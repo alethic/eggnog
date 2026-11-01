@@ -10,7 +10,7 @@ namespace Eggnog.Tests.Scopes
 {
 
     /// <summary>
-    /// The scope tree: children, paths, freezing, depth, tag resolution and per-scope parallelism; what a frozen scope
+    /// The scope tree: children, paths, freezing, tag resolution and per-scope parallelism; what a frozen scope
     /// refuses, and the structural calls a run observer may not make.
     /// </summary>
     public sealed class ScopeTreeTests
@@ -102,17 +102,6 @@ namespace Eggnog.Tests.Scopes
             Assert.Equal("Scope 'root' is frozen; its local rules are fixed",
                 Assert.Throws<InvalidOperationException>(() => t.Root.DefineRule(t.Rules, "late", r => r.When(t.Fact.Of("a")))).Message);
             Assert.False(t.Root.Check(t.Fact.Of("a")));
-        }
-
-        [Fact]
-        public void ATreeIsAtMost31Deep()
-        {
-            var t = new ScopeTheory();
-            var scope = t.Root;
-            for (var depth = 1; depth <= 31; depth++)
-                scope = scope.CreateChild();
-
-            Assert.Contains("31", Assert.Throws<InvalidOperationException>(() => scope.CreateChild()).Message);
         }
 
         [Fact]

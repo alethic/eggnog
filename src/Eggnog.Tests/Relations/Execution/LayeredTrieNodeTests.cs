@@ -55,7 +55,7 @@ namespace Eggnog.Relations.Tests
             var node = pool.Rent(Rows((0, Subset.Dense(0, 5)), (2, Subset.Dense(3, 10))));
             Assert.True(node.IsMultiLayer);
             Assert.Equal(-1, node.SingleLayer);
-            Assert.Equal(0b101u, node.LayerMask);
+            Assert.Equal(0b101u, LayerTestUtil.Mask(node));
             Assert.Equal(12, node.Size);
             Assert.Equal([0, 1, 2, 3, 4], ExecutionTestUtil.Ids(node.GetLayerRows(0)));
             Assert.True(node.GetLayerRows(1).IsEmpty);
@@ -64,7 +64,7 @@ namespace Eggnog.Relations.Tests
             var single = pool.Rent(2, Subset.Dense(1, 4));
             Assert.False(single.IsMultiLayer);
             Assert.Equal(2, single.SingleLayer);
-            Assert.Equal(0b100u, single.LayerMask);
+            Assert.Equal(0b100u, LayerTestUtil.Mask(single));
             Assert.Equal([1, 2, 3], ExecutionTestUtil.Ids(single.Rows));
         }
 
@@ -128,6 +128,56 @@ namespace Eggnog.Relations.Tests
             Assert.False(node.TryGetChild(TrieNode.ChildSlot(1, 0, arity), 4, out _));
         }
 
+        /// <summary>
+        /// A node over layers on both sides of the 64 a mask word holds reports them in order, caches an index and a child
+        /// for each of them, the deepest included, and a node like it without caches intersects layer by layer.
+        /// </summary>
+        [Fact]
+        public void ANodeDeeperThanAMaskWordKeepsEveryLayersSlots()
+        {
+            const int Layers = 131;
+            int[] present = [2, 63, 64, 70, 130];
+            var arrays = new SubsetArrayPool(Layers);
+            var pool = new TrieNodePool(false, Layers);
+            var array = new Subset[Layers];
+            foreach (var layer in present)
+                array[layer] = Subset.Dense(0, 10);
+
+            var node = pool.Rent(LayeredSubset.FromLayers(array, null));
+            Assert.True(node.IsMultiLayer);
+            Assert.Equal(present, LayerTestUtil.Layers(node));
+            Assert.Equal(50, node.Size);
+            Assert.True(node.GetLayerRows(65).IsEmpty);
+
+            var (table, view) = Layer(130, 0, 0);
+            var index = node.GetCachedIndex(C(1), 130, view);
+            Assert.Same(index, node.GetCachedIndex(C(1), 130, view));
+            Assert.NotSame(index, node.GetCachedIndex(C(1), 64, Layer(64, 0).View));
+            Assert.True(index.TryGetSubset(0, out var rows));
+            Assert.Equal([4, 8], ExecutionTestUtil.Ids(rows));
+
+            var arity = table.Arity;
+            var deepest = node.AddChild(TrieNode.ChildSlot(1, 131, arity), 3, pool.Rent(130, Subset.Dense(3, 4)), arity, pool);
+            var everyLayer = node.AddChild(TrieNode.ChildSlot(1, 0, arity), 3, pool.Rent(64, Subset.Dense(3, 4)), arity, pool);
+            Assert.True(node.TryGetChild(TrieNode.ChildSlot(1, 131, arity), 3, out var found));
+            Assert.Same(deepest, found);
+            Assert.True(node.TryGetChild(TrieNode.ChildSlot(1, 0, arity), 3, out found));
+            Assert.Same(everyLayer, found);
+            Assert.False(node.TryGetChild(TrieNode.ChildSlot(1, 65, arity), 3, out _));
+
+            // A node without caches intersects with a header layer by layer.
+            var fresh = pool.Rent(LayeredSubset.FromLayers((Subset[])array.Clone(), null));
+            var header = new Subset[Layers];
+            header[63] = Subset.Dense(5, 20);
+            header[130] = Subset.Dense(0, 2);
+            var headerRows = LayeredSubset.FromLayers(header, null);
+            fresh.Intersect(in headerRows, arrays);
+            Assert.Equal([63, 130], LayerTestUtil.Layers(fresh));
+            Assert.Equal([5, 6, 7, 8, 9], ExecutionTestUtil.Ids(fresh.GetLayerRows(63)));
+            Assert.Equal([0, 1], ExecutionTestUtil.Ids(fresh.GetLayerRows(130)));
+            headerRows.Dispose(null);
+        }
+
         [Fact]
         public void IntersectWorksLayerByLayer()
         {
@@ -136,7 +186,7 @@ namespace Eggnog.Relations.Tests
             var node = pool.Rent(Rows((0, Subset.Dense(0, 10)), (1, Subset.Dense(0, 10)), (2, Subset.Dense(0, 10))));
             var header = Rows((0, Subset.Dense(5, 20)), (2, Subset.Dense(0, 2)));
             node.Intersect(in header, arrays);
-            Assert.Equal(0b101u, node.LayerMask);
+            Assert.Equal(0b101u, LayerTestUtil.Mask(node));
             Assert.Equal([5, 6, 7, 8, 9], ExecutionTestUtil.Ids(node.GetLayerRows(0)));
             Assert.Equal([0, 1], ExecutionTestUtil.Ids(node.GetLayerRows(2)));
 

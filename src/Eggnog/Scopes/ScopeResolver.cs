@@ -12,7 +12,7 @@ namespace Eggnog
 
         /// <summary>
         /// Gets the nearest ancestor-or-self of <paramref name="from"/> tagged <paramref name="tag"/>, or <c>null</c>.
-        /// O(depth), at most 32 links.
+        /// O(depth).
         /// </summary>
         /// <param name="from">The scope.</param>
         /// <param name="tag">The tag.</param>

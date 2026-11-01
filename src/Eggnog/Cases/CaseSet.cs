@@ -73,9 +73,9 @@ namespace Eggnog
         /// <exception cref="ArgumentException">The tag belongs to another graph, or it is the root's.</exception>
         /// <exception cref="ObjectDisposedException">The set or the parent is disposed.</exception>
         /// <exception cref="ScopeContradictedException">The parent is a case whose contradiction stopped it, or lies under one.</exception>
-        /// <exception cref="InvalidOperationException">The parent is frozen, faulted, at depth 31 (the deepest a scope
-        /// tree goes), has a <c>Write</c> batch open, or is in use on another thread; or the call comes from a run
-        /// observer, or from a primitive, lattice, filter or cost function.</exception>
+        /// <exception cref="InvalidOperationException">The parent is frozen, faulted, has a <c>Write</c> batch open, or is
+        /// in use on another thread; or the call comes from a run observer, or from a primitive, lattice, filter or cost
+        /// function.</exception>
         /// <exception cref="RuleEvaluationException">A failure the parent recorded surfaced when the case was created, or a
         /// lattice merge threw in the catch-up the call makes first, in the parent or a writable ancestor of it; the parent
         /// is faulted, and so is that ancestor.</exception>
@@ -103,9 +103,6 @@ namespace Eggnog
                 ThrowIfDisposed();
                 if (Parent.IsFrozen)
                     throw new InvalidOperationException($"Scope '{Parent.Path}' is frozen; open cases in a child of it");
-
-                if (Parent.Depth() >= Scope.MaxDepth)
-                    throw new InvalidOperationException($"Scope '{Parent.Path}' is at depth {Scope.MaxDepth}, the deepest a scope tree goes.");
 
                 // Brought up to date before the check: a parent case its own parent's contradiction reached since its last
                 // call stops at this catch-up, and the engine would refuse to add a case under it.

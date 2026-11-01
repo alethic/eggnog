@@ -67,6 +67,7 @@ namespace Eggnog.Relations
             Counters = database.Counters;
             Counters.Increment(ClockCounter);
             ContainerLog = database.Containers.Log;
+            ContainerLog.Clock = ChangeClock;
             Schema = new LayeredSchema(this);
             Root = new Context(this, database);
         }
@@ -109,6 +110,12 @@ namespace Eggnog.Relations
         /// its container layers (<see cref="ContainerLayers.Log"/>).
         /// </summary>
         public ContainerLog ContainerLog { get; }
+
+        /// <summary>
+        /// Gets the clock that every change of a level with live descendants moves, which a child's catch-up test reads
+        /// before it reads its ancestors (<see cref="Relations.ChangeClock"/>).
+        /// </summary>
+        public ChangeClock ChangeClock { get; } = new();
 
         /// <summary>
         /// Gets the number of ids the store can hand out: ids 0 to <see cref="UnionFind.MaxId"/>.

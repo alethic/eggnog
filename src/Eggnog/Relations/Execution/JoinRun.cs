@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using System.Numerics;
 using System.Runtime.CompilerServices;
 
 namespace Eggnog.Relations
@@ -327,11 +326,8 @@ namespace Eggnog.Relations
             var atom = check.Atom.Index;
             var node = nodes[atom]!;
             var view = atomViews[atom]!;
-            var remaining = node.LayerMask;
-            while (remaining != 0)
+            foreach (var layer in node.GetLayers())
             {
-                var layer = BitOperations.TrailingZeroCount(remaining);
-                remaining &= remaining - 1;
                 var lv = view.Layers[layer]!;
                 var rows = node.GetLayerRows(layer);
                 var table = lv.Table;

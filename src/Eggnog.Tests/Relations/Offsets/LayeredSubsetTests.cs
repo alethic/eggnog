@@ -9,8 +9,9 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// Tests for <see cref="LayeredSubset"/> and <see cref="SubsetArrayPool"/>: a property test over 2000 seeds
-    /// against a reference of one <see cref="SortedSet{T}"/> per layer, plus the representation rules (single versus
-    /// multi-layer, collapsing, the root path), ownership and pooling.
+    /// against a reference of one <see cref="SortedSet{T}"/> per layer, over chains shallow, around the mask's 64 layers
+    /// and well past them, plus the representation rules (single versus multi-layer, collapsing, the root path, the
+    /// layers past the mask), ownership and pooling.
     /// </summary>
     [Collection(AllocationProbeCollection.Name)]
     public class LayeredSubsetTests
@@ -22,12 +23,20 @@ namespace Eggnog.Relations.Tests
         const int Seeds = 2000;
 
         /// <summary>
-        /// Draws a layer count: mostly shallow chains, sometimes up to the limit.
+        /// The most layers a drawn subset spans: well past <see cref="LayeredSubset.MaskedLayers"/>.
         /// </summary>
-        static int DrawLayerCount(Random random) => random.Next(8) switch
+        const int MaxDrawnLayers = 150;
+
+        /// <summary>
+        /// Draws a layer count: mostly shallow chains, sometimes about 32 or 64 layers, sometimes up to
+        /// <see cref="MaxDrawnLayers"/>.
+        /// </summary>
+        static int DrawLayerCount(Random random) => random.Next(10) switch
         {
-            0 => LayeredSubset.MaxLayers,
-            1 => random.Next(1, LayeredSubset.MaxLayers + 1),
+            0 => MaxDrawnLayers,
+            1 => random.Next(1, MaxDrawnLayers + 1),
+            2 => random.Next(LayeredSubset.MaskedLayers - 3, LayeredSubset.MaskedLayers + 4),
+            3 => random.Next(30, 35),
             _ => random.Next(1, 6),
         };
 
@@ -102,22 +111,25 @@ namespace Eggnog.Relations.Tests
         /// </summary>
         static void Check(in LayeredSubset subset, SortedSet<int>[] reference, string context)
         {
-            var mask = 0u;
+            var nonempty = new List<int>();
             var size = 0;
-            for (var l = 0; l < LayeredSubset.MaxLayers; l++)
+            for (var l = 0; l < MaxDrawnLayers + 2; l++)
             {
                 var rows = OffsetTestUtil.Collect(subset.GetLayer(l));
-                Assert.True(reference[l].SequenceEqual(rows), $"{context}: layer {l} holds [{string.Join(",", rows)}], expected [{string.Join(",", reference[l])}] ({subset})");
+                var expected = l < reference.Length ? reference[l] : new SortedSet<int>();
+                Assert.True(expected.SequenceEqual(rows), $"{context}: layer {l} holds [{string.Join(",", rows)}], expected [{string.Join(",", expected)}] ({subset})");
                 if (rows.Count > 0)
-                    mask |= 1u << l;
+                    nonempty.Add(l);
 
                 size += rows.Count;
             }
 
-            Assert.Equal(mask, subset.LayerMask);
+            // The layers come in ascending order, each once.
+            Assert.Equal(nonempty, LayerTestUtil.Layers(subset));
+            Assert.Equal(nonempty.Count == 0 ? 0 : nonempty[^1] + 1, subset.TopLayer);
             Assert.Equal(size, subset.Size);
             Assert.Equal(size == 0, subset.IsEmpty);
-            var multi = (mask & (mask - 1)) != 0;
+            var multi = nonempty.Count >= 2;
             Assert.Equal(multi, subset.IsMultiLayer);
             if (multi)
             {
@@ -127,8 +139,8 @@ namespace Eggnog.Relations.Tests
             }
             else
             {
-                if (mask != 0)
-                    Assert.Equal(System.Numerics.BitOperations.TrailingZeroCount(mask), subset.SingleLayer);
+                if (nonempty.Count == 1)
+                    Assert.Equal(nonempty[0], subset.SingleLayer);
 
                 Assert.Equal(reference[subset.SingleLayer], OffsetTestUtil.Collect(subset.SingleRows));
             }
@@ -137,7 +149,7 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// Gets the reference of an empty subset.
         /// </summary>
-        static SortedSet<int>[] EmptyReference() => Enumerable.Range(0, LayeredSubset.MaxLayers).Select(_ => new SortedSet<int>()).ToArray();
+        static SortedSet<int>[] EmptyReference() => Enumerable.Range(0, MaxDrawnLayers).Select(_ => new SortedSet<int>()).ToArray();
 
         /// <summary>
         /// Copies a reference.
@@ -151,7 +163,7 @@ namespace Eggnog.Relations.Tests
             {
                 var random = new Random(seed);
                 var layerCount = DrawLayerCount(random);
-                var pool = random.Next(3) == 0 ? null : new SubsetArrayPool(random.Next(2) == 0 ? layerCount : random.Next(1, LayeredSubset.MaxLayers + 1));
+                var pool = random.Next(3) == 0 ? null : new SubsetArrayPool(random.Next(2) == 0 ? layerCount : random.Next(1, MaxDrawnLayers + 1));
                 var context = $"seed {seed}";
 
                 var a = Draw(random, layerCount, pool, out var ra);
@@ -203,27 +215,129 @@ namespace Eggnog.Relations.Tests
             Assert.True(empty.IsEmpty);
             Assert.False(empty.IsMultiLayer);
             Assert.Equal(0, empty.Size);
-            Assert.Equal(0u, empty.LayerMask);
+            Assert.Empty(LayerTestUtil.Layers(empty));
+            Assert.Equal(0, empty.TopLayer);
             Assert.Equal(0, empty.SingleLayer);
             Assert.True(empty.SingleRows.IsEmpty);
             Assert.True(default(LayeredSubset).GetLayer(31).IsEmpty);
+            Assert.True(default(LayeredSubset).GetLayer(1000).IsEmpty);
             empty.Dispose(null);
         }
 
         [Fact]
-        public void LayersOutsideTheLimitAreRefused()
+        public void OnlyNegativeLayersAreRefused()
         {
             Assert.Throws<ArgumentOutOfRangeException>(() => LayeredSubset.Single(-1, Subset.Empty));
-            Assert.Throws<ArgumentOutOfRangeException>(() => LayeredSubset.Single(LayeredSubset.MaxLayers, Subset.Empty));
-            Assert.Throws<ArgumentOutOfRangeException>(() => LayeredSubset.Empty.GetLayer(LayeredSubset.MaxLayers));
             Assert.Throws<ArgumentOutOfRangeException>(() => LayeredSubset.Empty.GetLayer(-1));
-            Assert.Throws<ArgumentException>(() => LayeredSubset.FromLayers(new Subset[LayeredSubset.MaxLayers + 1], null));
             Assert.Throws<ArgumentNullException>(() => LayeredSubset.FromLayers(null!, null));
 
-            // A layer at the top of the mask works.
-            var top = LayeredSubset.Single(31, Subset.Dense(4, 6));
-            Assert.Equal(1u << 31, top.LayerMask);
-            Assert.Equal(new[] { 4, 5 }, OffsetTestUtil.Collect(top.GetLayer(31)));
+            // Layers at the top of a 32-bit and of the 64-bit mask, and past both, work.
+            foreach (var layer in new[] { 31, 32, 63, 64, 65, 1000 })
+            {
+                var single = LayeredSubset.Single(layer, Subset.Dense(4, 6));
+                Assert.Equal(new[] { layer }, LayerTestUtil.Layers(single));
+                Assert.Equal(layer + 1, single.TopLayer);
+                Assert.Equal(new[] { 4, 5 }, OffsetTestUtil.Collect(single.GetLayer(layer)));
+                Assert.True(single.GetLayer(layer + 1).IsEmpty);
+                Assert.Equal(layer, single.SingleLayer);
+                single.Dispose(null);
+            }
+
+            // An array of any length is taken.
+            var wide = new Subset[300];
+            wide[7] = Subset.Dense(0, 1);
+            wide[299] = Subset.Dense(2, 3);
+            var multi = LayeredSubset.FromLayers(wide, null);
+            Assert.Equal(new[] { 7, 299 }, LayerTestUtil.Layers(multi));
+            multi.Dispose(null);
+        }
+
+        [Fact]
+        public void LayersPastTheMaskAreFoundByTheirEntries()
+        {
+            const int Count = 150;
+            var pool = new SubsetArrayPool(Count);
+            var array = pool.Rent();
+            array[3] = Subset.Dense(0, 4);
+            array[40] = OffsetTestUtil.Sparse(new[] { 1, 5, 9 });
+            array[63] = Subset.Dense(2, 3);
+            array[64] = Subset.Dense(7, 9);
+            array[100] = OffsetTestUtil.Sparse(new[] { 4, 6 });
+            array[149] = Subset.Dense(0, 1);
+            array[120] = OffsetTestUtil.Sparse(Array.Empty<int>());
+            var subset = LayeredSubset.FromLayers(array, pool);
+            Assert.True(subset.IsMultiLayer);
+            Assert.Equal(new[] { 3, 40, 63, 64, 100, 149 }, LayerTestUtil.Layers(subset));
+            Assert.Equal(150, subset.TopLayer);
+            Assert.Equal(4 + 3 + 1 + 2 + 2 + 1, subset.Size);
+            Assert.True(subset.GetLayer(120).IsEmpty);
+            var text = subset.ToString();
+            Assert.StartsWith("{L3:", text);
+            Assert.Contains(", L64:", text);
+            Assert.Contains(", L149:", text);
+
+            // A clone takes a pooled array, as the pool's arrays are long enough.
+            var spare = pool.Rent();
+            pool.Return(spare);
+            var clone = subset.Clone(pool);
+            Assert.Equal(0, pool.Count);
+            Assert.Equal(LayerTestUtil.Layers(subset), LayerTestUtil.Layers(clone));
+            Assert.Equal(new[] { 4, 6 }, OffsetTestUtil.Collect(clone.GetLayer(100)));
+
+            // Intersecting with a multi-layer subset keeps the layers both hold: one masked layer and one past the mask
+            // stay multi-layer.
+            var other = new Subset[Count];
+            other[40] = Subset.Dense(0, 6);
+            other[100] = Subset.Dense(0, 100);
+            other[130] = Subset.Dense(0, 100);
+            var both = LayeredSubset.FromLayers(other, null);
+            subset.Intersect(in both, pool);
+            Assert.True(subset.IsMultiLayer);
+            Assert.Equal(new[] { 40, 100 }, LayerTestUtil.Layers(subset));
+            Assert.Equal(new[] { 1, 5 }, OffsetTestUtil.Collect(subset.GetLayer(40)));
+            Assert.Equal(101, subset.TopLayer);
+
+            // Down to one layer past the mask, it collapses and gives its array back.
+            var high = LayeredSubset.Single(100, Subset.Dense(0, 5));
+            subset.Intersect(in high, pool);
+            Assert.False(subset.IsMultiLayer);
+            Assert.Equal(100, subset.SingleLayer);
+            Assert.Equal(new[] { 4 }, OffsetTestUtil.Collect(subset.SingleRows));
+            Assert.Equal(1, pool.Count);
+
+            // Two layers past the mask and none in it stay multi-layer; emptying one collapses to the other.
+            var twoHigh = new Subset[Count];
+            twoHigh[70] = Subset.Dense(0, 3);
+            twoHigh[90] = Subset.Dense(0, 3);
+            var pair = LayeredSubset.FromLayers(twoHigh, null);
+            Assert.True(pair.IsMultiLayer);
+            Assert.Equal(new[] { 70, 90 }, LayerTestUtil.Layers(pair));
+            var keep90 = new Subset[Count];
+            keep90[90] = Subset.Dense(1, 2);
+            keep90[3] = Subset.Dense(0, 9);
+            var filter = LayeredSubset.FromLayers(keep90, null);
+            pair.Intersect(in filter, null);
+            Assert.False(pair.IsMultiLayer);
+            Assert.Equal(90, pair.SingleLayer);
+            Assert.Equal(new[] { 1 }, OffsetTestUtil.Collect(pair.SingleRows));
+
+            // A single-layer subset past the mask intersects with a multi-layer one by its layer.
+            var lone = LayeredSubset.Single(149, Subset.Dense(0, 10));
+            lone.Intersect(in clone, pool);
+            Assert.Equal(149, lone.SingleLayer);
+            Assert.Equal(new[] { 0 }, OffsetTestUtil.Collect(lone.SingleRows));
+
+            // Disposing the clone gives its array back, cleared.
+            clone.Dispose(pool);
+            Assert.Equal(2, pool.Count);
+            Assert.All(pool.Rent(), s => Assert.Equal(Subset.Empty, s));
+
+            subset.Dispose(pool);
+            both.Dispose(null);
+            high.Dispose(null);
+            pair.Dispose(null);
+            filter.Dispose(null);
+            lone.Dispose(null);
         }
 
         [Fact]
@@ -261,7 +375,7 @@ namespace Eggnog.Relations.Tests
             var b = LayeredSubset.Single(2, Subset.Dense(0, 10));
             a.Intersect(in b, null);
             Assert.True(a.IsEmpty);
-            Assert.Equal(0u, a.LayerMask);
+            Assert.Empty(LayerTestUtil.Layers(a));
             a.Dispose(null);
             b.Dispose(null);
         }
@@ -297,7 +411,7 @@ namespace Eggnog.Relations.Tests
             two[2] = Subset.Dense(5, 6);
             var multi = LayeredSubset.FromLayers(two, pool);
             Assert.True(multi.IsMultiLayer);
-            Assert.Equal(0b101u, multi.LayerMask);
+            Assert.Equal(0b101u, LayerTestUtil.Mask(multi));
             Assert.Equal(4, multi.Size);
             Assert.Equal(0, pool.Count);
 
@@ -319,7 +433,7 @@ namespace Eggnog.Relations.Tests
         public void PoolsHandOutClearedArraysOfTheirLength()
         {
             Assert.Throws<ArgumentOutOfRangeException>(() => new SubsetArrayPool(0));
-            Assert.Throws<ArgumentOutOfRangeException>(() => new SubsetArrayPool(LayeredSubset.MaxLayers + 1));
+            Assert.Equal(1000, new SubsetArrayPool(1000).Rent().Length);
             Assert.Throws<ArgumentNullException>(() => new SubsetArrayPool(2).Return(null!));
 
             var pool = new SubsetArrayPool(3);
@@ -355,7 +469,7 @@ namespace Eggnog.Relations.Tests
             // Too short a pool: a fresh array; long enough: the pool's.
             var shortPool = new SubsetArrayPool(4);
             var copy = multi.Clone(shortPool);
-            Assert.Equal(0b100010u, copy.LayerMask);
+            Assert.Equal(0b100010u, LayerTestUtil.Mask(copy));
             copy.Dispose(shortPool);
             Assert.Equal(0, shortPool.Count);
 
@@ -370,10 +484,17 @@ namespace Eggnog.Relations.Tests
             multi.Dispose(null);
         }
 
-        [Fact]
-        public void WarmMultiLayerOperationsAllocateNothing()
+        /// <summary>
+        /// Building, copying, intersecting, walking and disposing multi-layer subsets from a warm pool allocates nothing:
+        /// over 4 layers, over 64 (the whole mask) and over 130 (past it).
+        /// </summary>
+        [Theory]
+        [InlineData(4, 1, 3)]
+        [InlineData(64, 33, 63)]
+        [InlineData(130, 64, 129)]
+        public void WarmMultiLayerOperationsAllocateNothing(int layerCount, int middle, int last)
         {
-            var pool = new SubsetArrayPool(4);
+            var pool = new SubsetArrayPool(layerCount);
             var left = Enumerable.Range(0, 300).Select(x => x * 3).ToArray();
             var right = Enumerable.Range(0, 300).Select(x => x * 2).ToArray();
 
@@ -381,18 +502,22 @@ namespace Eggnog.Relations.Tests
             {
                 var a = pool.Rent();
                 a[0] = Subset.Dense(0, 500);
-                a[1] = SubsetRef.Sparse(left, 0, left.Length).ToOwned();
-                a[3] = Subset.Dense(10, 20);
+                a[middle] = SubsetRef.Sparse(left, 0, left.Length).ToOwned();
+                a[last] = Subset.Dense(10, 20);
                 var x = LayeredSubset.FromLayers(a, pool);
 
                 var b = pool.Rent();
-                b[1] = SubsetRef.Sparse(right, 0, right.Length).ToOwned();
-                b[3] = Subset.Dense(0, 15);
+                b[middle] = SubsetRef.Sparse(right, 0, right.Length).ToOwned();
+                b[last] = Subset.Dense(0, 15);
                 var y = LayeredSubset.FromLayers(b, pool);
 
                 var copy = x.Clone(pool);
                 x.Intersect(in y, pool);
-                _ = x.Size + copy.Size + (int)x.LayerMask;
+                var walked = 0;
+                foreach (var layer in copy.GetLayers())
+                    walked += layer;
+
+                _ = x.Size + copy.Size + x.TopLayer + walked;
                 copy.Dispose(pool);
                 x.Dispose(pool);
                 y.Dispose(pool);

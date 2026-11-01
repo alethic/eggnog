@@ -68,6 +68,11 @@ namespace Eggnog.Relations
         readonly List<TKey> notified = new();
 
         /// <summary>
+        /// The number of identifiers in <see cref="notified"/>: written under its lock, read volatile.
+        /// </summary>
+        int count;
+
+        /// <summary>
         /// The flag segment directory: nonzero flags are notified. Never empty, except in a lazy list before its first
         /// notify. Replaced wholesale (under <see cref="growLock"/>) when it grows; segments are shared between
         /// successive directories and never reallocated.
@@ -124,17 +129,10 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets whether nothing was notified since the last reset: a child context is clean only without pending
-        /// notifications. Takes the list's lock; a notify racing the read may or may not be seen, as with
-        /// <see cref="Reset()"/>.
+        /// notifications, so a chain's clean test reads it at every level. One volatile read, no lock; a notify racing
+        /// the read may or may not be seen, as with <see cref="Reset()"/>.
         /// </summary>
-        public bool IsEmpty
-        {
-            get
-            {
-                lock (notified)
-                    return notified.Count == 0;
-            }
-        }
+        public bool IsEmpty => Volatile.Read(ref count) == 0;
 
         /// <summary>
         /// Clears every notification and returns the identifiers notified since the last reset, in the order they were
@@ -151,6 +149,7 @@ namespace Eggnog.Relations
 
                 taken = notified.ToArray();
                 notified.Clear();
+                Volatile.Write(ref count, 0);
             }
 
             ClearFlags(taken);
@@ -172,6 +171,7 @@ namespace Eggnog.Relations
             {
                 destination.AddRange(notified);
                 notified.Clear();
+                Volatile.Write(ref count, 0);
             }
 
             var added = destination.Count - start;
@@ -187,7 +187,10 @@ namespace Eggnog.Relations
         void Record(TKey item)
         {
             lock (notified)
+            {
                 notified.Add(item);
+                Volatile.Write(ref count, notified.Count);
+            }
         }
 
         /// <summary>

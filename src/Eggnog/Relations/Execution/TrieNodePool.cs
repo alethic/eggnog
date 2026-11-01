@@ -41,12 +41,12 @@ namespace Eggnog.Relations
         /// Initializes an empty pool for a run whose tables' views have <paramref name="layerCount"/> layers.
         /// </summary>
         /// <param name="concurrent">Whether the nodes it hands out may be shared by parallel tasks.</param>
-        /// <param name="layerCount">The running context's depth plus one, in <c>[1, <see cref="LayeredSubset.MaxLayers"/>]</c>.
-        /// A root's run (one layer) never creates a multi-layer row set and gets no array pool.</param>
+        /// <param name="layerCount">The running context's depth plus one, at least 1. A root's run (one layer) never
+        /// creates a multi-layer row set and gets no array pool.</param>
         public TrieNodePool(bool concurrent, int layerCount)
         {
-            if (layerCount < 1 || layerCount > LayeredSubset.MaxLayers)
-                throw new ArgumentOutOfRangeException(nameof(layerCount), layerCount, $"A layer count lies in [1, {LayeredSubset.MaxLayers}].");
+            if (layerCount < 1)
+                throw new ArgumentOutOfRangeException(nameof(layerCount), layerCount, "A layer count is at least 1.");
 
             this.concurrent = concurrent;
             Layers = layerCount > 1 ? new SubsetArrayPool(layerCount) : null;

@@ -184,9 +184,8 @@ namespace Eggnog.Relations
         /// <param name="options">The child's options; <see cref="ContextOptions.Default"/> if <c>null</c>.</param>
         /// <returns>The child.</returns>
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
-        /// <exception cref="InvalidOperationException">The context is faulted or stopped; it is at the deepest level; the
-        /// call comes from inside another operation of the same thread domain; or the domain is held by another
-        /// thread.</exception>
+        /// <exception cref="InvalidOperationException">The context is faulted or stopped; the call comes from inside another
+        /// operation of the same thread domain; or the domain is held by another thread.</exception>
         /// <exception cref="PanicException">A failure was recorded on this context (by the flush, the rebuild or the
         /// settle, or before the call).</exception>
         public EGraphContext CreateChild(ContextOptions? options = null)

@@ -1,5 +1,4 @@
 using System;
-using System.Numerics;
 using System.Threading;
 
 namespace Eggnog.Relations
@@ -51,9 +50,14 @@ namespace Eggnog.Relations
         public readonly int LayerCount;
 
         /// <summary>
-        /// Bit <c>j</c> is set when <see cref="Layers"/>[<c>j</c>] is present.
+        /// The number of present entries of <see cref="Layers"/>.
         /// </summary>
-        public readonly uint PresentMask;
+        public readonly int PresentCount;
+
+        /// <summary>
+        /// The first present entry of <see cref="Layers"/>, or −1 when none is.
+        /// </summary>
+        public readonly int FirstPresent;
 
         /// <summary>
         /// The live rows the view hides, counted on first use of <see cref="VisibleCount"/>; −1 until then. The hidden
@@ -66,8 +70,7 @@ namespace Eggnog.Relations
         /// </summary>
         /// <param name="id">The table's id.</param>
         /// <param name="spec">The table's spec.</param>
-        /// <param name="layers">The layers by depth; at most 32 (a layered subset keeps a 32-bit layer mask), each over
-        /// a <see cref="SortedWritesTable"/>.</param>
+        /// <param name="layers">The layers by depth, any number, each over a <see cref="SortedWritesTable"/>.</param>
         internal TableView(TableId id, TableSpec spec, LayerView?[] layers) :
             this(id, spec, layers, requireSorted: true)
         {
@@ -80,14 +83,12 @@ namespace Eggnog.Relations
         TableView(TableId id, TableSpec spec, LayerView?[] layers, bool requireSorted)
         {
             ArgumentNullException.ThrowIfNull(layers);
-            if (layers.Length > 32)
-                throw new ArgumentException("A view has at most 32 layers.", nameof(layers));
-
             Id = id;
             Spec = spec;
             Layers = layers;
             LayerCount = layers.Length;
-            var mask = 0u;
+            var present = 0;
+            var first = -1;
             for (var j = 0; j < layers.Length; j++)
             {
                 if (layers[j] is not { } layer)
@@ -96,10 +97,12 @@ namespace Eggnog.Relations
                 if (requireSorted && layer.Sorted is null)
                     throw new ArgumentException("Every layer of a function table's view is a sorted-writes table.", nameof(layers));
 
-                mask |= 1u << j;
+                if (present++ == 0)
+                    first = j;
             }
 
-            PresentMask = mask;
+            PresentCount = present;
+            FirstPresent = first;
         }
 
         /// <summary>
@@ -134,8 +137,11 @@ namespace Eggnog.Relations
             if (Layers.Length == 1)
                 return Layers[0] is { } only0 ? LayeredSubset.Single(0, only0.Table.All()) : LayeredSubset.Empty;
 
-            Span<int> counts = stackalloc int[LayeredSubset.MaxLayers];
-            var withRows = 0u;
+            // The layers with rows: the first, its count, and one past the last.
+            var withRows = 0;
+            var first = -1;
+            var firstCount = 0;
+            var end = 0;
             for (var j = 0; j < Layers.Length; j++)
             {
                 if (Layers[j] is not { } layer)
@@ -145,28 +151,26 @@ namespace Eggnog.Relations
                 if (count == 0)
                     continue;
 
-                counts[j] = count;
-                withRows |= 1u << j;
+                if (withRows++ == 0)
+                {
+                    first = j;
+                    firstCount = count;
+                }
+
+                end = j + 1;
             }
 
             if (withRows == 0)
                 return LayeredSubset.Empty;
 
-            if ((withRows & (withRows - 1)) == 0)
-            {
-                var only = BitOperations.TrailingZeroCount(withRows);
-                return LayeredSubset.Single(only, Subset.Dense(0, counts[only]));
-            }
+            if (withRows == 1)
+                return LayeredSubset.Single(first, Subset.Dense(0, firstCount));
 
-            var length = 32 - BitOperations.LeadingZeroCount(withRows);
-            var layers = pool is not null && pool.LayerCount >= length ? pool.Rent() : new Subset[length];
-            var remaining = withRows;
-            while (remaining != 0)
-            {
-                var j = BitOperations.TrailingZeroCount(remaining);
-                remaining &= remaining - 1;
-                layers[j] = Subset.Dense(0, counts[j]);
-            }
+            var layers = pool is not null && pool.LayerCount >= end ? pool.Rent() : new Subset[end];
+            layers[first] = Subset.Dense(0, firstCount);
+            for (var j = first + 1; j < end; j++)
+                if (Layers[j] is { } layer)
+                    layers[j] = Subset.Dense(0, layer.Sorted!.Rows.Count);
 
             return LayeredSubset.FromLayers(layers, pool);
         }

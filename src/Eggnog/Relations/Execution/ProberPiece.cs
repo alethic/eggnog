@@ -38,7 +38,7 @@ namespace Eggnog.Relations
         /// <summary>
         /// The layer of the atom's view the piece indexes.
         /// </summary>
-        public byte Layer;
+        public int Layer;
 
         /// <summary>
         /// Whether probe results are clamped to <see cref="Outer"/>.

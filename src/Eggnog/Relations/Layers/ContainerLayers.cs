@@ -131,6 +131,7 @@ namespace Eggnog.Relations
             this.parent = parent;
             this.idBlocks = idBlocks;
             this.parallelism = parallelism;
+            Log = new ContainerLog { Clock = owner.Store.ChangeClock };
         }
 
         /// <summary>
@@ -170,7 +171,7 @@ namespace Eggnog.Relations
         /// Gets the context's container log: every own environment of its layers records into it, while it is active,
         /// each container of classes that appears there (<see cref="ContainerLog"/>).
         /// </summary>
-        public ContainerLog Log { get; } = new();
+        public ContainerLog Log { get; }
 
         /// <summary>
         /// Gets whether the context is frozen, and its layers read without locks. One volatile read.

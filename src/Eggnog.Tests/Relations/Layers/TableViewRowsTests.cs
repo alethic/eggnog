@@ -46,16 +46,79 @@ namespace Eggnog.Relations.Tests
         static bool IsVisible(LayerView layer, int row) =>
             layer.Sorted!.Rows.Data[row * layer.Table.Arity] != Value.StaleRep && layer.Hidden.Contains(row) == false;
 
+        /// <summary>
+        /// A chain 130 levels deep, each level frozen before the next is made: <c>f</c> has rows at levels on both sides of
+        /// the 64 a mask word holds, and <c>g</c> is cleared at level 64, so its view starts there. The present layers, the first of them, and the rows
+        /// <see cref="TableView.AllRows"/> lists cover every level, the deepest included.
+        /// </summary>
+        [Fact]
+        public void AllRowsCoversLayersOnBothSidesOfAMaskWord()
+        {
+            const int Depth = 130;
+            int[] writers = [0, 3, 63, 64, 65, Depth];
+            var store = new Store(ParallelHeuristics.Serial);
+            var f = store.AddTable(LayeredTestUtil.MaxFunction(1), name: "f");
+            var g = store.AddTable(LayeredTestUtil.MaxFunction(1), name: "g");
+            var context = store.Root;
+            for (var d = 0; d <= Depth; d++)
+            {
+                if (d > 0)
+                {
+                    context.Freeze();
+                    context = context.CreateChild();
+                }
+
+                if (Array.IndexOf(writers, d) >= 0)
+                    LayeredTestUtil.Insert(context, f, (uint)d + 1, 1, 0);
+
+                if (d == 1)
+                    LayeredTestUtil.Insert(context, g, 1, 1, 0);
+
+                if (d == 64)
+                {
+                    context.ClearTable(g);
+                    LayeredTestUtil.Insert(context, g, 2, 1, 0);
+                }
+
+                if (d == 100)
+                    LayeredTestUtil.Insert(context, g, 3, 1, 0);
+            }
+
+            var pool = new SubsetArrayPool(Depth + 1);
+            var view = context.GetView(f);
+            Assert.Equal(writers, Present(view));
+            Assert.Equal(writers.Length, view.PresentCount);
+            Assert.Equal(0, view.FirstPresent);
+            var all = view.AllRows(pool);
+            Assert.Equal(writers, LayerTestUtil.Layers(all));
+            Assert.Equal(writers.Length, all.Size);
+            foreach (var j in writers)
+                Assert.Equal(Subset.Dense(0, 1), all.GetLayer(j).ToOwned());
+
+            all.Dispose(pool);
+            Assert.Equal(1, pool.Count);
+
+            var cleared = context.GetView(g);
+            Assert.Equal([64, 100], Present(cleared));
+            Assert.Equal(2, cleared.PresentCount);
+            Assert.Equal(64, cleared.FirstPresent);
+            var rows = cleared.AllRows(pool);
+            Assert.Equal([64, 100], LayerTestUtil.Layers(rows));
+            rows.Dispose(pool);
+
+            static int[] Present(TableView view) => Enumerable.Range(0, view.Layers.Length).Where(j => view.Layers[j] is not null).ToArray();
+        }
+
         [Fact]
         public void AllRowsListsEveryPhysicalRowOfEveryPresentLayer()
         {
             var (store, f, g, child, grandchild) = Chain();
             var pool = new SubsetArrayPool(3);
             var view = grandchild.GetView(f);
-            Assert.Equal(0b111u, view.PresentMask);
+            Assert.Equal(0b111u, LayerTestUtil.PresentMask(view));
             var all = view.AllRows(pool);
             Assert.True(all.IsMultiLayer);
-            Assert.Equal(0b111u, all.LayerMask);
+            Assert.Equal(0b111u, LayerTestUtil.Mask(all));
             for (var j = 0; j < 3; j++)
             {
                 var expected = view.Layers[j]!.Table.All();
@@ -81,7 +144,7 @@ namespace Eggnog.Relations.Tests
 
             // Without a pool the array is allocated.
             var unpooled = view.AllRows(null);
-            Assert.Equal(0b111u, unpooled.LayerMask);
+            Assert.Equal(0b111u, LayerTestUtil.Mask(unpooled));
             unpooled.Dispose(null);
             grandchild.Dispose();
             child.Dispose();

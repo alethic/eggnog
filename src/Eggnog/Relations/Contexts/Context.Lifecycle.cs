@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -45,8 +46,8 @@ namespace Eggnog.Relations
         /// <returns>The child.</returns>
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
         /// <exception cref="InvalidOperationException">The context is faulted or contradicted; its parent (or an ancestor
-        /// that is not frozen) was stopped by a contradiction; it is at depth <see cref="MaxDepth"/>; the call comes from
-        /// inside another operation of the same thread domain; or the domain is held by another thread.</exception>
+        /// that is not frozen) was stopped by a contradiction; the call comes from inside another operation of the same
+        /// thread domain; or the domain is held by another thread.</exception>
         public Context CreateChild(ContextOptions? options = null)
         {
             ThrowIfDisposed();
@@ -55,9 +56,6 @@ namespace Eggnog.Relations
             var current = Domain;
             if (current.Depth > 0)
                 ThrowReentrant(nameof(CreateChild));
-
-            if (Depth + 1 > MaxDepth)
-                throw new InvalidOperationException($"A context can be at most {MaxDepth} levels below the root.");
 
             options ??= ContextOptions.Default;
             if (IsFrozen)
@@ -211,7 +209,52 @@ namespace Eggnog.Relations
         /// batch's action or a visitor of the same domain, where a rebuild with nothing to do is allowed.</exception>
         /// <exception cref="OverflowException">The store's clock has run out (<see cref="Store.ReadClock"/>); the
         /// context is not faulted.</exception>
-        public bool Rebuild()
+        public bool Rebuild() => RebuildCore(ancestorsCurrent: false);
+
+        /// <summary>
+        /// <see cref="Rebuild()"/> for a context whose writable ancestors below the root were just brought up to date,
+        /// root first, in its thread domain, with nothing changed since: it does not rebuild them again, which would
+        /// find each clean, and so costs one level, not one per ancestor, in a walk down a chain that rebuilds each
+        /// level in turn. A parent that is the root is still rebuilt, as its clean test is O(1) and its staged
+        /// notifications are merged only by a rebuild.
+        /// </summary>
+        /// <returns>Whether any pass changed anything.</returns>
+        /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
+        /// <exception cref="InvalidOperationException">As for <see cref="Rebuild()"/>.</exception>
+        /// <exception cref="OverflowException">The store's clock has run out; the context is not faulted.</exception>
+        public bool RebuildBelowCurrentAncestors() => RebuildCore(ancestorsCurrent: true);
+
+        /// <summary>
+        /// Brings the context up to date, rebuilding its writable ancestors first, root first, unless
+        /// <paramref name="ancestorsCurrent"/> says they were just brought up to date and the parent is not the root.
+        /// </summary>
+        bool RebuildCore(bool ancestorsCurrent)
+        {
+            if (frozen)
+                return false;
+
+            ThrowIfDisposed();
+            using var scope = Domain.Enter();
+            if (parent is { IsFrozen: false } p && (ancestorsCurrent == false || p.parent is null))
+            {
+                // A loop, not a recursion through the parent's rebuild, so a chain of any depth needs no more stack than
+                // one level: the writable ancestors are the deepest ones, below the last frozen one or from the root.
+                var top = Depth - 1;
+                while (top > 0 && ancestors[top - 1].frozen == false)
+                    top--;
+
+                for (var a = top; a < Depth; a++)
+                    ancestors[a].RebuildLevel();
+            }
+
+            return RebuildLevel();
+        }
+
+        /// <summary>
+        /// Rebuilds this level alone, its writable parent being up to date: the body of <see cref="Rebuild()"/> once the
+        /// walk has rebuilt every writable ancestor.
+        /// </summary>
+        bool RebuildLevel()
         {
             if (frozen)
                 return false;
@@ -221,9 +264,14 @@ namespace Eggnog.Relations
             using var scope = current.Enter();
             ThrowIfFaulted();
             lastRebuildPasses = 0;
+            foundClean = false;
+
+            // The parent's rebuild ends at its clean test when it is clean, and nothing below changes the parent, so
+            // the clean test here need not test the parent's chain again: a chain's rebuild tests each level once.
+            var parentClean = false;
             if (parent is { IsFrozen: false } p)
             {
-                p.Rebuild();
+                parentClean = p.foundClean;
                 StopIfParentStopped(p);
             }
 
@@ -235,8 +283,11 @@ namespace Eggnog.Relations
             if (parent is not null && tables!.HasNewAddedEntries)
                 containerLayers!.ScanAdds();
 
-            if (parent is null ? journalMark == DisplacedCount && database.Catalog.Notifications.IsEmpty : IsClean)
+            if (parent is null ? journalMark == DisplacedCount && database.Catalog.Notifications.IsEmpty : IsCleanBelow(parentClean))
+            {
+                foundClean = true;
                 return false;
+            }
 
             // A pass inside a running batch or visitor would run an epoch inside its epoch or change what it reads.
             ThrowIfInCallback(current, nameof(Rebuild));
@@ -567,15 +618,21 @@ namespace Eggnog.Relations
         /// <summary>
         /// Gives this context and every descendant created under it <paramref name="guard"/> as their thread domain:
         /// called when this context's parent freezes. Descendants are not frozen (their ancestor was not), so they all
-        /// shared this context's previous domain.
+        /// shared this context's previous domain. A walk with a work list, not a recursion, so a subtree of any depth
+        /// needs no more stack than one level.
         /// </summary>
         /// <param name="guard">The new domain.</param>
         void AssignDomain(ThreadAffinityGuard guard)
         {
-            Volatile.Write(ref domain, guard);
-            lock (children)
-                foreach (var child in children)
-                    child.AssignDomain(guard);
+            var work = new Stack<Context>();
+            work.Push(this);
+            while (work.TryPop(out var context))
+            {
+                Volatile.Write(ref context.domain, guard);
+                lock (context.children)
+                    foreach (var child in context.children)
+                        work.Push(child);
+            }
         }
 
         /// <summary>

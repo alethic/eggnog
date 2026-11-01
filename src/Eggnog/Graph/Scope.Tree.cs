@@ -9,11 +9,6 @@ namespace Eggnog
     public sealed partial class Scope
     {
 
-        /// <summary>
-        /// The depth limit of a scope tree, which the engine's 32-bit layer masks set: the root is at depth 0.
-        /// </summary>
-        internal const int MaxDepth = 31;
-
         readonly object childrenLock = new();
         readonly List<Scope> children = new();
         readonly Dictionary<ScopeTag, (long Stamp, int CopyRules)> mirrorSyncs = new(ReferenceEqualityComparer.Instance);
@@ -115,9 +110,8 @@ namespace Eggnog
         /// <exception cref="ArgumentException">The tag belongs to another graph, or it is the root's.</exception>
         /// <exception cref="ArgumentOutOfRangeException">The options' degree of parallelism is negative.</exception>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
-        /// <exception cref="InvalidOperationException">The scope is faulted, at depth 31 (the deepest a scope tree
-        /// goes), or in use on another thread; or the call comes from a run observer (a structural call), or from a
-        /// primitive, lattice, filter or cost function.</exception>
+        /// <exception cref="InvalidOperationException">The scope is faulted or in use on another thread; or the call comes
+        /// from a run observer (a structural call), or from a primitive, lattice, filter or cost function.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
         /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies
@@ -144,8 +138,6 @@ namespace Eggnog
                     throw new InvalidOperationException("Not allowed inside a run observer");
 
                 ThrowIfStopped();
-                if (Depth() >= MaxDepth)
-                    throw new InvalidOperationException($"Scope '{Path}' is at depth {MaxDepth}, the deepest a scope tree goes.");
 
                 var contextOptions = new Relations.ContextOptions
                 {
@@ -499,16 +491,30 @@ namespace Eggnog
         /// </summary>
         internal void TryRelease()
         {
+            // A loop up the chain rather than a recursion through the parent's release, so a chain of disposed scopes of
+            // any depth needs no more stack than one level.
+            for (var scope = this; scope is not null; scope = scope.TryReleaseOne())
+            {
+
+            }
+        }
+
+        /// <summary>
+        /// Releases this scope alone, as <see cref="TryRelease"/> describes, and returns its parent when the release left
+        /// it and the parent is disposed, for the caller to release next; <c>null</c> otherwise.
+        /// </summary>
+        Scope? TryReleaseOne()
+        {
             // A case's engine set owns its context until it ends the ownership (ReleaseCase).
             if (IsRoot || IsDisposed == false || ownedByCases)
-                return;
+                return null;
 
             // Inside an engine call of this scope's domain (a primitive that disposed it, say), the engine would refuse
             // the disposal as re-entrant: the domain's last exit runs it instead.
             if (Engine.Context.Context.Domain.Depth > 0)
             {
                 Guard.DeferRelease(this);
-                return;
+                return null;
             }
 
             ScopeGuard entered;
@@ -518,7 +524,7 @@ namespace Eggnog
                 lock (childrenLock)
                 {
                     if (released || children.Count > 0 || transientChildren > 0 || Volatile.Read(ref calls) > 0)
-                        return;
+                        return null;
                 }
 
                 entered = Guard;
@@ -536,7 +542,7 @@ namespace Eggnog
                 // it was left meanwhile, the exit may already have taken the list, so try again.
                 entered.DeferRelease(this);
                 if (entered.IsHeldByAnotherThread)
-                    return;
+                    return null;
 
                 spinner.SpinOnce();
             }
@@ -546,7 +552,7 @@ namespace Eggnog
                 lock (childrenLock)
                 {
                     if (released || children.Count > 0 || transientChildren > 0 || Volatile.Read(ref calls) > 0)
-                        return;
+                        return null;
 
                     released = true;
                 }
@@ -573,7 +579,11 @@ namespace Eggnog
                 entered.ExitAfterRelease();
             }
 
-            Parent!.RemoveChild(this);
+            var parent = Parent!;
+            lock (parent.childrenLock)
+                parent.children.Remove(this);
+
+            return parent.IsDisposed ? parent : null;
         }
 
         /// <summary>
@@ -582,35 +592,16 @@ namespace Eggnog
         /// </summary>
         void AssignGuard(ScopeGuard next)
         {
-            guard = next;
-            lock (childrenLock)
-                foreach (var child in children)
-                    child.AssignGuard(next);
-        }
-
-        /// <summary>
-        /// Removes a released child, then releases this scope if it is disposed and the child was the last obstacle.
-        /// </summary>
-        void RemoveChild(Scope child)
-        {
-            lock (childrenLock)
-                children.Remove(child);
-
-            if (IsDisposed)
-                TryRelease();
-        }
-
-        /// <summary>
-        /// Gets the scope's depth: 0 for the root. O(depth).
-        /// </summary>
-        /// <returns>The depth.</returns>
-        internal int Depth()
-        {
-            var depth = 0;
-            for (var up = Parent; up is not null; up = up.Parent)
-                depth++;
-
-            return depth;
+            // A walk with a work list, not a recursion, so a subtree of any depth needs no more stack than one level.
+            var work = new Stack<Scope>();
+            work.Push(this);
+            while (work.TryPop(out var scope))
+            {
+                scope.guard = next;
+                lock (scope.childrenLock)
+                    foreach (var child in scope.children)
+                        work.Push(child);
+            }
         }
 
         /// <summary>

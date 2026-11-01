@@ -58,7 +58,7 @@ namespace Eggnog.Relations.Tests
             var fast = new List<Constraint>();
             var slow = new List<Constraint>();
             var subset = view.Evaluate(f, [Constraint.GeConst(new ColumnId(2), new Value(epochs[1]))], fast, slow);
-            Assert.Equal(0b110u, subset.LayerMask);
+            Assert.Equal(0b110u, LayerTestUtil.Mask(subset));
             Assert.Equal(10, subset.GetLayer(1).Size);
             Assert.Equal(10, subset.GetLayer(2).Size);
             Assert.True(subset.GetLayer(1).IsDense && subset.GetLayer(2).IsDense);
@@ -68,7 +68,7 @@ namespace Eggnog.Relations.Tests
 
             fast.Clear();
             var old = view.Evaluate(f, [Constraint.LtConst(new ColumnId(2), new Value(epochs[1]))], fast, slow);
-            Assert.Equal(0b001u, old.LayerMask);
+            Assert.Equal(0b001u, LayerTestUtil.Mask(old));
             Assert.False(old.IsMultiLayer);
             Assert.Equal(10, old.Size);
             old.Dispose(null);
@@ -96,7 +96,7 @@ namespace Eggnog.Relations.Tests
             var leaf = middle.CreateChild();
             var third = Write(leaf, f, ids[20..], 3);
             Write(leaf, g, ids[20..], 3);
-            Assert.Equal(0b101u, leaf.GetView(g).PresentMask);
+            Assert.Equal(0b101u, LayerTestUtil.PresentMask(leaf.GetView(g)));
 
             var view = leaf.Database.View;
             var scratch = new HeaderScratch();
@@ -109,12 +109,12 @@ namespace Eggnog.Relations.Tests
             {
                 fast.Clear();
                 var fRows = view.Evaluate(f, constraints, fast, slow, scratch);
-                Assert.Equal(mask, fRows.LayerMask);
+                Assert.Equal(mask, LayerTestUtil.Mask(fRows));
                 Assert.Equal(size, fRows.Size);
 
                 fast.Clear();
                 var gRows = view.Evaluate(g, all, fast, slow, scratch);
-                Assert.Equal(0b101u, gRows.LayerMask);
+                Assert.Equal(0b101u, LayerTestUtil.Mask(gRows));
                 Assert.Equal(20, gRows.Size);
                 fRows.Dispose(null);
                 gRows.Dispose(null);
@@ -128,7 +128,7 @@ namespace Eggnog.Relations.Tests
             var fast = new List<Constraint>();
             var slow = new List<Constraint>();
             var subset = leaf.Database.View.Evaluate(f, [Constraint.EqConst(new ColumnId(1), new Value(2))], fast, slow);
-            Assert.Equal(0b010u, subset.LayerMask);
+            Assert.Equal(0b010u, LayerTestUtil.Mask(subset));
             Assert.Equal(10, subset.Size);
             subset.Dispose(null);
 
@@ -160,7 +160,7 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(new RuleId(0), kept);
             using var rs = next.Build();
             var header = Assert.Single(rs[kept!.Value].Instance!.HeaderSubsets);
-            Assert.Equal(0b100u, header.LayerMask);
+            Assert.Equal(0b100u, LayerTestUtil.Mask(header));
         }
 
         [Fact]
@@ -171,7 +171,7 @@ namespace Eggnog.Relations.Tests
             var root = store.Root;
             Insert(root, p, root.NewId(), 1, 0);
             using var child = root.CreateChild();
-            Assert.Equal(0u, child.GetView(p).PresentMask);
+            Assert.Equal(0u, LayerTestUtil.PresentMask(child.GetView(p)));
             var fast = new List<Constraint>();
             var slow = new List<Constraint>();
             var subset = child.Database.View.Evaluate(p, [Constraint.GeConst(new ColumnId(2), new Value(0)), Constraint.Eq(new ColumnId(0), new ColumnId(1))], fast, slow);

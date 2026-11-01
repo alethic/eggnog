@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Threading;
 
@@ -74,9 +73,10 @@ namespace Eggnog.Relations
         TrieNodeSideState? side;
 
         /// <summary>
-        /// The layer of <see cref="single"/>.
+        /// The layer of <see cref="single"/>. An <see cref="int"/>, as a chain may be any depth; it fills the slot the
+        /// flags leave, so a node is still 64 bytes.
         /// </summary>
-        byte layer;
+        int layer;
 
         /// <summary>
         /// Whether the rows are <see cref="side"/>'s multi-layer rows.
@@ -122,12 +122,17 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets the layers that hold rows: bit <c>l</c> for layer <c>l</c>.
+        /// Gets the layers that hold rows, in ascending order (<see cref="LayeredSubset.GetLayers"/>): a nonempty
+        /// single-layer node's one layer, as one mask bit. Valid while the node is not released or reset.
         /// </summary>
-        public uint LayerMask
+        /// <returns>The enumerator.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public LayerEnumerator GetLayers()
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => multiLayer ? side!.Rows.LayerMask : (single.IsEmpty ? 0u : 1u << layer);
+            if (multiLayer)
+                return side!.Rows.GetLayers();
+
+            return single.IsEmpty ? LayerEnumerator.Empty : LayerEnumerator.Single(layer);
         }
 
         /// <summary>
@@ -168,7 +173,7 @@ namespace Eggnog.Relations
         /// Borrows the rows of layer <paramref name="layer"/>: empty when the layer holds none. Valid while the node is
         /// not released or reset.
         /// </summary>
-        /// <param name="layer">The layer.</param>
+        /// <param name="layer">The layer, not negative.</param>
         /// <returns>The rows.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public SubsetRef GetLayerRows(int layer)
@@ -176,7 +181,7 @@ namespace Eggnog.Relations
             if (multiLayer)
                 return side!.Rows.GetLayer(layer);
 
-            if ((uint)layer >= LayeredSubset.MaxLayers)
+            if (layer < 0)
                 ThrowLayerOutOfRange(layer);
 
             return layer == this.layer ? single.AsRef() : default;
@@ -206,11 +211,11 @@ namespace Eggnog.Relations
         internal void Initialize(int layer, Subset rows, bool isConcurrent)
         {
             Debug.Assert(hasCaches == false, "a pooled node kept its caches");
-            if ((uint)layer >= LayeredSubset.MaxLayers)
+            if (layer < 0)
                 ThrowLayerOutOfRange(layer);
 
             single = rows;
-            this.layer = (byte)layer;
+            this.layer = layer;
             multiLayer = false;
             concurrent = isConcurrent;
             pooled = false;
@@ -422,13 +427,13 @@ namespace Eggnog.Relations
         /// <param name="pool">Receives the released children, and a multi-layer node's per-layer array.</param>
         public void ResetDense(int layer, OffsetRange range, TrieNodePool pool)
         {
-            if ((uint)layer >= LayeredSubset.MaxLayers)
+            if (layer < 0)
                 ThrowLayerOutOfRange(layer);
 
             ResetCaches(pool);
             DisposeRows(pool.Layers);
             single = Subset.Dense(range);
-            this.layer = (byte)layer;
+            this.layer = layer;
         }
 
         /// <summary>
@@ -472,8 +477,7 @@ namespace Eggnog.Relations
                 return;
             }
 
-            single = rows.TakeSingle(out var l);
-            layer = (byte)l;
+            single = rows.TakeSingle(out layer);
             multiLayer = false;
         }
 
@@ -524,7 +528,7 @@ namespace Eggnog.Relations
             if (multiLayer == false)
                 return arity;
 
-            var top = 32 - BitOperations.LeadingZeroCount(side!.Rows.LayerMask);
+            var top = side!.Rows.TopLayer;
             return (selectors ? top + 1 : top) * arity;
         }
 
@@ -674,7 +678,7 @@ namespace Eggnog.Relations
         [MethodImpl(MethodImplOptions.NoInlining)]
         static void ThrowLayerOutOfRange(int layer)
         {
-            throw new ArgumentOutOfRangeException(nameof(layer), layer, $"A layer lies in [0, {LayeredSubset.MaxLayers}).");
+            throw new ArgumentOutOfRangeException(nameof(layer), layer, "A layer is not negative.");
         }
 
         [DoesNotReturn]

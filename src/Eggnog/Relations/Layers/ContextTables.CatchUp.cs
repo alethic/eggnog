@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
+using System.Threading;
 
 namespace Eggnog.Relations
 {
@@ -35,6 +36,20 @@ namespace Eggnog.Relations
         int settledAtCreation;
 
         /// <summary>
+        /// The store's change clock reading at which <see cref="NeedsCatchUp"/> last found every ancestor that is not
+        /// settled read, shifted left one bit, with the low bit set when it tested the Added streams too; -1 when there
+        /// is none to go by. While the clock has not moved, no such ancestor changed (<see cref="ChangeClock"/>), so the
+        /// answer stands without the ancestor reads. Reset whenever the cursors move.
+        /// </summary>
+        long caughtUpAt = -1;
+
+        /// <summary>
+        /// The store's change clock reading at which <see cref="HasNewAddedEntries"/> last found nothing new; -1 when
+        /// there is none to go by. Reset whenever the cursors move.
+        /// </summary>
+        long addedReadAt = -1;
+
+        /// <summary>
         /// Gets whether some ancestor that is not settled changed since the context last caught up with it: its change
         /// stamp moved (the root's is its database's <see cref="Database.ChangeStamp"/>); its container log holds Dirty
         /// ids past the context's cursor, the ids of containers it rebuilt in place, whose new meaning the context's
@@ -44,8 +59,9 @@ namespace Eggnog.Relations
         /// cursor, drained or still pending (<see cref="ContainerLog.HasAddedSince"/>), which the pre-loop scan of the
         /// context's rebuild has not read (<see cref="ContainerLayers.ScanAdds"/>). A context with neither learns of
         /// such a container only through a later displacement of its own, whose container pass claims every container
-        /// that holds it (<see cref="ContainerLayers.RebuildPass"/>). O(unsettled ancestors), three volatile reads
-        /// each.
+        /// that holds it (<see cref="ContainerLayers.RebuildPass"/>). O(1) while the store's change clock has not moved
+        /// since the last test that found nothing (<see cref="ChangeClock"/>), so testing every level of a chain costs
+        /// O(depth), not O(depth²); otherwise O(unsettled ancestors), three volatile reads each.
         /// </summary>
         public bool NeedsCatchUp
         {
@@ -54,9 +70,16 @@ namespace Eggnog.Relations
                 if (settled == depth)
                     return false;
 
+                // The clock is read before the ancestors: a change after the reads moves it past this reading.
                 var containers = owner.Journal is { Count: > 0 } || owner.ContainerLayers is { IsEmpty: false };
+                var clock = owner.Store.ChangeClock.Value;
+                var memo = Volatile.Read(ref caughtUpAt);
+                if (memo >= 0 && memo >> 1 == clock && (containers == false || (memo & 1) != 0))
+                    return false;
+
                 for (var a = settled; a < depth; a++)
                 {
+                    statistics.AncestorCursorReads++;
                     var cursor = cursors[a]!;
                     if (chain[a].Database.ChangeStamp != cursor.Stamp)
                         return true;
@@ -69,24 +92,46 @@ namespace Eggnog.Relations
                         return true;
                 }
 
+                Volatile.Write(ref caughtUpAt, clock << 1 | (containers ? 1L : 0L));
                 return false;
             }
         }
 
         /// <summary>
+        /// Forgets what <see cref="NeedsCatchUp"/> and <see cref="HasNewAddedEntries"/> last found, as the cursors moved.
+        /// </summary>
+        void ForgetCaughtUp()
+        {
+            Volatile.Write(ref caughtUpAt, -1);
+            Volatile.Write(ref addedReadAt, -1);
+        }
+
+        /// <summary>
         /// Gets whether the container log of some ancestor that is not settled holds Added entries past the context's
         /// cursor into it, drained or still pending: what <see cref="ReadAdded"/> would read, and the pre-loop scan of
-        /// the context's rebuild then reads (<see cref="ContainerLayers.ScanAdds"/>). O(unsettled ancestors), two
-        /// volatile reads each.
+        /// the context's rebuild then reads (<see cref="ContainerLayers.ScanAdds"/>). O(1) while the store's change clock
+        /// has not moved since the last test that found nothing, as for <see cref="NeedsCatchUp"/>; otherwise
+        /// O(unsettled ancestors), two volatile reads each.
         /// </summary>
         internal bool HasNewAddedEntries
         {
             get
             {
+                if (settled == depth)
+                    return false;
+
+                var clock = owner.Store.ChangeClock.Value;
+                if (Volatile.Read(ref addedReadAt) == clock)
+                    return false;
+
                 for (var a = settled; a < depth; a++)
+                {
+                    statistics.AncestorCursorReads++;
                     if (chain[a].ContainerLog.HasAddedSince(cursors[a]!.Added))
                         return true;
+                }
 
+                Volatile.Write(ref addedReadAt, clock);
                 return false;
             }
         }
@@ -145,6 +190,8 @@ namespace Eggnog.Relations
                 log.Drain();
                 cursor.Added = log.ReadAdded(cursor.Added, null);
             }
+
+            ForgetCaughtUp();
         }
 
         /// <summary>
@@ -160,6 +207,8 @@ namespace Eggnog.Relations
             for (var a = settled; a < depth; a++)
                 if (ends[a] >= 0)
                     cursors[a]!.Added = ends[a];
+
+            ForgetCaughtUp();
         }
 
         /// <summary>
@@ -309,6 +358,7 @@ namespace Eggnog.Relations
             while (settled < depth && chain[settled].IsFrozen)
                 cursors[settled++] = null;
 
+            ForgetCaughtUp();
             return moved;
         }
 

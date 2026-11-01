@@ -124,7 +124,7 @@ namespace Eggnog.Relations.Tests
             using var rs = builder.Build();
             var instance = rs[kept!.Value].Instance!;
             var header = Assert.Single(instance.HeaderSubsets);
-            Assert.Equal(0b110u, header.LayerMask);
+            Assert.Equal(0b110u, LayerTestUtil.Mask(header));
             Assert.Equal(20, header.Size);
             Assert.Equal([Constraint.GeConst(new ColumnId(2), new Value(epochs[1]))], instance.Headers[0].Constraints);
         }
@@ -173,7 +173,7 @@ namespace Eggnog.Relations.Tests
                 fast.Clear();
                 slow.Clear();
                 var rows = view.Evaluate(f, both, fast, slow, scratch);
-                Assert.Equal(0b10u, rows.LayerMask);
+                Assert.Equal(0b10u, LayerTestUtil.Mask(rows));
                 Assert.Equal(1, rows.Size);
                 rows.Dispose(null);
             }
@@ -184,6 +184,66 @@ namespace Eggnog.Relations.Tests
                 fast.Clear();
                 slow.Clear();
                 view.Evaluate(f, both, fast, slow, scratch).Dispose(null);
+            }
+
+            Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
+        }
+
+        /// <summary>
+        /// A view deeper than a machine word's layers, with a header of six constraints: its table of fast constraints per
+        /// layer outgrows the stack, so it lives in the scratch, which grows once and then serves every evaluation. A
+        /// chain of frozen levels each writes one row of <c>f</c>; the header asks for rows newer than the leaf's, so it
+        /// is empty in every layer, and a warm evaluation allocates nothing.
+        /// </summary>
+        [Theory]
+        [InlineData(70)]
+        [InlineData(130)]
+        public void AHeaderOverADeepViewAllocatesNothingOnceItsScratchHasGrown(int depth)
+        {
+            var store = new Store(ParallelHeuristics.Serial);
+            var f = store.AddTable(MaxFunction(1), name: "f");
+            var context = store.Root;
+            var last = 0u;
+            for (var d = 0; d <= depth; d++)
+            {
+                if (d > 0)
+                {
+                    context.Freeze();
+                    context = context.CreateChild();
+                }
+
+                last = Write(context, f, [context.NewId()], _ => 1u);
+            }
+
+            var view = context.Database.View;
+            var scratch = new HeaderScratch();
+            var fast = new List<Constraint>();
+            var slow = new List<Constraint>();
+            Constraint[] header =
+            [
+                Constraint.GtConst(new ColumnId(2), new Value(last)),
+                Constraint.GeConst(new ColumnId(2), new Value(1)),
+                Constraint.LeConst(new ColumnId(2), new Value(uint.MaxValue - 1)),
+                Constraint.GeConst(new ColumnId(1), new Value(1)),
+                Constraint.LeConst(new ColumnId(1), new Value(1)),
+                Constraint.LtConst(new ColumnId(1), new Value(2)),
+            ];
+            Assert.True((depth + 1) * header.Length > 256);
+            for (var i = 0; i < 2; i++)
+            {
+                fast.Clear();
+                slow.Clear();
+                var rows = view.Evaluate(f, header, fast, slow, scratch);
+                Assert.Equal(0, rows.Size);
+                rows.Dispose(null);
+            }
+
+            var before = GC.GetAllocatedBytesForCurrentThread();
+            for (var i = 0; i < 1000; i++)
+            {
+                fast.Clear();
+                slow.Clear();
+                view.Evaluate(f, header, fast, slow, scratch).Dispose(null);
             }
 
             Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);

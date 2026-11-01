@@ -83,21 +83,53 @@ namespace Eggnog.Relations
         /// <param name="atom">The atom.</param>
         /// <param name="range">The rows.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void RefineAtomDense(AtomId atom, OffsetRange range) => RefineAtomDense(atom, 0, range);
+        public void RefineAtomDense(AtomId atom, OffsetRange range)
+        {
+            ref var e = ref Append();
+            e.Kind = FrameUpdateKind.RefineAtomDense;
+            e.Layer = 0;
+            e.Id = atom.Index;
+            e.A = range.Start;
+            e.B = range.End;
+        }
 
         /// <summary>
         /// Refines <paramref name="atom"/> to the dense rows <paramref name="range"/> of layer
-        /// <paramref name="layer"/>: egglog's <c>refine_atom_dense</c> with the layer the frame's rows lie in.
+        /// <paramref name="layer"/>: egglog's <c>refine_atom_dense</c> with the layer the frame's rows lie in. A layer
+        /// past <see cref="byte.MaxValue"/>, which only a chain that deep has, does not fit the entry's layer byte: its
+        /// rows become a node from <paramref name="pool"/> that the frame owns, as a sparse refinement's do.
+        /// </summary>
+        /// <param name="atom">The atom.</param>
+        /// <param name="layer">The layer of the rows: 0 at a root.</param>
+        /// <param name="range">The rows.</param>
+        /// <param name="pool">The pool to take the node of a deep layer's rows from.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void RefineAtomDense(AtomId atom, int layer, OffsetRange range, TrieNodePool pool)
+        {
+            if ((uint)layer > byte.MaxValue)
+            {
+                RefineAtomOwned(atom, pool.Rent(layer, Subset.Dense(range)));
+                return;
+            }
+
+            RefineAtomDense(atom, (byte)layer, range);
+        }
+
+        /// <summary>
+        /// Refines <paramref name="atom"/> to the dense rows <paramref name="range"/> of layer
+        /// <paramref name="layer"/>, a layer that fits the entry's layer byte: egglog's <c>refine_atom_dense</c> with the
+        /// layer the frame's rows lie in, which only writes the entry. For a row loop that has already sent the layers
+        /// past <see cref="byte.MaxValue"/> to <see cref="RefineAtomDense(AtomId, int, OffsetRange, TrieNodePool)"/>.
         /// </summary>
         /// <param name="atom">The atom.</param>
         /// <param name="layer">The layer of the rows: 0 at a root.</param>
         /// <param name="range">The rows.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void RefineAtomDense(AtomId atom, int layer, OffsetRange range)
+        public void RefineAtomDense(AtomId atom, byte layer, OffsetRange range)
         {
             ref var e = ref Append();
             e.Kind = FrameUpdateKind.RefineAtomDense;
-            e.Layer = (byte)layer;
+            e.Layer = layer;
             e.Id = atom.Index;
             e.A = range.Start;
             e.B = range.End;
@@ -125,14 +157,11 @@ namespace Eggnog.Relations
         {
             if (rows.TryGetDense(out var range))
             {
-                RefineAtomDense(atom, layer, range);
+                RefineAtomDense(atom, layer, range, pool);
                 return;
             }
 
-            ref var e = ref Append();
-            e.Kind = FrameUpdateKind.RefineAtomOwned;
-            e.Id = atom.Index;
-            e.Node = pool.Rent(layer, rows);
+            RefineAtomOwned(atom, pool.Rent(layer, rows));
         }
 
         /// <summary>
@@ -152,10 +181,19 @@ namespace Eggnog.Relations
                 return;
             }
 
+            RefineAtomOwned(atom, pool.Rent(rows));
+        }
+
+        /// <summary>
+        /// Refines <paramref name="atom"/> to <paramref name="node"/>, a node the frame owns.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        void RefineAtomOwned(AtomId atom, TrieNode node)
+        {
             ref var e = ref Append();
             e.Kind = FrameUpdateKind.RefineAtomOwned;
             e.Id = atom.Index;
-            e.Node = pool.Rent(rows);
+            e.Node = node;
         }
 
         /// <summary>

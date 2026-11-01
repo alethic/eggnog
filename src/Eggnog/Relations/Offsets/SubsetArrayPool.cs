@@ -36,12 +36,12 @@ namespace Eggnog.Relations
         /// <summary>
         /// Initializes an empty pool of arrays of <paramref name="layerCount"/> entries.
         /// </summary>
-        /// <param name="layerCount">The array length: a layer count, in <c>[1, <see cref="LayeredSubset.MaxLayers"/>]</c>.</param>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="layerCount"/> is out of range.</exception>
+        /// <param name="layerCount">The array length: a layer count, at least 1.</param>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="layerCount"/> is less than 1.</exception>
         public SubsetArrayPool(int layerCount)
         {
-            if (layerCount < 1 || layerCount > LayeredSubset.MaxLayers)
-                throw new ArgumentOutOfRangeException(nameof(layerCount), layerCount, $"A layer count lies in [1, {LayeredSubset.MaxLayers}].");
+            if (layerCount < 1)
+                throw new ArgumentOutOfRangeException(nameof(layerCount), layerCount, "A layer count is at least 1.");
 
             this.layerCount = layerCount;
         }
