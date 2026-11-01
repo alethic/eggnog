@@ -253,7 +253,7 @@ namespace Eggnog.Tests.Subsumption
             var inCase = t.Graph.DefineRuleset("in case");
             inCase.DefineRule("name one", r => r.Rewrite(t.Num.Of(1L), t.Var.Of("one"), subsume: true));
             var root = t.Root;
-            root.Assume(dom.Of("k").Is(Set.Of("x", "y")), key.Of("k"));
+            root.Assume(dom.Of("k").Is(Set.Of(["x", "y"])), key.Of("k"));
             var one = root.Make(t.Num.Of(1L));
 
             var report = root.Run(Schedule.Split(split, Schedule.Saturate(inCase)));
@@ -272,7 +272,7 @@ namespace Eggnog.Tests.Subsumption
             var key = t.Graph.DefineRelation<string>("key");
             var split = t.Graph.DefineDomainSplit("split", dom, [key]);
             var root = t.Root;
-            root.Assume(dom.Of("k").Is(Set.Of("x", "y")), dom.Of("j").Is(Set.Of("x", "y")), key.Of("k"), key.Of("j"));
+            root.Assume(dom.Of("k").Is(Set.Of(["x", "y"])), dom.Of("j").Is(Set.Of(["x", "y"])), key.Of("k"), key.Of("j"));
             root.Subsume(key.Of("k"));
 
             var report = root.Run(Schedule.Split(split, Schedule.Saturate(t.Rules)));

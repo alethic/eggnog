@@ -28,6 +28,21 @@ namespace Eggnog.Tests.Host
             Assert.True(t.Root.Check());
         }
 
+        /// <summary>
+        /// A null fact array converts to an empty span, so it is no facts: a check of it holds, and an assume of it
+        /// writes nothing.
+        /// </summary>
+        [Fact]
+        public void ANullFactArrayIsNoFacts()
+        {
+            var t = new NodeTheory();
+            Fact[] none = null!;
+            var version = t.Root.Version;
+            t.Root.Assume(none);
+            Assert.Equal(version, t.Root.Version);
+            Assert.True(t.Root.Check(none));
+        }
+
         [Fact]
         public void AnEqualityOfClassesHoldsWhenTheyAreOneClass()
         {
@@ -91,14 +106,14 @@ namespace Eggnog.Tests.Host
             var t = new NodeTheory();
             var f = t.Graph.DefineFunction<string, long>("f");
             var size = t.Graph.DefineFunction<Node, Set<string>>("size");
-            t.Root.Assume(f.Of("k").Is(1L), size.Of(t.Lit.Of(1L)).Is(Set.Of("x")));
+            t.Root.Assume(f.Of("k").Is(1L), size.Of(t.Lit.Of(1L)).Is(Set.Of(["x"])));
 
             Assert.Equal(1L, t.Root.Get(f.Of("k")));
             Assert.True(t.Root.TryGet(f.Of("k"), out var value));
             Assert.Equal(1L, value);
             Assert.False(t.Root.TryGet(f.Of("j"), out _));
             Assert.Throws<InvalidOperationException>(() => t.Root.Get(f.Of("j")));
-            Assert.Equal(Set.Of("x"), t.Root.Get(size.Of(t.Lit.Of(1L))));
+            Assert.Equal(Set.Of(["x"]), t.Root.Get(size.Of(t.Lit.Of(1L))));
 
             var lit = t.Root.Get(t.Lit.Of(1L));
             Assert.Equal(t.Root.Find(lit).Id, lit.Id);
@@ -125,13 +140,13 @@ namespace Eggnog.Tests.Host
             var f = t.Graph.DefineFunction<string, Set<string>>("f");
             var byName = t.Graph.DefineConstructor<string, Node>("ByName");
             var a = t.Root.Make(t.A.Of());
-            t.Root.Assume(text.Of("seen"), f.Of("seen").Is(Set.Of("s")));
+            t.Root.Assume(text.Of("seen"), f.Of("seen").Is(Set.Of(["s"])));
             var before = t.Graph.Values.InternedCount;
 
             Assert.False(t.Root.Check(text.Of("unseen 1")));
             Assert.False(t.Root.TryGet(f.Of("unseen 2"), out _));
             Assert.False(t.Root.AreEqual(a, byName.Of("unseen 3")));
-            Assert.False(t.Root.Check(f.Of("seen").Is(Set.Of("unseen 4"))));
+            Assert.False(t.Root.Check(f.Of("seen").Is(Set.Of(["unseen 4"]))));
             Assert.False(t.Root.Check(Fact.Exists(byName.Of("unseen 5"))));
             Assert.False(t.Root.Check(t.Num.Of(long.MinValue + 7)));
 
@@ -163,7 +178,7 @@ namespace Eggnog.Tests.Host
             Assert.Equal(-7.25, graph.Root.Get(DoublePrimitives.Negate.Of(7.25)));
             Assert.True(graph.Root.Check(((Term<int>)(-5)).Is(-5)));
             Assert.Equal(-5, graph.Root.Get((Term<int>)(-5)));
-            Assert.True(graph.Root.Check(Primitives.Singleton<string>().Of("q").Is(Set.Of("q"))));
+            Assert.True(graph.Root.Check(Primitives.Singleton<string>().Of("q").Is(Set.Of(["q"]))));
             Assert.True(graph.Root.Check(Fact.In(graph.RootTag, StringPrimitives.Concat.Of("x", "y").Is("xy"))));
 
             Assert.Equal(before, graph.Values.InternedCount);
@@ -295,7 +310,7 @@ namespace Eggnog.Tests.Host
             var named = t.Graph.DefineRelation<string, long>("named");
             var dom = t.Graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
             t.Root.Assume(named.Of("b", 10L), named.Of("a", 2L), named.Of("b", 9L), named.Of("Z", 1L));
-            t.Root.Assume(dom.Of("x").Is(Set.Of("q", "p")));
+            t.Root.Assume(dom.Of("x").Is(Set.Of(["q", "p"])));
 
             var rows = t.Root.Rows(named);
             Assert.Equal(new[] { "(named \"Z\" 1)", "(named \"a\" 2)", "(named \"b\" 9)", "(named \"b\" 10)" }, rows.Select(r => r.ToString()));
@@ -306,7 +321,7 @@ namespace Eggnog.Tests.Host
             var values = t.Root.Rows(dom);
             Assert.Single(values);
             Assert.Equal(new object[] { "x" }, values[0].Keys);
-            Assert.Equal(Set.Of("p", "q"), values[0].Output);
+            Assert.Equal(Set.Of(["p", "q"]), values[0].Output);
             Assert.Empty(t.Root.Rows(t.Num));
         }
 

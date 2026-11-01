@@ -65,10 +65,9 @@ namespace Eggnog
         /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
         /// <exception cref="ArgumentException">A table inside the facts belongs to another graph than the
         /// tag.</exception>
-        public static Fact In(ScopeTag scope, params Fact[] facts)
+        public static Fact In(ScopeTag scope, params ReadOnlySpan<Fact> facts)
         {
             ArgumentNullException.ThrowIfNull(scope);
-            ArgumentNullException.ThrowIfNull(facts);
             var copy = new Fact[facts.Length];
             for (var i = 0; i < copy.Length; i++)
             {

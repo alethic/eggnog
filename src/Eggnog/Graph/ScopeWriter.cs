@@ -52,12 +52,11 @@ namespace Eggnog
         /// <exception cref="InvalidOperationException">The call came from another thread, or from a user delegate the
         /// engine invoked.</exception>
         /// <exception cref="ObjectDisposedException">The batch has ended.</exception>
-        public void Assume(params Fact[] facts)
+        public void Assume(params ReadOnlySpan<Fact> facts)
         {
             Enter();
             try
             {
-                ArgumentNullException.ThrowIfNull(facts);
                 foreach (var fact in facts)
                     batch.PlanFact(fact ?? throw new ArgumentNullException(nameof(facts), "A fact is null."));
             }
@@ -149,7 +148,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Adds the subsumption of ground relation rows to the batch (see <see cref="Scope.Subsume(Fact[])"/>). A row
+        /// Adds the subsumption of ground relation rows to the batch (see <see cref="Scope.Subsume(ReadOnlySpan{Fact})"/>). A row
         /// the batch inserts, before or after this call, is inserted subsumed.
         /// </summary>
         /// <param name="rows">The rows, of subsumable relations (<see cref="RelationOptions.Subsumable"/>).</param>
@@ -158,12 +157,11 @@ namespace Eggnog
         /// <exception cref="InvalidOperationException">The call came from another thread, or from a user delegate the
         /// engine invoked.</exception>
         /// <exception cref="ObjectDisposedException">The batch has ended.</exception>
-        public void Subsume(params Fact[] rows)
+        public void Subsume(params ReadOnlySpan<Fact> rows)
         {
             Enter();
             try
             {
-                ArgumentNullException.ThrowIfNull(rows);
                 foreach (var row in rows)
                     batch.PlanSubsume(row ?? throw new ArgumentNullException(nameof(rows), "A fact is null."));
             }

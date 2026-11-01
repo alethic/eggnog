@@ -20,7 +20,7 @@ namespace Eggnog.Tests.Predicates.Literal
     public sealed class ContextArgumentTheory
     {
 
-        static readonly Set<string> StringOrNull = Set.Of("string", "null");
+        static readonly Set<string> StringOrNull = Set.Of(["string", "null"]);
 
         /// <summary>
         /// Defines the theory in <paramref name="graph"/>.
@@ -229,7 +229,7 @@ namespace Eggnog.Tests.Predicates.Literal
             Horn.DefineRule($"{path} = {value} declares {formPath} {form}", r =>
             {
                 var c = r.Var<Ctx>("c");
-                r.When(Present.Of(c, path), Dom.Of(c, path).Is(Set.Of(value)));
+                r.When(Present.Of(c, path), Dom.Of(c, path).Is(Set.Of([value])));
                 r.Then(Form.Of(c, formPath, form));
             });
 
@@ -291,7 +291,7 @@ namespace Eggnog.Tests.Predicates.Literal
             {
                 var (c, p, d) = r.Vars<Ctx, string, Set<string>>("c", "p", "d");
                 r.When(d.Is(Dom.Of(c, p)));
-                r.Then(Types.Of(c, p).Is(Set.Of("string")));
+                r.Then(Types.Of(c, p).Is(Set.Of(["string"])));
             });
             Lattice.DefineRule("a form describes strings", r =>
             {
@@ -479,7 +479,7 @@ namespace Eggnog.Tests.Predicates.Literal
                 r.Then(
                     Present.Of(Query.Of(), p),
                     Lo.Of(Query.Of(), p).Is(Primitives.Add.Of(n, 1L)),
-                    Types.Of(Query.Of(), p).Is(Set.Of("number")));
+                    Types.Of(Query.Of(), p).Is(Set.Of(["number"])));
             });
         }
 

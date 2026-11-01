@@ -178,7 +178,7 @@ namespace Eggnog.Tests.Scopes
             graph.Root.Freeze();
             var scope = graph.Root.CreateChild();
             var node = scope.Make(a.Of());
-            scope.Assume(dom.Of("kind").Is(Set.Of("x", "y")));
+            scope.Assume(dom.Of("kind").Is(Set.Of(["x", "y"])));
             scope.Assume(g.Of("k").Is(1L));
             var child = scope.CreateChild();
             var inCase = Schedule.Sequence(Schedule.Saturate(rules), Schedule.Until(Schedule.Saturate(rules), tag.Of(node)));
@@ -277,7 +277,7 @@ namespace Eggnog.Tests.Scopes
             graph.Root.Freeze();
             var scope = graph.Root.CreateChild();
             var node = scope.Make(a.Of());
-            scope.Assume(dom.Of(node).Is(Set.Of("x", "y")));
+            scope.Assume(dom.Of(node).Is(Set.Of(["x", "y"])));
             disposed = scope;
 
             var report = scope.Run(Schedule.Split(split, Schedule.Saturate(none)));

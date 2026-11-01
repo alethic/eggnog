@@ -88,7 +88,7 @@ namespace Eggnog.Tests.Values
                 if (naive)
                 {
                     graph.Root.Run(rules);
-                    Assert.Equal(Vec.Of(2L, 4L), graph.Root.Get(output.Of()));
+                    Assert.Equal(Vec.Of([2L, 4L]), graph.Root.Get(output.Of()));
                 }
                 else
                 {
@@ -209,7 +209,7 @@ namespace Eggnog.Tests.Values
             graph.Root.Freeze();
             using var child = graph.Root.CreateChild();
             child.Assume(output.Of().Is(Primitives.UnstableVecMap<long, long>().Of(Primitives.UnstableFn<long, long>(Primitives.Add).Of(10L), Primitives.VecOf<long>().Of(1L, 2L))));
-            Assert.Equal(Vec.Of(11L, 12L), child.Get(output.Of()));
+            Assert.Equal(Vec.Of([11L, 12L]), child.Get(output.Of()));
         }
 
     }

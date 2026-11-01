@@ -20,10 +20,10 @@ namespace Eggnog.Tests.Values
         static readonly Set<string>[] Sets =
         {
             Set<string>.Empty,
-            Set.Of("a"),
-            Set.Of("b"),
-            Set.Of("a", "b"),
-            Set.Of("a", "b", "c"),
+            Set.Of(["a"]),
+            Set.Of(["b"]),
+            Set.Of(["a", "b"]),
+            Set.Of(["a", "b", "c"]),
         };
 
         static readonly long[] Numbers = { -3, 0, 1, 7, long.MaxValue };
@@ -70,11 +70,11 @@ namespace Eggnog.Tests.Values
             var lo = graph.DefineFunction<string, long>("lo", ValueLattice.Max<long>());
             var hi = graph.DefineFunction<string, long>("hi", ValueLattice.Min<long>());
             var dom = graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
-            graph.Root.Assume(lo.Of("n").Is(5L), hi.Of("n").Is(5L), dom.Of("k").Is(Set.Of("a", "b")));
-            graph.Root.Assume(lo.Of("n").Is(3L), lo.Of("n").Is(9L), hi.Of("n").Is(3L), dom.Of("k").Is(Set.Of("b", "c")));
+            graph.Root.Assume(lo.Of("n").Is(5L), hi.Of("n").Is(5L), dom.Of("k").Is(Set.Of(["a", "b"])));
+            graph.Root.Assume(lo.Of("n").Is(3L), lo.Of("n").Is(9L), hi.Of("n").Is(3L), dom.Of("k").Is(Set.Of(["b", "c"])));
             Assert.Equal(9L, graph.Root.Get(lo.Of("n")));
             Assert.Equal(3L, graph.Root.Get(hi.Of("n")));
-            Assert.Equal(Set.Of("b"), graph.Root.Get(dom.Of("k")));
+            Assert.Equal(Set.Of(["b"]), graph.Root.Get(dom.Of("k")));
             Assert.Same(lo.Lattice, ((FunctionHandle)lo).Lattice);
         }
 
@@ -325,10 +325,10 @@ namespace Eggnog.Tests.Values
             var discriminator = s.Graph.DefineRelation<string>("discriminator");
             var split = s.Graph.DefineDomainSplit("kind", dom, [discriminator]);
             var branches = s.Graph.DefineRuleset("branches");
-            branches.DefineRule("kind a", r => { r.When(dom.Of("kind").Is(Set.Of("a"))); r.Then(s.Ge.Of("y", 1m), s.Lt.Of("y", 5m)); });
-            branches.DefineRule("kind b", r => { r.When(dom.Of("kind").Is(Set.Of("b"))); r.Then(s.Gt.Of("y", 1m), s.Le.Of("y", 8m)); });
+            branches.DefineRule("kind a", r => { r.When(dom.Of("kind").Is(Set.Of(["a"]))); r.Then(s.Ge.Of("y", 1m), s.Lt.Of("y", 5m)); });
+            branches.DefineRule("kind b", r => { r.When(dom.Of("kind").Is(Set.Of(["b"]))); r.Then(s.Gt.Of("y", 1m), s.Le.Of("y", 8m)); });
             var scope = s.Graph.Root;
-            scope.Assume(discriminator.Of("kind"), dom.Of("kind").Is(Set.Of("a", "b")));
+            scope.Assume(discriminator.Of("kind"), dom.Of("kind").Is(Set.Of(["a", "b"])));
 
             var report = scope.Run(Schedule.Split(split, Schedule.Saturate(branches, s.Bounds)));
 

@@ -95,10 +95,9 @@ namespace Eggnog
         /// </summary>
         /// <param name="facts">The facts.</param>
         /// <exception cref="ArgumentException">The tag of a <see cref="Fact.In"/> belongs to another graph.</exception>
-        public void When(params Fact[] facts)
+        public void When(params ReadOnlySpan<Fact> facts)
         {
             ThrowIfClosed();
-            ArgumentNullException.ThrowIfNull(facts);
             foreach (var fact in facts)
             {
                 graph.CheckFactTags(fact ?? throw new ArgumentNullException(nameof(facts), "A fact is null."), nameof(facts));
@@ -169,10 +168,9 @@ namespace Eggnog
         /// </summary>
         /// <param name="facts">The facts.</param>
         /// <exception cref="ArgumentException">The tag of a <see cref="Fact.In"/> belongs to another graph.</exception>
-        public void Then(params Fact[] facts)
+        public void Then(params ReadOnlySpan<Fact> facts)
         {
             ThrowIfClosed();
-            ArgumentNullException.ThrowIfNull(facts);
             foreach (var fact in facts)
             {
                 graph.CheckFactTags(fact ?? throw new ArgumentNullException(nameof(facts), "A fact is null."), nameof(facts));
@@ -276,10 +274,9 @@ namespace Eggnog
         /// </summary>
         /// <param name="rows">The relation rows.</param>
         /// <exception cref="ArgumentException">The tag of a <see cref="Fact.In"/> belongs to another graph.</exception>
-        public void Subsume(params Fact[] rows)
+        public void Subsume(params ReadOnlySpan<Fact> rows)
         {
             ThrowIfClosed();
-            ArgumentNullException.ThrowIfNull(rows);
             foreach (var row in rows)
             {
                 graph.CheckFactTags(row ?? throw new ArgumentNullException(nameof(rows), "A fact is null."), nameof(rows));
@@ -315,10 +312,9 @@ namespace Eggnog
         /// </summary>
         /// <param name="rows">The relation rows.</param>
         /// <exception cref="ArgumentException">The tag of a <see cref="Fact.In"/> belongs to another graph.</exception>
-        public void Delete(params Fact[] rows)
+        public void Delete(params ReadOnlySpan<Fact> rows)
         {
             ThrowIfClosed();
-            ArgumentNullException.ThrowIfNull(rows);
             foreach (var row in rows)
             {
                 graph.CheckFactTags(row ?? throw new ArgumentNullException(nameof(rows), "A fact is null."), nameof(rows));

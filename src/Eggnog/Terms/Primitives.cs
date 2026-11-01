@@ -519,7 +519,7 @@ namespace Eggnog
             for (var i = 0; i < items.Length; i++)
                 items[i] = i;
 
-            return Vec.Of(items);
+            return Vec<long>.Own(items);
         });
 
         /// <summary>

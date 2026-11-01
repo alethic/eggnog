@@ -173,7 +173,7 @@ namespace Eggnog
         /// <param name="function">The function: pure, deterministic and thread-safe.</param>
         /// <returns>The primitive.</returns>
         /// <exception cref="ArgumentException">The name is invalid, or a parameter type is <c>null</c>.</exception>
-        public static PrimitiveN<TResult> Create<TResult>(string name, IReadOnlyList<Type> parameters, FuncN<TResult> function)
+        public static PrimitiveN<TResult> Create<TResult>(string name, ReadOnlySpan<Type> parameters, FuncN<TResult> function)
         {
             NameRules.ValidateName(name, nameof(name));
             ArgumentNullException.ThrowIfNull(function);
@@ -191,7 +191,7 @@ namespace Eggnog
         /// <returns>The primitive; its <see cref="PrimitiveN{TResult}.Function"/> throws
         /// <see cref="InvalidOperationException"/> where there is no result.</returns>
         /// <exception cref="ArgumentException">The name is invalid, or a parameter type is <c>null</c>.</exception>
-        public static PrimitiveN<TResult> CreatePartial<TResult>(string name, IReadOnlyList<Type> parameters, PartialFuncN<TResult> function)
+        public static PrimitiveN<TResult> CreatePartial<TResult>(string name, ReadOnlySpan<Type> parameters, PartialFuncN<TResult> function)
         {
             NameRules.ValidateName(name, nameof(name));
             ArgumentNullException.ThrowIfNull(function);
@@ -211,7 +211,7 @@ namespace Eggnog
         /// <returns>The primitive; its <see cref="PrimitiveN{TResult}.Function"/> throws, since it needs the
         /// tables.</returns>
         /// <exception cref="ArgumentException">The name is invalid, or a parameter type is <c>null</c>.</exception>
-        public static PrimitiveN<TResult> CreateRead<TResult>(string name, IReadOnlyList<Type> parameters, TableFuncN<ITableReader, TResult> function) =>
+        public static PrimitiveN<TResult> CreateRead<TResult>(string name, ReadOnlySpan<Type> parameters, TableFuncN<ITableReader, TResult> function) =>
             CreateTables(name, parameters, PrimitiveAccess.Read, function);
 
         /// <summary>
@@ -226,7 +226,7 @@ namespace Eggnog
         /// <returns>The primitive; its <see cref="PrimitiveN{TResult}.Function"/> throws, since it needs the
         /// tables.</returns>
         /// <exception cref="ArgumentException">The name is invalid, or a parameter type is <c>null</c>.</exception>
-        public static PrimitiveN<TResult> CreateWrite<TResult>(string name, IReadOnlyList<Type> parameters, TableFuncN<ITableWriter, TResult> function) =>
+        public static PrimitiveN<TResult> CreateWrite<TResult>(string name, ReadOnlySpan<Type> parameters, TableFuncN<ITableWriter, TResult> function) =>
             CreateTables(name, parameters, PrimitiveAccess.Write, function);
 
         /// <summary>
@@ -241,13 +241,13 @@ namespace Eggnog
         /// <returns>The primitive; its <see cref="PrimitiveN{TResult}.Function"/> throws, since it needs the
         /// tables.</returns>
         /// <exception cref="ArgumentException">The name is invalid, or a parameter type is <c>null</c>.</exception>
-        public static PrimitiveN<TResult> CreateFull<TResult>(string name, IReadOnlyList<Type> parameters, TableFuncN<ITables, TResult> function) =>
+        public static PrimitiveN<TResult> CreateFull<TResult>(string name, ReadOnlySpan<Type> parameters, TableFuncN<ITables, TResult> function) =>
             CreateTables(name, parameters, PrimitiveAccess.Full, function);
 
         /// <summary>
         /// Creates a primitive over the tables, of an access other than <see cref="PrimitiveAccess.Pure"/>.
         /// </summary>
-        static PrimitiveN<TResult> CreateTables<TResult>(string name, IReadOnlyList<Type> parameters, PrimitiveAccess access, TableFuncN<ITables, TResult> function)
+        static PrimitiveN<TResult> CreateTables<TResult>(string name, ReadOnlySpan<Type> parameters, PrimitiveAccess access, TableFuncN<ITables, TResult> function)
         {
             NameRules.ValidateName(name, nameof(name));
             ArgumentNullException.ThrowIfNull(function);
@@ -312,10 +312,9 @@ namespace Eggnog
         /// <summary>
         /// Copies parameter types, refusing a missing one.
         /// </summary>
-        static Type[] ParameterArray(IReadOnlyList<Type> parameters)
+        static Type[] ParameterArray(ReadOnlySpan<Type> parameters)
         {
-            ArgumentNullException.ThrowIfNull(parameters);
-            var types = new Type[parameters.Count];
+            var types = new Type[parameters.Length];
             for (var i = 0; i < types.Length; i++)
                 types[i] = parameters[i] ?? throw new ArgumentException($"Parameter type {i} is null.", nameof(parameters));
 
@@ -328,10 +327,10 @@ namespace Eggnog
         /// <typeparam name="T">The arguments' type.</typeparam>
         /// <typeparam name="TResult">The result type.</typeparam>
         /// <param name="name">The name it renders as.</param>
-        /// <param name="function">The function over all the arguments: pure, deterministic and thread-safe; it must not
-        /// keep the list, which is valid only during the call.</param>
+        /// <param name="function">The function over all the arguments, in a span valid only during the call: pure,
+        /// deterministic and thread-safe.</param>
         /// <returns>The primitive.</returns>
-        public static VariadicPrimitive<T, TResult> CreateVariadic<T, TResult>(string name, Func<IReadOnlyList<T>, TResult> function)
+        public static VariadicPrimitive<T, TResult> CreateVariadic<T, TResult>(string name, VariadicFunc<T, TResult> function)
         {
             NameRules.ValidateName(name, nameof(name));
             ArgumentNullException.ThrowIfNull(function);

@@ -74,7 +74,7 @@ namespace Eggnog
         /// and the facts after it are not written. On a case whose contradiction stopped it, or a scope under one, the
         /// call does nothing.
         /// </summary>
-        /// <param name="facts">The facts.</param>
+        /// <param name="facts">The facts; none, a <c>null</c> array included, write nothing.</param>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
         /// <exception cref="FactConflictException">A function without a lattice holds another value, or a union the facts
         /// make would merge two of its keys that hold different values.</exception>
@@ -91,9 +91,8 @@ namespace Eggnog
         /// ran out in the rebuild after the merge, the write stays, and if that rebuild left work undone the scope's reads
         /// throw the same way (<see cref="Check"/>). Every later call that needs an id or an epoch throws the same
         /// way.</exception>
-        public void Assume(params Fact[] facts)
+        public void Assume(params ReadOnlySpan<Fact> facts)
         {
-            ArgumentNullException.ThrowIfNull(facts);
             EnterWrite();
             try
             {
@@ -259,9 +258,8 @@ namespace Eggnog
         /// epochs ran out in the rebuild after the merge, the write stays, and if that rebuild left work undone the
         /// scope's reads throw the same way (<see cref="Check"/>). Every later call that needs an id or an epoch throws
         /// the same way.</exception>
-        public void Subsume(params Fact[] rows)
+        public void Subsume(params ReadOnlySpan<Fact> rows)
         {
-            ArgumentNullException.ThrowIfNull(rows);
             EnterWrite();
             try
             {
@@ -361,9 +359,8 @@ namespace Eggnog
         /// rows before it stand.</exception>
         /// <exception cref="RuleEvaluationException">As for <see cref="Delete{T}"/>.</exception>
         /// <exception cref="OverflowException">As for <see cref="Delete{T}"/>.</exception>
-        public void Delete(params Fact[] rows)
+        public void Delete(params ReadOnlySpan<Fact> rows)
         {
-            ArgumentNullException.ThrowIfNull(rows);
             EnterWrite();
             try
             {

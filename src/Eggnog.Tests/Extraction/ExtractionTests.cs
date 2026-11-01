@@ -231,7 +231,7 @@ namespace Eggnog.Tests.Extraction
             Assert.Equal("(V 42 -1 false 2.0)", root.Extract(root.Make(values.Of(42L, -1, false, 2.0))).ToString());
             Assert.Equal("(T \"kind\")", root.Extract(root.Make(text.Of("kind"))).ToString());
             Assert.Equal("(S (set-of \"a\" \"b\") (set-of 1 3) (set-of))",
-                root.Extract(root.Make(sets.Of(Set.Of("b", "a"), Set.Of(3L, 1L), Set<int>.Empty))).ToString());
+                root.Extract(root.Make(sets.Of(Set.Of(["b", "a"]), Set.Of([3L, 1L]), Set<int>.Empty))).ToString());
         }
 
         /// <summary>

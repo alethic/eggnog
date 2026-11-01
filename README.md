@@ -112,7 +112,7 @@ foreach (var c in new[] { "red", "amber" })
     rules.DefineRule($"{c} means stop", r =>
     {
         var s = r.Var<string>("s");
-        r.When(signal.Of(s), color.Of(s).Is(Set.Of(c)));
+        r.When(signal.Of(s), color.Of(s).Is(Set.Of([c])));
         r.Then(stop.Of(s));
     });
 }
@@ -125,12 +125,12 @@ graph.Root.Assume(signal.Of("north"));
 graph.Root.Freeze();                       // a shared base: read-only, children on any thread
 
 using var q1 = graph.Root.CreateChild();
-q1.Assume(color.Of("north").Is(Set.Of("red", "amber")));
+q1.Assume(color.Of("north").Is(Set.Of(["red", "amber"])));
 q1.Run(schedule);
 bool mustStop = q1.Check(stop.Of("north"));            // true: both cases prove it
 
 using var q2 = graph.Root.CreateChild();
-q2.Assume(color.Of("north").Is(Set.Of("red", "green")));
+q2.Assume(color.Of("north").Is(Set.Of(["red", "green"])));
 q2.Run(schedule);
 bool mayGo = q2.Check(stop.Of("north")) == false;      // true: the green case does not prove it
 

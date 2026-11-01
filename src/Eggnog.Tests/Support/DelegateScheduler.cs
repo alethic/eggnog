@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 
 namespace Eggnog.Tests.Support
 {
@@ -25,7 +24,7 @@ namespace Eggnog.Tests.Support
         }
 
         /// <inheritdoc />
-        public bool CanStop(IReadOnlyList<string> rules, string ruleset) => canStop?.Invoke() ?? true;
+        public bool CanStop(ReadOnlySpan<string> rules, string ruleset) => canStop?.Invoke() ?? true;
 
         /// <inheritdoc />
         public bool FilterMatches(string rule, string ruleset, RuleMatches matches) => filter(rule, matches);

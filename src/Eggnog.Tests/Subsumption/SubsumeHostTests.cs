@@ -10,7 +10,7 @@ namespace Eggnog.Tests.Subsumption
 
     /// <summary>
     /// Host subsumption through <see cref="Scope.Subsume{TSort}(ConstructorTerm{TSort})"/>, <see
-    /// cref="Scope.Subsume(Fact[])"/> and a <see cref="ScopeWriter"/>: an existing row is subsumed, a missing one is
+    /// cref="Scope.Subsume(ReadOnlySpan{Fact})"/> and a <see cref="ScopeWriter"/>: an existing row is subsumed, a missing one is
     /// made subsumed (egglog's <c>test_subsume_ok</c>), a row already subsumed writes nothing, and a batch subsumes the
     /// terms and rows it makes, whichever call comes first.
     /// </summary>
