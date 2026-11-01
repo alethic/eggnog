@@ -200,13 +200,15 @@ A column holds either a class or a value.
   `UnstableFn<(i64, i64), i64>` and so on): a function value, a constructor, a function or a primitive with its leading
   arguments partially applied.
   - `Primitives.UnstableFn<…>(target)` is egglog's `unstable-fn`: a pure primitive of the partial arguments, rendered
-    `(unstable-fn "name" args)`. A host makes a value with `UnstableFn.Of<…>(target, args)` and reads its `Target`,
-    `Name` and `Arguments`. egglog has no literal for one, so a rule makes it with `unstable-fn`. A variadic primitive
-    is a target at an arity, `VecOf<long>().WithArity(2)`, which egglog infers from the partial arguments and the sort.
+    `(unstable-fn "name" args)`; the target is a `FunctionHandle<TResult>`, a `ConstructorHandle<TResult>` or a
+    `Primitive`. A host makes a value with `UnstableFn.Of<…>(target, args)` and reads its `Target`, `Name` and
+    `Arguments`. egglog has no literal for one, so a rule makes it with `unstable-fn`. A variadic primitive is a target
+    at an arity, `VecOf<long>().WithArity(2)`, which egglog infers from the partial arguments and the sort.
   - A write primitive such as `vec-union` runs through a function value where it runs when it is called, a child
     included.
   - The target's parameters must end with the sort's inputs and its result be the sort's output, as egglog's type
-    checker requires. A relation is no target: egglog's relation outputs a sort of its own that no function sort names.
+    checker requires; a table's result is its handle's type, so a wrong one does not compile. A relation is no target:
+    egglog's relation outputs a sort of its own that no function sort names, and no overload takes one.
   - `Primitives.UnstableApp<…>()` is egglog's `unstable-app`. It applies the value to the inputs where the call site's
     context allows the target, as egglog's `FunctionContainer::apply` dispatches (decisions row 12): a constructor
     makes its term where the context writes, a function reads its row where the context reads, and a primitive runs
@@ -292,7 +294,9 @@ interned interns nothing, and one that names a new string interns the string and
 ### 2.3 Tables
 
 There are three kinds of table, each typed by up to four key columns, or of any number (`TableHandle` is the untyped
-base):
+base; `RelationHandle`, `FunctionHandle` and `ConstructorHandle` the bases by kind, and `FunctionHandle<TOut>` and
+`ConstructorHandle<TSort>` the bases that carry a function's output type and a constructor's sort, which the calls that
+read or write a table's value take, so that the type is inferred and a wrong one does not compile):
 
 | Kind | Defined by | Rows | In the engine |
 |---|---|---|---|
@@ -476,17 +480,18 @@ rules.DefineRule("a singleton domain makes a path present", r =>
   rules) is egglog's `birewrite`: the two rewrites `{name}=>` and `{name}<=`, under the same conditions.
 - **Rule callbacks** are egglog's `rust_rule` and `rust_rule_full` (`src/prelude.rs`): `ThenCall(callback)` puts host
   code in the head, which for each match reads the rule's variables (`RuleCallbackContext.Get`) and writes as a head
-  does (`Insert`, `Set`, `Make`, `Union`, `Remove`, `Subsume`), staged with the iteration's other writes; it reads no
-  table, as egglog's write state reads none, so the rule stays semi-naive. `ThenCallFull` also reads
-  (`FullRuleCallbackContext.TryLookup`, `Contains`, `TableSize`) and makes the rule naive, as egglog marks
+  does (`Insert`, `Set`, `Make`, `Union`, `Remove`, `Subsume`; `Make(t.Lit, 1L)` and `Set(f, [k], v)` infer the sort and
+  the output's type from the handle), staged with the iteration's other writes; it reads no table, as egglog's write
+  state reads none, so the rule stays semi-naive. `ThenCallFull` also reads (`FullRuleCallbackContext.TryLookup` of a
+  function's value or a constructor's class, `Contains`, `TableSize`) and makes the rule naive, as egglog marks
   `rust_rule_full`'s. Since a callback decides what it writes, its writes are checked when made, not before the run: a
   function whose merge is not a lattice only at the root, a deletion only where the scope may delete (a scope's own
   mirrors are then reconciled as for a rule that deletes), a subsumption only of a subsumable table, no analysis table
-  and no scoped view; a refused write, even one the callback catches, or an exception fails the rule's run, as
-  egglog's callback returning `None` panics (section 2.12). A rule with a full callback has no licence unless it calls
+  and no scoped view; a refused write, even one the callback catches, or an exception fails the rule's run, as egglog's
+  callback returning `None` panics (section 2.12). A rule with a full callback has no licence unless it calls
   `ReadsOwnFacts`, since its reads are not atoms the licence sees. Callbacks run on the engine's threads, as primitives
-  do, and cannot call into a graph. Under `RunWith` a full callback's rule is queried semi-naively, as egglog builds every
-  scheduler's query.
+  do, and cannot call into a graph. Under `RunWith` a full callback's rule is queried semi-naively, as egglog builds
+  every scheduler's query.
 - **Subsumption** is egglog's. `Subsume(term)` and `Subsume(rows)` in a head, and `Rewrite(left, right, subsume: true)`
   (egglog's `rewrite ... :subsume`, which also subsumes the matched left side), mark a row of a relation or
   constructor as subsumed; so do the host's `Scope.Subsume` and `ScopeWriter.Subsume` (section 2.7). The row stays:

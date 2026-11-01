@@ -61,7 +61,7 @@ namespace Eggnog.Tests.Host
             /// </summary>
             public PrimitiveN<long> SetF => setF ??= Primitive.CreateWrite("setf", [typeof(long), typeof(long)], (ITableWriter tables, ReadOnlySpan<object> args, out long result) =>
             {
-                tables.Set(F, [args[0]], args[1]);
+                tables.Set(F, [args[0]], (long)args[1]);
                 result = (long)args[0];
                 return true;
             });
@@ -71,7 +71,7 @@ namespace Eggnog.Tests.Host
             /// </summary>
             public PrimitiveN<long> SetFBoom => setFBoom ??= Primitive.CreateWrite("setf-boom", [typeof(long), typeof(long)], (ITableWriter tables, ReadOnlySpan<object> args, out long result) =>
             {
-                tables.Set(F, [args[0]], args[1]);
+                tables.Set(F, [args[0]], (long)args[1]);
                 result = 0;
                 return false;
             });
@@ -300,7 +300,7 @@ namespace Eggnog.Tests.Host
             // stands.
             var setG = Primitive.CreateWrite("setg", [typeof(long), typeof(long)], (ITableWriter tables, ReadOnlySpan<object> args, out long result) =>
             {
-                tables.Set(t.G, [args[0]], args[1]);
+                tables.Set(t.G, [args[0]], (long)args[1]);
                 result = (long)args[0];
                 return true;
             });
@@ -737,7 +737,7 @@ namespace Eggnog.Tests.Host
             var n = t.Graph.DefineFunction<long, long>("n", FunctionMerge.Of<long>("minus", (old, value) => old - value));
             var setn = Primitive.CreateWrite("setn", [typeof(long), typeof(long)], (ITableWriter tables, ReadOnlySpan<object> args, out long result) =>
             {
-                tables.Set(n, [args[0]], args[1]);
+                tables.Set(n, [args[0]], (long)args[1]);
                 result = (long)args[0];
                 return true;
             });

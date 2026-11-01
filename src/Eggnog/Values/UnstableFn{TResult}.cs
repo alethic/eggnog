@@ -8,8 +8,8 @@ namespace Eggnog
     /// A function value of no input: egglog's <c>(UnstableFn () TResult)</c> sort (src/sort/fn.rs), whose
     /// column type <see cref="ValueStore.RegisterFn{TResult}"/> registers. It applies a constructor, a function or a primitive,
     /// partially applied to <see cref="Arguments"/>, its first parameters, to the inputs:
-    /// <see cref="Primitives.UnstableApp{TResult}"/>, egglog's <c>unstable-app</c>; <see cref="Primitives.UnstableFn{TResult}(TableHandle)"/>
-    /// makes one in a term, egglog's <c>unstable-fn</c>, and <see cref="UnstableFn.Of{TResult}(TableHandle, ReadOnlySpan{object})"/>
+    /// <see cref="Primitives.UnstableApp{TResult}"/>, egglog's <c>unstable-app</c>; <see cref="Primitives.UnstableFn{TResult}(FunctionHandle{TResult})"/> (or <see cref="Primitives.UnstableFn{TResult}(ConstructorHandle{TResult})"/>)
+    /// makes one in a term, egglog's <c>unstable-fn</c>, and <see cref="UnstableFn.Of{TResult}(FunctionHandle{TResult}, ReadOnlySpan{object})"/> (or <see cref="UnstableFn.Of{TResult}(ConstructorHandle{TResult}, ReadOnlySpan{object})"/>)
     /// on the host. Equal by function and arguments, as egglog's are. Immutable.
     /// </summary>
     /// <typeparam name="TResult">The type of the output.</typeparam>

@@ -66,14 +66,14 @@ namespace Eggnog.Tests.Values
         [Fact]
         public void ATargetsSignatureEndsWithTheSorts()
         {
-            // fail-typecheck/unstable-fn-wrong-args-type.egg and unstable-fn-wrong-return-type.egg:
-            // (datatype Math (Zero) (Inc Math)) (sort Fn (UnstableFn (i64) Math)) (unstable-fn "Inc"), and (UnstableFn (Math) i64).
+            // fail-typecheck/unstable-fn-wrong-args-type.egg: (datatype Math (Zero) (Inc Math)) (sort Fn (UnstableFn (i64)
+            // Math)) (unstable-fn "Inc"). unstable-fn-wrong-return-type.egg's (UnstableFn (Math) i64) does not compile, as
+            // the constructor carries its sort.
             var graph = new EGraph();
             graph.DefineSort<Node>("Math");
             var inc = graph.DefineConstructor<Node, Node>("Inc");
             Assert.Throws<ArgumentException>(() => Primitives.UnstableFn<long, Node>(inc));
             Assert.Throws<ArgumentException>(() => UnstableFn.Of<long, Node>(inc));
-            Assert.Throws<ArgumentException>(() => Primitives.UnstableFn<Node, long>(inc));
 
             // fail-typecheck/unstable-fn-primitive-missing-partial-arg.egg: (unstable-app (unstable-fn "+") 2) of
             // (UnstableFn (i64) i64), which "+" is only partially applied to one argument.
@@ -97,11 +97,12 @@ namespace Eggnog.Tests.Values
         public void ARelationIsNoTarget()
         {
             // egglog desugars (relation R (i64)) to a constructor of the reserved sort @RSort, which no function sort names.
+            // The public overloads take a function or a constructor, so a relation does not compile; the untyped path
+            // underneath still refuses one.
             var graph = new EGraph();
             var rel = graph.DefineRelation<long>("R");
-            var primitive = Assert.Throws<ArgumentException>(() => Primitives.UnstableFn<long, bool>(rel));
-            Assert.Contains("'R' is a relation", primitive.Message, StringComparison.Ordinal);
-            Assert.Throws<ArgumentException>(() => UnstableFn.Of<long, bool>(rel));
+            var refused = Assert.Throws<ArgumentException>(() => FnValue.Create(rel, [], [typeof(long)], typeof(ValueTuple)));
+            Assert.Contains("'R' is a relation", refused.Message, StringComparison.Ordinal);
         }
 
         [Fact]

@@ -106,6 +106,9 @@ namespace Eggnog
         /// <inheritdoc />
         internal override object Wrap(ClassId id) => TSort.FromId(id);
 
+        /// <inheritdoc />
+        internal override ConstructorHandle CreateUntypedConstructor() => new UntypedConstructor<TSort>();
+
     }
 
 }

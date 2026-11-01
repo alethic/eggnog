@@ -31,11 +31,12 @@ namespace Eggnog
         /// Sets a function's value at a key: egglog's <c>insert</c> of the row; two values for one key merge as the
         /// function merges them.
         /// </summary>
+        /// <typeparam name="TOut">The function's output type.</typeparam>
         /// <param name="function">The function, of the call's graph.</param>
         /// <param name="keys">One value per key column.</param>
-        /// <param name="value">The value, of the output's type.</param>
+        /// <param name="value">The value.</param>
         /// <exception cref="ArgumentException">The function, or a value, is not one the call may write.</exception>
-        void Set(FunctionHandle function, ReadOnlySpan<object> keys, object value);
+        void Set<TOut>(FunctionHandle<TOut> function, ReadOnlySpan<object> keys, TOut value);
 
         /// <summary>
         /// Gets the class of a constructor term, making it when it is new: egglog's lookup of a constructor in an action,
@@ -46,7 +47,7 @@ namespace Eggnog
         /// <param name="keys">One value per child.</param>
         /// <returns>The term's class.</returns>
         /// <exception cref="ArgumentException">The constructor, or a value, is not one the call may write.</exception>
-        TSort Make<TSort>(ConstructorHandle constructor, params ReadOnlySpan<object> keys) where TSort : struct, ISort<TSort>;
+        TSort Make<TSort>(ConstructorHandle<TSort> constructor, params ReadOnlySpan<object> keys) where TSort : struct, ISort<TSort>;
 
         /// <summary>
         /// Unions two classes: egglog's <c>union</c>.

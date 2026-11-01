@@ -10,7 +10,7 @@ namespace Eggnog
     /// where the typed functions stop at four keys.
     /// </summary>
     /// <typeparam name="TOut">The type of the value.</typeparam>
-    public sealed class FunctionN<TOut> : FunctionHandle
+    public sealed class FunctionN<TOut> : FunctionHandle<TOut>
     {
 
         /// <summary>
@@ -20,11 +20,6 @@ namespace Eggnog
         {
 
         }
-
-        /// <summary>
-        /// Gets the lattice that merges the function's values; <c>null</c> when it has none.
-        /// </summary>
-        public new ValueLattice<TOut>? Lattice => (ValueLattice<TOut>?)base.Lattice;
 
         /// <summary>
         /// The function's value at the keys: matched in a body, written in a head or a host write, read by
