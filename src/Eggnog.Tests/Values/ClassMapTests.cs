@@ -63,7 +63,7 @@ namespace Eggnog.Tests.Values
             Assert.True(t.Root.Check(Primitives.MultiSetCount<Node>().Of(s.Of(), t.Num.Of(2L)).Is(3L)));
             var one = t.Root.Find(t.Make(1L));
             Assert.Equal(Map.Of((one, 20L)), t.Root.Get(m.Of()));
-            Assert.Equal(MultiSet.Of(one, one, one), t.Root.Get(s.Of()));
+            Assert.Equal(MultiSet.Of([one, one, one]), t.Root.Get(s.Of()));
         }
 
         [Fact]
@@ -130,7 +130,7 @@ namespace Eggnog.Tests.Values
                 Assert.True(child.Check(m.Of().Is(t.Insert(t.Empty, 1L, 20L))));
                 Assert.True(child.Check(s.Of().Is(Primitives.MultiSetOf<Node>().Of(t.Num.Of(1L), t.Num.Of(1L), t.Num.Of(1L)))));
                 Assert.Equal(Map.Of((one, 20L)), child.Get(m.Of()));
-                Assert.Equal(MultiSet.Of(one, one, one), child.Get(s.Of()));
+                Assert.Equal(MultiSet.Of([one, one, one]), child.Get(s.Of()));
                 child.Engine.Context.CheckInvariants();
             }
 
@@ -514,7 +514,7 @@ namespace Eggnog.Tests.Values
             var m = graph.DefineFunction<long, Map<Vec<Node>, long>>("m");
             var root = graph.Root;
             var (one, two) = (root.Make(num.Of(1L)), root.Make(num.Of(2L)));
-            var before = Map.Of((Vec.Of(two), 20L), (Vec.Of(one), 10L));
+            var before = Map.Of((Vec.Of([two]), 20L), (Vec.Of([one]), 10L));
             root.Assume(m.Of(1L).Is(before));
 
             root.Union(one, two);
@@ -533,7 +533,7 @@ namespace Eggnog.Tests.Values
             var map = Map.Of((a, 1L), (b, 2L));
             Assert.Equal(2, map.Count);
             Assert.NotEqual(0, Map.Of((a, 1L)).CompareTo(Map.Of((b, 1L))));
-            Assert.Equal(2, MultiSet.Of(a, b).Counts.Count());
+            Assert.Equal(2, MultiSet.Of([a, b]).Counts.Count());
         }
 
         [Fact]
@@ -557,7 +557,7 @@ namespace Eggnog.Tests.Values
             root.Union(root.Make(num.Of(1L)), root.Make(num.Of(2L)));
 
             var one = root.Find(root.Make(num.Of(1L)));
-            Assert.Equal(MultiSet.Of(Vec.Of(one), Vec.Of(one)), root.Get(s.Of()));
+            Assert.Equal(MultiSet.Of([Vec.Of([one]), Vec.Of([one])]), root.Get(s.Of()));
             Assert.Equal(Map.Of((7L, one)), root.Get(m.Of()));
         }
 

@@ -80,14 +80,14 @@ namespace Eggnog.Tests.Rules
             {
                 var x = r.Var<long>("x");
                 r.When(t.Num.Of(x));
-                r.Then(best.Of("k").Is(x), dom.Of("k").Is(Primitives.Insert<long>().Of(Set.Of(100L), x)));
+                r.Then(best.Of("k").Is(x), dom.Of("k").Is(Primitives.SetInsert<long>().Of(Set.Of([100L]), x)));
             });
             t.Root.Assume(t.Num.Of(3L), t.Num.Of(9L), t.Num.Of(5L));
 
             t.Root.Run(Schedule.Saturate(t.Rules));
 
             Assert.Equal(9L, t.Root.Get(best.Of("k")));
-            Assert.Equal(Set.Of(100L), t.Root.Get(dom.Of("k")));
+            Assert.Equal(Set.Of([100L]), t.Root.Get(dom.Of("k")));
         }
 
         [Fact]
@@ -316,7 +316,7 @@ namespace Eggnog.Tests.Rules
             t.Rules.DefineRule("minus one", r =>
             {
                 var (x, y) = r.Vars<long, long>("x", "y");
-                r.When(t.Num.Of(x), y.Is(Primitives.Subtract.Of(x, 1L)));
+                r.When(t.Num.Of(x), y.Is(Int64Primitives.Subtract.Of(x, 1L)));
                 r.Then(below.Of(y));
             });
             t.Root.Assume(t.Num.Of(5L), t.Num.Of(long.MinValue));
@@ -336,7 +336,7 @@ namespace Eggnog.Tests.Rules
             {
                 var x = r.Var<long>("x");
                 r.When(t.Num.Of(x));
-                r.Then(t.Num.Of(Primitives.Add.Of(x, 1L)));
+                r.Then(t.Num.Of(Int64Primitives.Add.Of(x, 1L)));
             });
             t.Root.Assume(t.Num.Of(long.MaxValue));
 
@@ -361,7 +361,7 @@ namespace Eggnog.Tests.Rules
                 r.Where(pick.Of(d, p));
                 r.Then(t.Num.Of(1L));
             });
-            t.Root.Assume(dom.Of("k").Is(Set.Of("b", "a")), dom.Of("e").Is(Set<string>.Empty));
+            t.Root.Assume(dom.Of("k").Is(Set.Of(["b", "a"])), dom.Of("e").Is(Set<string>.Empty));
 
             var e = Assert.Throws<RuleEvaluationException>(() => t.Root.Run(t.Rules));
 
@@ -387,7 +387,7 @@ namespace Eggnog.Tests.Rules
                 r.Where(boom.Of(d, v));
                 r.Then(pick.Of(v, p));
             });
-            graph.Root.Assume(dom.Of("k").Is(Set.Of("a", "b")), pick.Of("k", "b"));
+            graph.Root.Assume(dom.Of("k").Is(Set.Of(["a", "b"])), pick.Of("k", "b"));
 
             var e = Assert.Throws<RuleEvaluationException>(() => graph.Root.Run(rules));
             Assert.Equal("d={a, b} v=\"b\"", e.Bindings);
@@ -395,7 +395,7 @@ namespace Eggnog.Tests.Rules
 
         /// <summary>
         /// egglog's <c>+</c> is partial (<c>checked_add</c>): in a body an overflow drops the match, and only a head
-        /// call fails. <see cref="Primitives.Add"/> is partial the same way, so the run completes and the root is not
+        /// call fails. <see cref="Int64Primitives.Add"/> is partial the same way, so the run completes and the root is not
         /// faulted.
         /// </summary>
         [Fact]
@@ -407,7 +407,7 @@ namespace Eggnog.Tests.Rules
             t.Rules.DefineRule("plus one", r =>
             {
                 var (x, y) = r.Vars<long, long>("x", "y");
-                r.When(t.Num.Of(x), y.Is(Primitives.Add.Of(x, 1L)));
+                r.When(t.Num.Of(x), y.Is(Int64Primitives.Add.Of(x, 1L)));
                 r.Then(hit.Of(y));
             });
             var thrown = Record.Exception(() => t.Root.Run(Schedule.Saturate(t.Rules)));

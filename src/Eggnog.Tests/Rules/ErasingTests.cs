@@ -21,7 +21,7 @@ namespace Eggnog.Tests.Rules
             var t = new ScopeTheory();
             t.Graph.DefineSort<Node>("Node");
             var term = t.Graph.DefineConstructor<string, Node>("Term");
-            var analysis = t.Graph.DefineRelation<string>("mentioned", new TableOptions { Role = TableRole.Analysis });
+            var analysis = t.Graph.DefineRelation<string>("mentioned", new RelationOptions { Analysis = true });
             var licensed = t.Graph.DefineRuleset("licensed", new RulesetOptions { Licence = t.Outer });
             return (t, licensed, term, analysis);
         }

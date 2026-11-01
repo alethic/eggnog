@@ -340,7 +340,7 @@ namespace Eggnog.Tests.Host
             // are 1, and no (g 9), (g 10) or (g 11).
             var t = new Theory();
             var s = t.Open(inChild);
-            var add = Primitives.Add;
+            var add = Int64Primitives.Add;
             Assert.Throws<RuleEvaluationException>(() => s.Assume(t.G.Of(9L).Is(Primitives.VecGet<long>().Of(Primitives.VecOf<long>().Of(t.SetF.Of(9L, 1L)), 5L))));
             Assert.Throws<RuleEvaluationException>(() => s.Assume(t.G.Of(10L).Is(t.SetFBoom.Of(10L, 1L))));
             Assert.Throws<RuleEvaluationException>(() => s.Assume(t.G.Of(11L).Is(add.Of(t.SetF.Of(11L, 1L), Theory.Missing))));
@@ -473,7 +473,7 @@ namespace Eggnog.Tests.Host
                 result = (long)args[0];
                 return true;
             });
-            var add = Primitives.Add;
+            var add = Int64Primitives.Add;
             s.Assume(t.H.Of(classes[1]).Is(1L), t.H.Of(classes[2]).Is(2L));
             s.Assume(q.Of(classes[11]).Is(t.Num.Of(100L)), q.Of(classes[12]).Is(t.Num.Of(200L)));
             var conflicting = uni.Of(1L, 2L);
@@ -561,7 +561,7 @@ namespace Eggnog.Tests.Host
                 return true;
             });
             s.Assume(t.H.Of(classes[2]).Is(2L), t.H.Of(classes[1]).Is(1L));
-            var e = Assert.Throws<FactConflictException>(() => s.Assume(t.G.Of(50L).Is(Primitives.Add.Of(uni.Of(0L, 1L), uni.Of(0L, 2L)))));
+            var e = Assert.Throws<FactConflictException>(() => s.Assume(t.G.Of(50L).Is(Int64Primitives.Add.Of(uni.Of(0L, 1L), uni.Of(0L, 2L)))));
             Assert.Equal(2L, e.StoredValue);
             Assert.Equal(1L, e.NewValue);
             Assert.Equal(0L, s.Get(t.G.Of(50L)));
@@ -594,7 +594,7 @@ namespace Eggnog.Tests.Host
                 return true;
             });
             s.Assume(h2.Of(classes[1]).Is(5L), h2.Of(classes[2]).Is(6L), t.H.Of(classes[1]).Is(1L), t.H.Of(classes[2]).Is(2L));
-            var e = Assert.Throws<FactConflictException>(() => s.Assume(t.G.Of(60L).Is(Primitives.Add.Of(uni.Of(3L, 4L), uni.Of(2L, 1L)))));
+            var e = Assert.Throws<FactConflictException>(() => s.Assume(t.G.Of(60L).Is(Int64Primitives.Add.Of(uni.Of(3L, 4L), uni.Of(2L, 1L)))));
             Assert.Equal("Illegal merge attempted for function h", e.InnerException!.Message);
             Assert.Same(t.H, e.Table);
             Assert.Equal(1L, e.StoredValue);

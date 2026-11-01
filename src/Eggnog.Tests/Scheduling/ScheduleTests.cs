@@ -27,8 +27,8 @@ namespace Eggnog.Tests.Scheduling
             {
                 var x = r.Var<long>("x");
                 r.When(t.Num.Of(x));
-                r.Where(Primitives.Less.Of(x, limit));
-                r.Then(t.Num.Of(Primitives.Add.Of(x, 1L)));
+                r.Where(Int64Primitives.Less.Of(x, limit));
+                r.Then(t.Num.Of(Int64Primitives.Add.Of(x, 1L)));
             });
             t.Root.Assume(t.Num.Of(0L));
             return t;
@@ -223,7 +223,7 @@ namespace Eggnog.Tests.Scheduling
         {
             var t = new NodeTheory();
             Assert.Throws<ArgumentOutOfRangeException>(() => Schedule.Repeat(-1, t.Rules));
-            Assert.Throws<ArgumentNullException>(() => Schedule.Sequence(null!));
+            Assert.Throws<ArgumentNullException>(() => Schedule.Sequence(t.Rules, null!));
             Assert.Throws<ArgumentNullException>(() => Schedule.Saturate(t.Rules, null!));
             Assert.Throws<ArgumentNullException>(() => t.Root.Run(null!));
         }
@@ -256,7 +256,7 @@ namespace Eggnog.Tests.Scheduling
         public void AnUntilConditionMayCompute()
         {
             var t = Counter(10);
-            var report = t.Root.Run(Schedule.Saturate(Schedule.Until(t.Rules, t.Num.Of(Primitives.Add.Of(2L, 2L)))));
+            var report = t.Root.Run(Schedule.Saturate(Schedule.Until(t.Rules, t.Num.Of(Int64Primitives.Add.Of(2L, 2L)))));
 
             Assert.Equal(4, report.Iterations);
             Assert.True(t.Root.Check(t.Num.Of(4L)));
@@ -280,9 +280,8 @@ namespace Eggnog.Tests.Scheduling
         {
             var t = Counter(10);
             Assert.Throws<ArgumentException>(() => Schedule.Until(t.Rules, ((Term<long>)1L).IsNot(2L)));
-            Assert.Throws<ArgumentException>(() => Schedule.Until(t.Rules, Fact.True(Primitives.Less.Of(1L, 2L))));
+            Assert.Throws<ArgumentException>(() => Schedule.Until(t.Rules, Fact.True(Int64Primitives.Less.Of(1L, 2L))));
             Assert.Throws<ArgumentNullException>(() => Schedule.Until(null!, t.Num.Of(1L)));
-            Assert.Throws<ArgumentNullException>(() => Schedule.Until(t.Rules, null!));
             Assert.Throws<ArgumentNullException>(() => Schedule.Until(t.Rules, t.Num.Of(1L), null!));
         }
 
@@ -340,7 +339,7 @@ namespace Eggnog.Tests.Scheduling
                     Thread.Sleep(pause);
                     return v < 100_000;
                 });
-                r.Then(t.Num.Of(Primitives.Add.Of(x, 1L)));
+                r.Then(t.Num.Of(Int64Primitives.Add.Of(x, 1L)));
             });
             t.Root.Assume(t.Num.Of(0L));
             var limit = TimeSpan.FromMilliseconds(300);
@@ -408,7 +407,7 @@ namespace Eggnog.Tests.Scheduling
                 var c = new Predicates.Scoped.PredicateTheory(new EGraph());
                 c.Graph.Root.Freeze();
                 var scope = c.Graph.Root.CreateChild(c.Schema);
-                scope.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of("a", "b", "c")), c.Discriminator.Of("kind"));
+                scope.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of(["a", "b", "c"])), c.Discriminator.Of("kind"));
                 scope.Run(Schedule.Saturate(c.Horn, c.Lattice));
                 return (c, scope);
             }
@@ -474,7 +473,7 @@ namespace Eggnog.Tests.Scheduling
             {
                 var x = r.Var<long>("x");
                 r.When(t.Num.Of(x));
-                r.Then(t.Num.Of(Primitives.Add.Of(x, 1L)));
+                r.Then(t.Num.Of(Int64Primitives.Add.Of(x, 1L)));
             });
             var report = t.Root.Run(Schedule.Saturate(t.Rules), new RunOptions { RowLimit = 5 });
             Assert.Equal(RunStopReason.RowLimit, report.StopReason);
@@ -490,7 +489,7 @@ namespace Eggnog.Tests.Scheduling
             {
                 var x = r.Var<long>("x");
                 r.When(t.Num.Of(x));
-                r.Then(t.Num.Of(Primitives.Add.Of(x, 1L)));
+                r.Then(t.Num.Of(Int64Primitives.Add.Of(x, 1L)));
             });
             var report = t.Root.Run(Schedule.Saturate(t.Rules), new RunOptions { TimeLimit = TimeSpan.Zero });
             Assert.Equal(RunStopReason.TimeLimit, report.StopReason);
@@ -507,8 +506,8 @@ namespace Eggnog.Tests.Scheduling
             {
                 var x = r.Var<long>("x");
                 r.When(t.Num.Of(x));
-                r.Where(Primitives.Less.Of(x, 100L));
-                r.Then(t.Num.Of(Primitives.Add.Of(x, 1L)));
+                r.Where(Int64Primitives.Less.Of(x, 100L));
+                r.Then(t.Num.Of(Int64Primitives.Add.Of(x, 1L)));
             });
             var report = t.Root.Run(Schedule.Saturate(Schedule.Until(t.Rules, t.Num.Of(5L))));
             Assert.True(t.Root.Check(t.Num.Of(5L)));
@@ -529,7 +528,7 @@ namespace Eggnog.Tests.Scheduling
             {
                 var x = r.Var<long>("x");
                 r.When(t.Num.Of(x));
-                r.Then(t.Num.Of(Primitives.Add.Of(x, 1L)));
+                r.Then(t.Num.Of(Int64Primitives.Add.Of(x, 1L)));
             });
             Assert.Equal(RunStopReason.IterationLimit, t.Root.Run(t.Rules, new RunOptions { IterationLimit = 0, TimeLimit = TimeSpan.Zero, RowLimit = 0 }).StopReason);
             Assert.Equal(RunStopReason.TimeLimit, t.Root.Run(t.Rules, new RunOptions { TimeLimit = TimeSpan.Zero, RowLimit = 0 }).StopReason);
@@ -550,8 +549,8 @@ namespace Eggnog.Tests.Scheduling
             {
                 var x = r.Var<long>("x");
                 r.When(t.Num.Of(x));
-                r.Where(Primitives.Less.Of(x, 5L));
-                r.Then(t.Num.Of(Primitives.Add.Of(x, 1L)));
+                r.Where(Int64Primitives.Less.Of(x, 5L));
+                r.Then(t.Num.Of(Int64Primitives.Add.Of(x, 1L)));
             });
             Assert.Throws<ArgumentException>(() => t.Root.Check(other.Num.Of(2L)));
             Assert.Throws<ArgumentException>(() => t.Root.Run(Schedule.Saturate(Schedule.Until(t.Rules, other.Num.Of(2L)))));
@@ -577,8 +576,8 @@ namespace Eggnog.Tests.Scheduling
             {
                 var x = r.Var<long>("x");
                 r.When(t.Num.Of(x));
-                r.Where(Primitives.Less.Of(x, 3L));
-                r.Then(t.Num.Of(Primitives.Add.Of(x, 1L)));
+                r.Where(Int64Primitives.Less.Of(x, 3L));
+                r.Then(t.Num.Of(Int64Primitives.Add.Of(x, 1L)));
             });
             var version = t.Root.Version;
             var condition = foreignTable ? other.Num.Of(2L) : t.Num.In(t.Graph.DefineScopeTag("elsewhere")).Of(2L);

@@ -8,9 +8,10 @@ namespace Eggnog.Tests.Subsumption
 {
 
     /// <summary>
-    /// Which tables may be subsumed and where a subsumption may be written: a relation or a constructor opts in with
-    /// <see cref="TableOptions.Subsumable"/>, a function cannot (egglog's <c>test_subsume_custom</c> and
-    /// <c>test_cant_subsume_merge</c>), and rules and hosts subsume only tables that opted in, only through the running
+    /// Which tables may be subsumed and where a subsumption may be written: every relation and constructor is subsumable
+    /// unless it opts out with <see cref="RelationOptions.Subsumable"/> or <see cref="ConstructorOptions.Subsumable"/>,
+    /// and a function never is, its options having no such setting (egglog's <c>test_subsume_custom</c> and
+    /// <c>test_cant_subsume_merge</c>); rules and hosts subsume only subsumable tables, only through the running
     /// scope, and only relation rows and constructor terms. Rules render their subsumptions as egglog writes them.
     /// </summary>
     public sealed class SubsumeDefinitionTests
@@ -25,7 +26,7 @@ namespace Eggnog.Tests.Subsumption
         {
             var t = new MathTheory();
             var tag = t.Graph.DefineScopeTag("schema");
-            var fact = t.Graph.DefineRelation<string>("fact", MathTheory.Subsumable);
+            var fact = t.Graph.DefineRelation<string>("fact");
             var plain = t.Graph.DefineConstructor<long, Node>("Plain", 1, MathTheory.NotSubsumable);
             var byDefault = t.Graph.DefineConstructor<long, Node>("ByDefault");
             var relation = t.Graph.DefineRelation<string>("relation");
@@ -39,19 +40,8 @@ namespace Eggnog.Tests.Subsumption
             Assert.False(function.Subsumable);
             Assert.False(plain.Subsumable);
             Assert.False(t.Seen.Subsumable);
-            Assert.Null(new TableOptions().Subsumable);
-        }
-
-        [Fact]
-        public void AFunctionCannotBeSubsumable()
-        {
-            var graph = new EGraph();
-
-            var plain = Assert.Throws<ArgumentException>(() => graph.DefineFunction<long>("one", null, MathTheory.Subsumable));
-            Assert.Contains("only relations and constructors can be subsumed", plain.Message, StringComparison.Ordinal);
-            Assert.Throws<ArgumentException>(() =>
-                graph.DefineFunction<string, long>("best", ValueLattice.Max<long>(), MathTheory.Subsumable));
-            Assert.DoesNotContain(graph.Tables, table => table.Name is "one" or "best");
+            Assert.True(new RelationOptions().Subsumable);
+            Assert.True(new ConstructorOptions().Subsumable);
         }
 
         [Fact]
@@ -112,7 +102,7 @@ namespace Eggnog.Tests.Subsumption
         public void ARuleSubsumesRelationRowsAndConstructorTermsOnly()
         {
             var t = new MathTheory();
-            var fact = t.Graph.DefineRelation<long>("fact", MathTheory.Subsumable);
+            var fact = t.Graph.DefineRelation<long>("fact");
             var tag = t.Graph.DefineScopeTag("schema");
 
             var equality = Assert.Throws<RuleDefinitionException>(() => t.Rules.DefineRule("equality", r =>
@@ -145,7 +135,7 @@ namespace Eggnog.Tests.Subsumption
         {
             var t = new MathTheory();
             var fact = t.Graph.DefineRelation<long>("fact");
-            var analysis = t.Graph.DefineRelation<long>("analysis", new TableOptions { Role = TableRole.Analysis, Subsumable = true });
+            var analysis = t.Graph.DefineRelation<long>("analysis", new RelationOptions { Analysis = true });
 
             // Subsuming is writing: a rule that subsumes an analysis may not judge on facts.
             var error = Assert.Throws<RuleDefinitionException>(() => t.Rules.DefineRule("judges on a fact", r =>
@@ -168,7 +158,7 @@ namespace Eggnog.Tests.Subsumption
         public void RulesRenderTheirSubsumptionsAsEgglogWritesThem()
         {
             var t = new MathTheory();
-            var fact = t.Graph.DefineRelation<long>("fact", MathTheory.Subsumable);
+            var fact = t.Graph.DefineRelation<long>("fact");
 
             // (rewrite (Mul a (Num 2)) (Add a a) :subsume) desugars to a union, then a subsume of the left side.
             var rewrite = t.Rules.DefineRule("double", r =>
@@ -195,7 +185,7 @@ namespace Eggnog.Tests.Subsumption
         {
             var t = new MathTheory();
             var plain = t.Graph.DefineConstructor<long, Node>("Plain", 1, MathTheory.NotSubsumable);
-            var fact = t.Graph.DefineRelation<long>("fact", MathTheory.Subsumable);
+            var fact = t.Graph.DefineRelation<long>("fact");
             var tag = t.Graph.DefineScopeTag("schema");
             var version = t.Root.Version;
 

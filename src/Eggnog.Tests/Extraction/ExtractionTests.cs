@@ -18,7 +18,7 @@ namespace Eggnog.Tests.Extraction
         public void AClassWithNoFiniteTermHasNoExtraction()
         {
             var t = new NodeTheory();
-            var hidden = t.Graph.DefineConstructor<Node>("Hidden", options: new TableOptions { Extractable = false });
+            var hidden = t.Graph.DefineConstructor<Node>("Hidden", options: new ConstructorOptions { Unextractable = true });
             var h = t.Root.Make(hidden.Of());
             var extractor = t.Root.CreateExtractor();
             Assert.False(extractor.TryExtract(h, out var term));
@@ -97,7 +97,7 @@ namespace Eggnog.Tests.Extraction
         public void UnextractableHeadsAreSkipped()
         {
             var t = new NodeTheory();
-            var fast = t.Graph.DefineConstructor<long, Node>("Fast", cost: 0, options: new TableOptions { Extractable = false });
+            var fast = t.Graph.DefineConstructor<long, Node>("Fast", cost: 0, options: new ConstructorOptions { Unextractable = true });
             var slow = t.Graph.DefineConstructor<long, Node>("Slow", cost: 10);
             var f = t.Root.Make(fast.Of(1L));
             t.Root.Union(f, t.Root.Make(slow.Of(1L)));
@@ -231,7 +231,7 @@ namespace Eggnog.Tests.Extraction
             Assert.Equal("(V 42 -1 false 2.0)", root.Extract(root.Make(values.Of(42L, -1, false, 2.0))).ToString());
             Assert.Equal("(T \"kind\")", root.Extract(root.Make(text.Of("kind"))).ToString());
             Assert.Equal("(S (set-of \"a\" \"b\") (set-of 1 3) (set-of))",
-                root.Extract(root.Make(sets.Of(Set.Of("b", "a"), Set.Of(3L, 1L), Set<int>.Empty))).ToString());
+                root.Extract(root.Make(sets.Of(Set.Of(["b", "a"]), Set.Of([3L, 1L]), Set<int>.Empty))).ToString());
         }
 
         /// <summary>

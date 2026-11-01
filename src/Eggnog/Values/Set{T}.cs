@@ -2,6 +2,8 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace Eggnog
@@ -21,6 +23,7 @@ namespace Eggnog
     /// operations are linear merges.
     /// </remarks>
     /// <typeparam name="T">The element type.</typeparam>
+    [CollectionBuilder(typeof(Set), nameof(Set.Of))]
     public sealed class Set<T> : IReadOnlyList<T>, IEquatable<Set<T>>, IComparable<Set<T>> where T : notnull
     {
 
@@ -390,23 +393,34 @@ namespace Eggnog
         /// <exception cref="ArgumentNullException">An element is <c>null</c>.</exception>
         internal static Set<T> Create(IEnumerable<T> source)
         {
-            var list = new List<T>(source);
-            if (list.Count == 0)
+            return Own(source.ToArray());
+        }
+
+        /// <summary>
+        /// Makes a set of <paramref name="items"/>, sorting them in place and dropping duplicates.
+        /// </summary>
+        /// <param name="items">The elements; owned by the set from now on.</param>
+        /// <returns>The set.</returns>
+        /// <exception cref="ArgumentNullException">An element is <c>null</c>.</exception>
+        internal static Set<T> Own(T[] items)
+        {
+            if (items.Length == 0)
                 return Empty;
 
-            foreach (var item in list)
+            foreach (var item in items)
                 if (item is null)
-                    throw new ArgumentNullException(nameof(source), "A set cannot hold null.");
+                    throw new ArgumentNullException(nameof(items), "A set cannot hold null.");
 
-            list.Sort(Order);
+            Array.Sort(items, Order);
             var distinct = 1;
-            for (var i = 1; i < list.Count; i++)
-                if (Order.Compare(list[i], list[distinct - 1]) != 0)
-                    list[distinct++] = list[i];
+            for (var i = 1; i < items.Length; i++)
+                if (Order.Compare(items[i], items[distinct - 1]) != 0)
+                    items[distinct++] = items[i];
 
-            var result = new T[distinct];
-            list.CopyTo(0, result, 0, distinct);
-            return new Set<T>(result);
+            if (distinct < items.Length)
+                Array.Resize(ref items, distinct);
+
+            return new Set<T>(items);
         }
 
     }

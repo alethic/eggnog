@@ -41,9 +41,9 @@ namespace Eggnog.Tests.Values
             RoundTrip(graph, false, true);
             RoundTrip(graph, 0.0, 1.5, -2.25, double.MaxValue, double.PositiveInfinity);
             RoundTrip(graph, "", "kind", "with \"quotes\"", "ünïcödé");
-            RoundTrip(graph, Set<string>.Empty, Set.Of("a"), Set.Of("b", "a"));
-            RoundTrip(graph, Set.Of(-2L, 1L, 3L), Set<long>.Empty);
-            RoundTrip(graph, Set.Of(-1, int.MinValue));
+            RoundTrip(graph, Set<string>.Empty, Set.Of(["a"]), Set.Of(["b", "a"]));
+            RoundTrip(graph, Set.Of([-2L, 1L, 3L]), Set<long>.Empty);
+            RoundTrip(graph, Set.Of([-1, int.MinValue]));
         }
 
         [Fact]
@@ -56,7 +56,7 @@ namespace Eggnog.Tests.Values
             Assert.Equal("1.5", values.TypeOf<double>().Format(1.5));
             Assert.Equal("2.0", values.TypeOf<double>().Format(2.0));
             Assert.Equal("\"kind\"", values.TypeOf<string>().Format("kind"));
-            Assert.Equal("(set-of \"a\" \"b\")", values.TypeOf<Set<string>>().Format(Set.Of("b", "a")));
+            Assert.Equal("(set-of \"a\" \"b\")", values.TypeOf<Set<string>>().Format(Set.Of(["b", "a"])));
             Assert.Equal("(set-of)", values.TypeOf<Set<long>>().Format(Set<long>.Empty));
             Assert.Equal("42", values.TypeOf<long>().Format((object)42L));
             Assert.Throws<ArgumentException>(() => values.TypeOf<long>().Format((object)"42"));
@@ -70,8 +70,8 @@ namespace Eggnog.Tests.Values
             Assert.True(values.TypeOf<long>().Compare(-5L, 3L) < 0);
             Assert.True(values.TypeOf<int>().Compare(-1, 0) < 0);
             Assert.True(values.TypeOf<bool>().Compare(false, true) < 0);
-            Assert.True(values.TypeOf<Set<string>>().Compare(Set.Of("a"), Set.Of("a", "b")) < 0);
-            Assert.True(values.TypeOf<Set<string>>().Compare(Set.Of("a", "z"), Set.Of("b")) < 0);
+            Assert.True(values.TypeOf<Set<string>>().Compare(Set.Of(["a"]), Set.Of(["a", "b"])) < 0);
+            Assert.True(values.TypeOf<Set<string>>().Compare(Set.Of(["a", "z"]), Set.Of(["b"])) < 0);
         }
 
         [Fact]
@@ -211,7 +211,7 @@ namespace Eggnog.Tests.Values
         [Fact]
         public void ValueSetOperationsKeepOrderAndReturnThisWhenNothingChanges()
         {
-            var set = Set.Of("b", "a", "b");
+            var set = Set.Of(["b", "a", "b"]);
             Assert.Equal(new[] { "a", "b" }, set.ToArray());
             Assert.Equal(2, set.Count);
             Assert.False(set.IsEmpty);
@@ -221,35 +221,84 @@ namespace Eggnog.Tests.Values
             Assert.Equal(new[] { "a", "b", "c" }, set.Add("c").ToArray());
             Assert.Same(set, set.Remove("z"));
             Assert.Equal(new[] { "b" }, set.Remove("a").ToArray());
-            Assert.Same(Set<string>.Empty, Set.Of("a").Remove("a"));
-            Assert.Same(set, set.Union(Set.Of("a")));
-            Assert.Equal(new[] { "a", "b", "c" }, set.Union(Set.Of("c")).ToArray());
-            Assert.Same(set, set.Intersect(Set.Of("a", "b", "c")));
-            Assert.Equal(new[] { "b" }, set.Intersect(Set.Of("b", "c")).ToArray());
-            Assert.Same(set, set.Except(Set.Of("c")));
-            Assert.Equal(new[] { "a" }, set.Except(Set.Of("b")).ToArray());
+            Assert.Same(Set<string>.Empty, Set.Of(["a"]).Remove("a"));
+            Assert.Same(set, set.Union(Set.Of(["a"])));
+            Assert.Equal(new[] { "a", "b", "c" }, set.Union(Set.Of(["c"])).ToArray());
+            Assert.Same(set, set.Intersect(Set.Of(["a", "b", "c"])));
+            Assert.Equal(new[] { "b" }, set.Intersect(Set.Of(["b", "c"])).ToArray());
+            Assert.Same(set, set.Except(Set.Of(["c"])));
+            Assert.Equal(new[] { "a" }, set.Except(Set.Of(["b"])).ToArray());
             Assert.Same(set, set.Where(s => s.Length == 1));
             Assert.Equal(new[] { "b" }, set.Where(s => s == "b").ToArray());
-            Assert.True(Set.Of("a").IsSubsetOf(set));
-            Assert.False(set.IsSubsetOf(Set.Of("a")));
-            Assert.True(set.Overlaps(Set.Of("b", "z")));
-            Assert.False(set.Overlaps(Set.Of("z")));
-            Assert.Equal(Set.Of("a", "b"), set);
-            Assert.Equal(Set.Of("a", "b").GetHashCode(), set.GetHashCode());
-            Assert.NotEqual(Set.Of("a"), set);
+            Assert.True(Set.Of(["a"]).IsSubsetOf(set));
+            Assert.False(set.IsSubsetOf(Set.Of(["a"])));
+            Assert.True(set.Overlaps(Set.Of(["b", "z"])));
+            Assert.False(set.Overlaps(Set.Of(["z"])));
+            Assert.Equal(Set.Of(["a", "b"]), set);
+            Assert.Equal(Set.Of(["a", "b"]).GetHashCode(), set.GetHashCode());
+            Assert.NotEqual(Set.Of(["a"]), set);
             Assert.Equal("{a, b}", set.ToString());
-            Assert.Equal(new[] { "B", "a" }, Set.Of("a", "B").ToArray());
-            Assert.Equal(new[] { -2L, 1L, 3L }, Set.Of(3L, -2L, 1L).ToArray());
+            Assert.Equal(new[] { "B", "a" }, Set.Of(["a", "B"]).ToArray());
+            Assert.Equal(new[] { -2L, 1L, 3L }, Set.Of([3L, -2L, 1L]).ToArray());
             Assert.Equal(new[] { 1, 2 }, Set.From(new List<int> { 2, 1, 2 }).ToArray());
-            Assert.Throws<ArgumentNullException>(() => Set.Of<string>("a", null!));
+            Assert.Throws<ArgumentNullException>(() => Set.Of<string>(["a", null!]));
+        }
+
+        /// <summary>
+        /// A collection expression builds a set, a vector or a multiset through its <c>Of</c>, so it sorts, keeps order or
+        /// counts repeats as <c>Of</c> does, and a spread copies the elements it reads.
+        /// </summary>
+        [Fact]
+        public void CollectionExpressionsBuildContainersThroughOf()
+        {
+            Set<long> set = [3L, 1L, 3L];
+            Vec<long> vec = [3L, 1L, 3L];
+            MultiSet<long> multiset = [3L, 1L, 3L];
+            Set<long> none = [];
+            long[] items = [2L, 1L];
+            Set<long> spread = [.. items, 5L];
+            items[0] = 9L;
+
+            Assert.Equal(Set.Of([1L, 3L]), set);
+            Assert.Equal(new[] { 3L, 1L, 3L }, vec.ToArray());
+            Assert.Equal(2L, multiset.CountOf(3L));
+            Assert.Equal(3L, multiset.Count);
+            Assert.Same(Set<long>.Empty, none);
+            Assert.Equal(new[] { 1L, 2L, 5L }, spread.ToArray());
+            Assert.Throws<ArgumentNullException>(() =>
+            {
+                Vec<string> nulls = ["a", null!];
+            });
         }
 
         [Fact]
         public void ValueSetOfAStringIsTheSingletonOfThatString()
         {
-            var set = Set.Of("abc");
+            var set = Set.Of(["abc"]);
             Assert.Single(set);
             Assert.Equal("abc", set[0]);
+        }
+
+        /// <summary>
+        /// <c>Of</c> takes its elements as one span, not <c>params</c>, so an array with its element type named is its
+        /// elements in every language version and never the one element of an array type; a null element is reported
+        /// against <c>items</c>, the parameter of <c>Of</c> and <c>From</c>.
+        /// </summary>
+        [Fact]
+        public void OfTakesAnArrayAsItsElements()
+        {
+            long[] items = [3L, 1L, 3L];
+            Assert.Equal(new[] { 1L, 3L }, Set.Of<long>(items).ToArray());
+            Assert.Equal(items, Vec.Of<long>(items).ToArray());
+            Assert.Equal(2L, MultiSet.Of<long>(items).CountOf(3L));
+            foreach (var factory in new[] { typeof(Set), typeof(Vec), typeof(MultiSet) })
+                Assert.DoesNotContain(factory.GetMethod("Of")!.GetParameters()[0].GetCustomAttributesData(),
+                    a => a.AttributeType.Name == "ParamCollectionAttribute");
+
+            Assert.Equal("items", Assert.Throws<ArgumentNullException>(() => Set.Of<string>(["a", null!])).ParamName);
+            Assert.Equal("items", Assert.Throws<ArgumentNullException>(() => Vec.Of<string>(["a", null!])).ParamName);
+            Assert.Equal("items", Assert.Throws<ArgumentNullException>(() => MultiSet.Of<string>(["a", null!])).ParamName);
+            Assert.Equal("items", Assert.Throws<ArgumentNullException>(() => MultiSet.From(new[] { "a", null! })).ParamName);
         }
 
         [Fact]
@@ -286,7 +335,7 @@ namespace Eggnog.Tests.Values
 
             Assert.False(graph.Root.Check(r.Of("never interned")));
             Assert.False(graph.Root.TryGet(f.Of("also never interned"), out _));
-            Assert.False(graph.Root.Check(f.Of("seen").Is(Set.Of("an unseen set"))));
+            Assert.False(graph.Root.Check(f.Of("seen").Is(Set.Of(["an unseen set"]))));
             Assert.True(graph.Root.Check(r.Of("seen")));
             Assert.Equal(before, graph.Values.InternedCount);
         }
@@ -371,7 +420,7 @@ namespace Eggnog.Tests.Values
                 return;
 
             Assert.Null(registered);
-            var two = Record.Exception(() => Set.Of(new Opaque(1), new Opaque(2)));
+            var two = Record.Exception(() => Set.Of([new Opaque(1), new Opaque(2)]));
             Assert.Null(two);
         }
 

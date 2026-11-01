@@ -25,7 +25,7 @@ namespace Eggnog.Tests.Rules
             t.Rules.DefineRule("hundred over", r =>
             {
                 var (x, y) = r.Vars<long, long>("x", "y");
-                r.When(t.Num.Of(x), y.Is(Primitives.Divide.Of(100L, x)));
+                r.When(t.Num.Of(x), y.Is(Int64Primitives.Divide.Of(100L, x)));
                 r.Then(hit.Of(y));
             });
             t.Root.Assume(t.Num.Of(0L), t.Num.Of(10L));
@@ -46,7 +46,7 @@ namespace Eggnog.Tests.Rules
             {
                 var x = r.Var<long>("x");
                 r.When(t.Num.Of(x));
-                r.Then(hit.Of(Primitives.Divide.Of(100L, x)));
+                r.Then(hit.Of(Int64Primitives.Divide.Of(100L, x)));
             });
             t.Root.Assume(t.Num.Of(0L));
 
@@ -150,7 +150,7 @@ namespace Eggnog.Tests.Rules
             var log = t.Graph.DefineQuery("log", q =>
             {
                 var (x, y) = q.Vars<long, long>("x", "y");
-                q.When(t.Num.Of(x), y.Is(Primitives.Log2.Of(x)));
+                q.When(t.Num.Of(x), y.Is(Int64Primitives.Log2.Of(x)));
             });
             t.Root.Assume(t.Num.Of(0L), t.Num.Of(8L));
 
@@ -178,7 +178,7 @@ namespace Eggnog.Tests.Rules
             });
             graph.Root.Freeze();
             var scope = graph.Root.CreateChild();
-            scope.Assume(dom.Of("k").Is(Set.Of("a", "b")));
+            scope.Assume(dom.Of("k").Is(Set.Of(["a", "b"])));
 
             var e = Assert.Throws<RuleEvaluationException>(() => scope.Run(Schedule.Split(split, rules)));
 
@@ -199,8 +199,8 @@ namespace Eggnog.Tests.Rules
             {
                 var (n, v) = r.Vars<long, BigInteger>("n", "v");
                 r.When(factorial.Of(n).Is(v));
-                r.Where(Primitives.Less.Of(n, 30L));
-                var m = Primitives.Add.Of(n, 1L);
+                r.Where(Int64Primitives.Less.Of(n, 30L));
+                var m = Int64Primitives.Add.Of(n, 1L);
                 r.Then(factorial.Of(m).Is(BigIntegerPrimitives.Multiply.Of(v, BigIntegerPrimitives.FromInt64.Of(m))));
             });
             graph.Root.Assume(factorial.Of(0L).Is(BigInteger.One));
@@ -259,7 +259,7 @@ namespace Eggnog.Tests.Rules
             Assert.Equal("(rule ((mark v) (!= v (from-string \"7\")) (< v (from-string \"100\"))) ((mark (+ v (from-string \"5\")))) :ruleset rules)",
                 rule.ToString());
             Assert.Equal("(from-string \"5\")", ((Term<BigInteger>)new BigInteger(5)).ToString());
-            Assert.Equal("(set-of (from-string \"1\"))", ((Term<Set<BigInteger>>)Set.Of(BigInteger.One)).ToString());
+            Assert.Equal("(set-of (from-string \"1\"))", ((Term<Set<BigInteger>>)Set.Of([BigInteger.One])).ToString());
         }
 
         /// <summary>

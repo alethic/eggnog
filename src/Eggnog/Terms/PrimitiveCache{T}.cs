@@ -15,14 +15,14 @@ namespace Eggnog
     {
 
         /// <summary>
-        /// <c>set-of</c>: the singleton set.
+        /// <c>set-empty</c>.
         /// </summary>
-        public static readonly Primitive<T, Set<T>> Singleton = new("set-of", static v => Set.Of(v), false);
+        public static readonly PrimitiveN<Set<T>> Empty = Primitive.Create("set-empty", [], static _ => Set<T>.Empty);
 
         /// <summary>
         /// <c>set-of</c> of any number of elements.
         /// </summary>
-        public static readonly VariadicPrimitive<T, Set<T>> SetOf = new("set-of", static xs => Set.From(xs));
+        public static readonly VariadicPrimitive<T, Set<T>> SetOf = new("set-of", static xs => Set.Of(xs));
 
         /// <summary>
         /// <c>set-union</c>.
@@ -37,7 +37,7 @@ namespace Eggnog
         /// <summary>
         /// <c>set-diff</c>.
         /// </summary>
-        public static readonly Primitive<Set<T>, Set<T>, Set<T>> Except = new("set-diff", static (a, b) => a.Except(b), false);
+        public static readonly Primitive<Set<T>, Set<T>, Set<T>> Difference = new("set-diff", static (a, b) => a.Except(b), false);
 
         /// <summary>
         /// <c>set-insert</c>.
@@ -76,17 +76,17 @@ namespace Eggnog
         /// <summary>
         /// <c>set-subset</c>: whether the first set is a subset of the second.
         /// </summary>
-        public static readonly Primitive<Set<T>, Set<T>, bool> IsSubsetOf = new("set-subset", static (a, b) => a.IsSubsetOf(b), false);
+        public static readonly Primitive<Set<T>, Set<T>, bool> IsSubset = new("set-subset", static (a, b) => a.IsSubsetOf(b), false);
 
         /// <summary>
-        /// <c>set-is-empty</c>: whether the set is empty, an addition (egglog's <c>set-empty</c> is the empty set).
+        /// <c>set-is-empty</c>: whether the set is empty, an addition (egglog's <c>set-empty</c> is the empty set, <see cref="Empty"/>).
         /// </summary>
         public static readonly Primitive<Set<T>, bool> IsEmpty = new("set-is-empty", static s => s.IsEmpty, false);
 
         /// <summary>
         /// <c>set-length</c>.
         /// </summary>
-        public static readonly Primitive<Set<T>, long> Count = new("set-length", static s => s.Count, false);
+        public static readonly Primitive<Set<T>, long> Length = new("set-length", static s => s.Count, false);
 
         /// <summary>
         /// <c>set-get</c>: the element at an index in cell order; no result for an index out of range.

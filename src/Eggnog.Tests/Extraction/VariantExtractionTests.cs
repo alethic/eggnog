@@ -151,7 +151,7 @@ namespace Eggnog.Tests.Extraction
         {
             // egglog panics on such a node (src/extract.rs:691); here it is left out, as Extract leaves it out.
             var t = new NodeTheory();
-            var hidden = t.Graph.DefineConstructor<Node>("Hidden", options: new TableOptions { Extractable = false });
+            var hidden = t.Graph.DefineConstructor<Node>("Hidden", options: new ConstructorOptions { Unextractable = true });
             var wrapped = t.Root.Make(t.Wrap.Of(hidden.Of()));
             Assert.Empty(t.Root.ExtractVariants(wrapped, 5));
             Assert.Empty(t.Root.ExtractVariants(t.Root.Get(hidden.Of()), 5));

@@ -10,7 +10,7 @@ namespace Eggnog.Tests.Subsumption
 
     /// <summary>
     /// Host subsumption through <see cref="Scope.Subsume{TSort}(ConstructorTerm{TSort})"/>, <see
-    /// cref="Scope.Subsume(Fact[])"/> and a <see cref="ScopeWriter"/>: an existing row is subsumed, a missing one is
+    /// cref="Scope.Subsume(ReadOnlySpan{Fact})"/> and a <see cref="ScopeWriter"/>: an existing row is subsumed, a missing one is
     /// made subsumed (egglog's <c>test_subsume_ok</c>), a row already subsumed writes nothing, and a batch subsumes the
     /// terms and rows it makes, whichever call comes first.
     /// </summary>
@@ -22,9 +22,9 @@ namespace Eggnog.Tests.Subsumption
         {
             // test_subsume_ok: subsuming present and missing constructor terms and relation rows.
             var t = new MathTheory();
-            var one = t.Graph.DefineConstructor<Node>("one", 1, MathTheory.Subsumable);
-            var two = t.Graph.DefineConstructor<Node>("two", 1, MathTheory.Subsumable);
-            var r = t.Graph.DefineRelation<long>("R", MathTheory.Subsumable);
+            var one = t.Graph.DefineConstructor<Node>("one", 1);
+            var two = t.Graph.DefineConstructor<Node>("two", 1);
+            var r = t.Graph.DefineRelation<long>("R");
             t.Root.Make(one.Of());
             t.Root.Assume(r.Of(1L));
 
@@ -54,7 +54,7 @@ namespace Eggnog.Tests.Subsumption
         public void SubsumingWhatIsSubsumedWritesNothing()
         {
             var t = new MathTheory();
-            var fact = t.Graph.DefineRelation<string>("fact", MathTheory.Subsumable);
+            var fact = t.Graph.DefineRelation<string>("fact");
             t.Root.Make(t.Num.Of(1L));
             t.Root.Assume(fact.Of("a"));
             var before = t.Root.Version;
@@ -77,7 +77,7 @@ namespace Eggnog.Tests.Subsumption
         public void ABatchSubsumesWhatItMakesWhicheverCallComesFirst()
         {
             var t = new MathTheory();
-            var fact = t.Graph.DefineRelation<string>("fact", MathTheory.Subsumable);
+            var fact = t.Graph.DefineRelation<string>("fact");
 
             t.Root.Write(w =>
             {

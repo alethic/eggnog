@@ -7,7 +7,7 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// A named set of rules that schedules run together (<see cref="Schedule.Run(Ruleset[])"/>). Made by
+    /// A named set of rules that schedules run together (<see cref="Schedule.Run(ReadOnlySpan{Ruleset})"/>). Made by
     /// <see cref="EGraph.DefineRuleset(string)"/>.
     /// </summary>
     public sealed class Ruleset
@@ -118,7 +118,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets a schedule of one iteration of this ruleset: <see cref="Schedule.Run(Ruleset[])"/>.
+        /// Gets a schedule of one iteration of this ruleset: <see cref="Schedule.Run(ReadOnlySpan{Ruleset})"/>.
         /// </summary>
         /// <param name="ruleset">The ruleset.</param>
         public static implicit operator Schedule(Ruleset ruleset) => Schedule.Run(ruleset);

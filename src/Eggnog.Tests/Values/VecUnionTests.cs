@@ -305,9 +305,9 @@ namespace Eggnog.Tests.Values
                 {
                     var (k, d) = s.Vars<string, Set<long>>("k", "d");
                     s.When(d.Is(choice.Of(k)));
-                    s.Where(Primitives.Greater.Of(Primitives.Count<long>().Of(d), 1L));
+                    s.Where(Int64Primitives.Greater.Of(Primitives.SetLength<long>().Of(d), 1L));
                     var v = s.Cases("v", d);
-                    s.Assume(choice.Of(k).Is(Primitives.Singleton<long>().Of(v)));
+                    s.Assume(choice.Of(k).Is(Primitives.SetOf<long>().Of(v)));
                 });
                 var unions = t.Graph.DefineRuleset("unions");
                 unions.DefineRule("union", r =>
@@ -316,7 +316,7 @@ namespace Eggnog.Tests.Values
                     r.When(x.Is(t.P.Of()), y.Is(t.Q.Of()));
                     r.Then(Fact.Exists(Primitives.VecUnion<Node>().Of(x, y)));
                 });
-                t.Root.Assume(choice.Of("k").Is(Set.Of(1L, 2L)));
+                t.Root.Assume(choice.Of("k").Is(Set.Of([1L, 2L])));
 
                 t.Root.Run(replay ? Schedule.Run(unions) : Schedule.Split(split, Schedule.Run(unions)));
 
@@ -373,7 +373,7 @@ namespace Eggnog.Tests.Values
 
             s.Assume(g.Of(t.A.Of()).Is(1L), g.Of(t.B.Of()).Is(2L));
             var length = Primitives.VecLength<Node>().Of(Primitives.VecUnion<Node>().Of(t.P.Of(), t.Q.Of()));
-            Assert.Throws<RuleEvaluationException>(() => s.Assume(k.Of(1L).Is(Primitives.Add.Of(length, Primitives.Divide.Of(1L, 0L)))));
+            Assert.Throws<RuleEvaluationException>(() => s.Assume(k.Of(1L).Is(Int64Primitives.Add.Of(length, Int64Primitives.Divide.Of(1L, 0L)))));
 
             Assert.True(s.AreEqual(s.Make(t.A.Of()), s.Make(t.B.Of())));
             Assert.Equal(1, s.CountRows(g));

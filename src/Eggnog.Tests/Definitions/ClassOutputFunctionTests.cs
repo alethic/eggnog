@@ -359,12 +359,12 @@ namespace Eggnog.Tests.Definitions
             {
                 var (k, d) = s.Vars<string, Set<long>>("k", "d");
                 s.When(d.Is(choice.Of(k)));
-                s.Where(Primitives.Greater.Of(Primitives.Count<long>().Of(d), 1L));
+                s.Where(Int64Primitives.Greater.Of(Primitives.SetLength<long>().Of(d), 1L));
                 var v = s.Cases("v", d);
-                s.Assume(choice.Of(k).Is(Primitives.Singleton<long>().Of(v)), t.B.Of().Is(t.Lit.Of(v)), picked.Of(k).Is(t.A.Of()));
+                s.Assume(choice.Of(k).Is(Primitives.SetOf<long>().Of(v)), t.B.Of().Is(t.Lit.Of(v)), picked.Of(k).Is(t.A.Of()));
             });
             var a = t.Root.Make(t.A.Of());
-            t.Root.Assume(choice.Of("k").Is(Set.Of(1L, 2L)));
+            t.Root.Assume(choice.Of("k").Is(Set.Of([1L, 2L])));
 
             var report = t.Root.Run(Schedule.Split(split, Schedule.Run(t.Rules)));
 
@@ -388,13 +388,13 @@ namespace Eggnog.Tests.Definitions
             {
                 var (k, d) = s.Vars<string, Set<long>>("k", "d");
                 s.When(d.Is(choice.Of(k)));
-                s.Where(Primitives.Greater.Of(Primitives.Count<long>().Of(d), 1L));
+                s.Where(Int64Primitives.Greater.Of(Primitives.SetLength<long>().Of(d), 1L));
                 var v = s.Cases("v", d);
-                s.Assume(choice.Of(k).Is(Primitives.Singleton<long>().Of(v)), t.A.Of().Is(t.B.Of()));
+                s.Assume(choice.Of(k).Is(Primitives.SetOf<long>().Of(v)), t.A.Of().Is(t.B.Of()));
             });
             var a = t.Root.Make(t.A.Of());
             var b = t.Root.Make(t.B.Of());
-            t.Root.Assume(f.Of(a).Is(t.Lit.Of(1L)), f.Of(b).Is(t.Lit.Of(2L)), choice.Of("k").Is(Set.Of(1L, 2L)));
+            t.Root.Assume(f.Of(a).Is(t.Lit.Of(1L)), f.Of(b).Is(t.Lit.Of(2L)), choice.Of("k").Is(Set.Of([1L, 2L])));
 
             var e = Assert.Throws<RuleEvaluationException>(() => t.Root.Run(Schedule.Split(split, Schedule.Run(t.Rules))));
 

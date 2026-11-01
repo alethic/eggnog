@@ -337,7 +337,7 @@ namespace Eggnog.Tests.Host
             // (check (= (weight 6) 1)) (check (Wrap (A))).
             var t = new NodeTheory();
             var weight = t.Graph.DefineFunction<long, long>("weight");
-            var total = t.Graph.DefineFunction<string, long>("total", FunctionMerge.Expression<long>((old, @new) => Primitives.Add.Of(old, weight.Of(@new))));
+            var total = t.Graph.DefineFunction<string, long>("total", FunctionMerge.Expression<long>((old, @new) => Int64Primitives.Add.Of(old, weight.Of(@new))));
             t.Root.Assume(total.Of("k").Is(0L));
             var made = default(Node);
 
@@ -366,7 +366,7 @@ namespace Eggnog.Tests.Host
             // As egglog's command whose merge panics: what the batch staged stands, the terms it made included.
             var t = new NodeTheory();
             var weight = t.Graph.DefineFunction<long, long>("weight");
-            var total = t.Graph.DefineFunction<string, long>("total", FunctionMerge.Expression<long>((old, @new) => Primitives.Add.Of(old, weight.Of(@new))));
+            var total = t.Graph.DefineFunction<string, long>("total", FunctionMerge.Expression<long>((old, @new) => Int64Primitives.Add.Of(old, weight.Of(@new))));
             t.Root.Assume(total.Of("k").Is(0L));
             var made = default(Node);
 
@@ -893,7 +893,7 @@ namespace Eggnog.Tests.Host
                 child.Write(cw =>
                 {
                     cw.Assume(r.Of(a.Of()));
-                    w.Assume(k.Of(1L).Is(Primitives.Add.Of(1L, 2L)));
+                    w.Assume(k.Of(1L).Is(Int64Primitives.Add.Of(1L, 2L)));
                 });
             });
             Assert.True(root.AreEqual(x, y));

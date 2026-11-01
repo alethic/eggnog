@@ -71,10 +71,9 @@ namespace Eggnog
         /// </summary>
         /// <param name="facts">The facts.</param>
         /// <exception cref="ArgumentException">The tag of a <see cref="Fact.In"/> belongs to another graph.</exception>
-        public void When(params Fact[] facts)
+        public void When(params ReadOnlySpan<Fact> facts)
         {
             ThrowIfClosed();
-            ArgumentNullException.ThrowIfNull(facts);
             foreach (var fact in facts)
             {
                 graph.CheckFactTags(fact ?? throw new ArgumentNullException(nameof(facts), "A fact is null."), nameof(facts));
@@ -101,7 +100,7 @@ namespace Eggnog
         public void Where<T1, T2>(Term<T1> a, Term<T2> b, Func<T1, T2, bool> predicate) => Where(Compute.Of(a, b, predicate));
 
         /// <summary>
-        /// Adds a filter on a boolean term, e.g. <c>Primitives.Contains&lt;string&gt;().Of(d, v)</c>.
+        /// Adds a filter on a boolean term, e.g. <c>Primitives.SetContains&lt;string&gt;().Of(d, v)</c>.
         /// </summary>
         /// <param name="condition">The condition.</param>
         public void Where(Term<bool> condition)

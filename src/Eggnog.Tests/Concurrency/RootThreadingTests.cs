@@ -58,7 +58,7 @@ namespace Eggnog.Tests.Concurrency
                     started.Set();
                     return Volatile.Read(ref keepGoing) == 1;
                 });
-                r.Then(t.Num.Of(Primitives.Add.Of(x, 1L)));
+                r.Then(t.Num.Of(Int64Primitives.Add.Of(x, 1L)));
             });
             t.Root.Assume(t.Num.Of(0L));
 

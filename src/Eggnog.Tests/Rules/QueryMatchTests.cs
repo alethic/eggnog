@@ -99,8 +99,8 @@ namespace Eggnog.Tests.Rules
             {
                 var x = r.Var<long>("x");
                 r.When(t.Num.Of(x));
-                r.Where(Primitives.Less.Of(x, 3L));
-                r.Then(t.Num.Of(Primitives.Add.Of(x, 1L)));
+                r.Where(Int64Primitives.Less.Of(x, 3L));
+                r.Then(t.Num.Of(Int64Primitives.Add.Of(x, 1L)));
             });
             t.Root.Assume(t.Num.Of(0L));
             var boom = t.Graph.DefineQuery("boom", q =>
@@ -178,8 +178,8 @@ namespace Eggnog.Tests.Rules
         public void AQueryWithOnlyAConstantFilter()
         {
             var t = new NodeTheory();
-            var yes = t.Graph.DefineQuery("yes", b => b.Where(Primitives.Greater.Of(2L, 1L)));
-            var no = t.Graph.DefineQuery("no", b => b.Where(Primitives.Greater.Of(1L, 2L)));
+            var yes = t.Graph.DefineQuery("yes", b => b.Where(Int64Primitives.Greater.Of(2L, 1L)));
+            var no = t.Graph.DefineQuery("no", b => b.Where(Int64Primitives.Greater.Of(1L, 2L)));
             Assert.Equal(1, t.Root.Count(yes));
             Assert.Equal(0, t.Root.Count(no));
         }
@@ -255,7 +255,7 @@ namespace Eggnog.Tests.Rules
             {
                 var (x, y, z) = r.Vars<long, long, long>("x", "y", "z");
                 r.When(e.Of(x, y), e.Of(y, z));
-                r.Where(Primitives.Less.Of(x, z));
+                r.Where(Int64Primitives.Less.Of(x, z));
                 r.Then(path.Of(x, z));
             });
             Var<long> qx = null!;
@@ -265,7 +265,7 @@ namespace Eggnog.Tests.Rules
                 var y = b.Var<long>("y");
                 (qx, qz) = b.Vars<long, long>("x", "z");
                 b.When(e.Of(qx, y), e.Of(y, qz));
-                b.Where(Primitives.Less.Of(qx, qz));
+                b.Where(Int64Primitives.Less.Of(qx, qz));
             });
             var rnd = new Random(3);
             for (var i = 0; i < 40; i++)
@@ -318,7 +318,7 @@ namespace Eggnog.Tests.Rules
             var q = t.Graph.DefineQuery("q", b =>
             {
                 x = b.Var<long>("x");
-                b.When(t.Num.Of(x), Primitives.Add.Of(x, 1L).Is(3L));
+                b.When(t.Num.Of(x), Int64Primitives.Add.Of(x, 1L).Is(3L));
             });
             var seen = new List<long>();
             t.Root.ForEachMatch(q, m =>
@@ -338,8 +338,8 @@ namespace Eggnog.Tests.Rules
             {
                 var x = r.Var<long>("x");
                 r.When(t.Num.Of(x));
-                r.Where(Primitives.Less.Of(x, 3L));
-                r.Then(t.Num.Of(Primitives.Add.Of(x, 1L)));
+                r.Where(Int64Primitives.Less.Of(x, 3L));
+                r.Then(t.Num.Of(Int64Primitives.Add.Of(x, 1L)));
             });
             var boom = Primitive.Create<long, bool>("boom", _ => throw new InvalidOperationException("x"));
             var failing = t.Graph.DefineQuery("failing", b =>
@@ -491,12 +491,12 @@ namespace Eggnog.Tests.Rules
             var q = t.Graph.DefineQuery("q", b =>
             {
                 x = b.Var<long>("x");
-                b.When(t.Num.Of(x), Primitives.Add.Of(x, 1L).Is(3L));
+                b.When(t.Num.Of(x), Int64Primitives.Add.Of(x, 1L).Is(3L));
             });
             t.Rules.DefineRule("tag two", r =>
             {
                 var y = r.Var<long>("y");
-                r.When(t.Num.Of(y), Primitives.Add.Of(y, 1L).Is(3L));
+                r.When(t.Num.Of(y), Int64Primitives.Add.Of(y, 1L).Is(3L));
                 r.Then(t.Tag.Of(t.Lit.Of(y)));
             });
 

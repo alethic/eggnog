@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Threading;
 
 namespace Eggnog
@@ -23,7 +22,7 @@ namespace Eggnog
         /// </summary>
         /// <param name="name">The name it renders as.</param>
         /// <param name="function">The function over all the arguments.</param>
-        internal VariadicPrimitive(string name, Func<IReadOnlyList<T>, TResult> function)
+        internal VariadicPrimitive(string name, VariadicFunc<T, TResult> function)
         {
             Name = name;
             Function = function;
@@ -35,19 +34,17 @@ namespace Eggnog
         public string Name { get; }
 
         /// <summary>
-        /// Gets the function over all the arguments. A rule calls it with a list valid only during the call, which it must
-        /// not keep.
+        /// Gets the function over all the arguments. A rule calls it with a span valid only during the call.
         /// </summary>
-        public Func<IReadOnlyList<T>, TResult> Function { get; }
+        public VariadicFunc<T, TResult> Function { get; }
 
         /// <summary>
         /// The primitive applied to terms: a computed value in a body (a let or a check) or a head.
         /// </summary>
         /// <param name="arguments">The arguments, any number of them.</param>
         /// <returns>The term.</returns>
-        public Term<TResult> Of(params Term<T>[] arguments)
+        public Term<TResult> Of(params ReadOnlySpan<Term<T>> arguments)
         {
-            ArgumentNullException.ThrowIfNull(arguments);
             var copy = new Term[arguments.Length];
             for (var i = 0; i < copy.Length; i++)
                 copy[i] = arguments[i] ?? throw new ArgumentNullException(nameof(arguments), $"Argument {i} of '{Name}' is null.");

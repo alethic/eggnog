@@ -45,9 +45,11 @@ namespace Eggnog
         /// <c>check</c>, which interns, holds: a value no write interned, a constant or a computation's result,
         /// equals only itself, and as a key is in no row. A scoped view (<c>T.In(tag)</c>) or a <see cref="Fact.In"/> reads the nearest
         /// ancestor-or-self tagged <c>tag</c> directly (host reads never use mirrors). A subsumed row holds, as in
-        /// egglog's <c>check</c> (<see cref="TableOptions.Subsumable"/>).
+        /// egglog's <c>check</c> (<see cref="RelationOptions.Subsumable"/>,
+        /// <see cref="ConstructorOptions.Subsumable"/>).
         /// </summary>
-        /// <param name="facts">The facts: relation rows, equalities of classes or values, existences.</param>
+        /// <param name="facts">The facts: relation rows, equalities of classes or values, existences. No facts, a
+        /// <c>null</c> array included, check nothing and hold.</param>
         /// <returns>Whether every fact holds.</returns>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
         /// <exception cref="ArgumentException">A fact is a filter, a term in it is not ground, a <see cref="Fact.In"/> is
@@ -63,9 +65,8 @@ namespace Eggnog
         /// which is not frozen, has catch-up work, which takes one: an ancestor that changed since it last caught up, or
         /// a rebuild of its own that ran out before it finished. The scope is not faulted. A frozen scope, and one with
         /// nothing to catch up, reads without an epoch.</exception>
-        public bool Check(params Fact[] facts)
+        public bool Check(params ReadOnlySpan<Fact> facts)
         {
-            ArgumentNullException.ThrowIfNull(facts);
             var held = EnterRead();
             try
             {
@@ -381,7 +382,7 @@ namespace Eggnog
         /// Gets whether a query has a match here. The engine stops at the first match. A query writes nothing: it
         /// moves neither <see cref="Version"/> nor any extractor; the mirrors of the tags it reads are brought
         /// current first, which neither does either. Like a rule body, and unlike <see cref="Check"/>, a query does not
-        /// match subsumed rows (<see cref="TableOptions.Subsumable"/>).
+        /// match subsumed rows (<see cref="RelationOptions.Subsumable"/>, <see cref="ConstructorOptions.Subsumable"/>).
         /// </summary>
         /// <param name="query">The query.</param>
         /// <returns>Whether it has a match.</returns>

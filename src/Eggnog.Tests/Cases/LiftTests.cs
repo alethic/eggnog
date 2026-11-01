@@ -29,13 +29,13 @@ namespace Eggnog.Tests.Cases
 
             using var cases = root.OpenCases();
             var first = cases.Add();
-            first.Assume(dom.Of("x").Is(Set.Of("a")), lo.Of("x").Is(5L), mostly.Of("x").Is(12L), exact.Of("x").Is(1L), exact.Of("y").Is(1L));
+            first.Assume(dom.Of("x").Is(Set.Of(["a"])), lo.Of("x").Is(5L), mostly.Of("x").Is(12L), exact.Of("x").Is(1L), exact.Of("y").Is(1L));
             var second = cases.Add();
-            second.Assume(dom.Of("x").Is(Set.Of("b")), lo.Of("x").Is(7L), mostly.Of("x").Is(3L), exact.Of("x").Is(1L), exact.Of("y").Is(2L));
+            second.Assume(dom.Of("x").Is(Set.Of(["b"])), lo.Of("x").Is(7L), mostly.Of("x").Is(3L), exact.Of("x").Is(1L), exact.Of("y").Is(2L));
 
             var lifted = cases.Lift();
 
-            Assert.Equal(Set.Of("a", "b"), root.Get(dom.Of("x")));   // ∩ merges, so the case join is ∪
+            Assert.Equal(Set.Of(["a", "b"]), root.Get(dom.Of("x")));   // ∩ merges, so the case join is ∪
             Assert.Equal(5L, root.Get(lo.Of("x")));                         // max merges, so the case join is min
             Assert.Equal(10L, root.Get(mostly.Of("x")));                    // the lattice's own case join
             Assert.Equal(1L, root.Get(exact.Of("x")));                      // no lattice: the cases agree
@@ -75,9 +75,9 @@ namespace Eggnog.Tests.Cases
         public void TablesThatDoNotLiftAreLeftOut()
         {
             var graph = new EGraph();
-            var local = graph.DefineRelation<string>("local", new TableOptions { Lift = false });
-            var analysis = graph.DefineRelation<string>("analysis", new TableOptions { Role = TableRole.Analysis });
-            var lifting = graph.DefineRelation<string>("lifting", new TableOptions { Role = TableRole.Analysis, Lift = true });
+            var local = graph.DefineRelation<string>("local", new RelationOptions { Lift = false });
+            var analysis = graph.DefineRelation<string>("analysis", new RelationOptions { Analysis = true });
+            var lifting = graph.DefineRelation<string>("lifting", new RelationOptions { Analysis = true, Lift = true });
             var root = graph.Root;
             Assert.False(local.Lift);
             Assert.False(analysis.Lift);
@@ -425,15 +425,15 @@ namespace Eggnog.Tests.Cases
             var dom = graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
             using (var cases = root.OpenCases())
             {
-                cases.Add().Assume(later.Of("b"), dom.Of("k").Is(Set.Of("x")));
-                cases.Add().Assume(later.Of("b"), dom.Of("k").Is(Set.Of("y")));
+                cases.Add().Assume(later.Of("b"), dom.Of("k").Is(Set.Of(["x"])));
+                cases.Add().Assume(later.Of("b"), dom.Of("k").Is(Set.Of(["y"])));
                 var lifted = cases.Lift();
                 Assert.Equal(1, lifted.Rows);
                 Assert.Equal(1, lifted.Values);
             }
 
             Assert.True(root.Check(later.Of("b")));
-            Assert.Equal(Set.Of("x", "y"), root.Get(dom.Of("k")));
+            Assert.Equal(Set.Of(["x", "y"]), root.Get(dom.Of("k")));
         }
 
         /// <summary>

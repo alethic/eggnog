@@ -30,7 +30,7 @@ namespace Eggnog.Tests.Cases
             var c = new PredicateTheory(new EGraph());
             c.Graph.Root.Freeze();
             var scope = c.Graph.Root.CreateChild(c.Schema);
-            scope.Assume(c.Present.Of(path), c.Dom.Of(path).Is(Set.Of(values)), c.Discriminator.Of(path));
+            scope.Assume(c.Present.Of(path), c.Dom.Of(path).Is(Set.From(values)), c.Discriminator.Of(path));
             return (c, scope);
         }
 
@@ -71,7 +71,7 @@ namespace Eggnog.Tests.Cases
             {
                 scope.DefineRule(c.Horn, $"kind = {value} and late", r =>
                 {
-                    r.When(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of(value)), c.Present.Of("late"));
+                    r.When(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of([value])), c.Present.Of("late"));
                     r.Then(c.Form.Of("ref", "uuid-lower"));
                 });
             }
@@ -132,7 +132,7 @@ namespace Eggnog.Tests.Cases
                 var (p, d) = s.Vars<string, Set<string>>("p", "d");
                 s.When(d.Is(c.Dom.Of(p)));
                 var v = s.Cases("v", d);
-                s.Assume(c.Dom.Of(p).Is(Primitives.Singleton<string>().Of(v)));
+                s.Assume(c.Dom.Of(p).Is(Primitives.SetOf<string>().Of(v)));
             });
 
             // dom(empty) = {} with no presence: no contradiction, and nothing to split.
@@ -177,17 +177,17 @@ namespace Eggnog.Tests.Cases
             for (var handWritten = 0; handWritten < 2; handWritten++)
             {
                 var (c, scope) = Discriminated("kind", "a", "b", "c");
-                c.DeclareBranch(scope, "kind", "a", c.Form.Of("ref", "uuid-lower"), c.Dom.Of("status").Is(Set.Of("x")));
-                c.DeclareBranch(scope, "kind", "b", c.Form.Of("ref", "uuid-lower"), c.Dom.Of("status").Is(Set.Of("y")));
-                c.DeclareBranch(scope, "kind", "c", c.Form.Of("ref", "uuid-lower"), c.Dom.Of("status").Is(Set.Of("x", "z")));
+                c.DeclareBranch(scope, "kind", "a", c.Form.Of("ref", "uuid-lower"), c.Dom.Of("status").Is(Set.Of(["x"])));
+                c.DeclareBranch(scope, "kind", "b", c.Form.Of("ref", "uuid-lower"), c.Dom.Of("status").Is(Set.Of(["y"])));
+                c.DeclareBranch(scope, "kind", "c", c.Form.Of("ref", "uuid-lower"), c.Dom.Of("status").Is(Set.Of(["x", "z"])));
                 var rule = handWritten == 0 ? c.SchemaSplit : c.Graph.DefineSplit("by hand", s =>
                 {
                     var (k, d) = s.Vars<string, Set<string>>("k", "d");
                     s.When(c.Discriminator.Of(k), c.Present.Of(k), d.Is(c.Dom.Of(k)));
-                    s.Where(Primitives.Greater.Of(Primitives.Count<string>().Of(d), 1L));
+                    s.Where(Int64Primitives.Greater.Of(Primitives.SetLength<string>().Of(d), 1L));
                     var v = s.Cases("v", d);
                     s.Key(k);
-                    s.Assume(c.Dom.Of(k).Is(Primitives.Singleton<string>().Of(v)));
+                    s.Assume(c.Dom.Of(k).Is(Primitives.SetOf<string>().Of(v)));
                 }, c.Case);
 
                 var report = scope.Run(Schedule.Saturate(Settle(c), Schedule.Split(rule, Settle(c))));
@@ -207,7 +207,7 @@ namespace Eggnog.Tests.Cases
             Assert.Equal(3, results[0].Report.CasesOpened);
             Assert.True(results[0].Form);
             Assert.True(results[1].Form);
-            Assert.Equal(Set.Of("x", "y", "z"), results[0].Dom);
+            Assert.Equal(Set.Of(["x", "y", "z"]), results[0].Dom);
             Assert.Equal(results[0].Dom, results[1].Dom);
         }
 
@@ -224,8 +224,8 @@ namespace Eggnog.Tests.Cases
                 c.Graph.Root.Freeze();
                 var scope = c.Graph.Root.CreateChild(c.Schema);
                 scope.Assume(
-                    c.Dom.Of("k1").Is(Set.Of("a", "b")), outer.Of("k1"),
-                    c.Dom.Of("k2").Is(Set.Of("c", "d")), inner.Of("k2"));
+                    c.Dom.Of("k1").Is(Set.Of(["a", "b"])), outer.Of("k1"),
+                    c.Dom.Of("k2").Is(Set.Of(["c", "d"])), inner.Of("k2"));
                 foreach (var v1 in new[] { "a", "b" })
                 {
                     foreach (var v2 in new[] { "c", "d" })
@@ -233,7 +233,7 @@ namespace Eggnog.Tests.Cases
                         // Only a pair of values proves the fact: a split on one path alone proves nothing.
                         scope.DefineRule(c.Horn, $"{v1} and {v2}", r =>
                         {
-                            r.When(c.Dom.Of("k1").Is(Set.Of(v1)), c.Dom.Of("k2").Is(Set.Of(v2)));
+                            r.When(c.Dom.Of("k1").Is(Set.Of([v1])), c.Dom.Of("k2").Is(Set.Of([v2])));
                             r.Then(c.Form.Of("both", "f"));
                         });
                     }
@@ -419,7 +419,7 @@ namespace Eggnog.Tests.Cases
             Assert.Equal(new[] { c.Schema }, guarded.ReadScopes);
             c.Graph.Root.Freeze();
             var schema = c.Graph.Root.CreateChild(c.Schema);
-            schema.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of("a", "b")));
+            schema.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of(["a", "b"])));
             var query = schema.CreateChild(c.Query);
             var report = query.Run(Schedule.Split(guarded, Settle(c)));
             Assert.Equal(2, report.CasesOpened);
@@ -441,7 +441,7 @@ namespace Eggnog.Tests.Cases
             var rules = graph.DefineRuleset("rules");
             graph.Root.Freeze();
             var scope = graph.Root.CreateChild();
-            scope.Assume(dom.Of("k1").Is(Set.Of("a", "b")), outer.Of("k1"), dom.Of("k2").Is(Set.Of("c", "d")), inner.Of("k2"));
+            scope.Assume(dom.Of("k1").Is(Set.Of(["a", "b"])), outer.Of("k1"), dom.Of("k2").Is(Set.Of(["c", "d"])), inner.Of("k2"));
             return (graph, scope, outerSplit, innerSplit, rules);
         }
 
@@ -495,7 +495,7 @@ namespace Eggnog.Tests.Cases
             });
             graph.Root.Freeze();
             var scope = graph.Root.CreateChild();
-            scope.Assume(dom.Of("k").Is(Set.Of("a", "b")), pick.Of("k").Is("a"));
+            scope.Assume(dom.Of("k").Is(Set.Of(["a", "b"])), pick.Of("k").Is("a"));
 
             // The b case's assumption pick(k) = b conflicts with the inherited pick(k) = a.
             var failure = Record.Exception(() => scope.Run(Schedule.Split(split, rules)));
@@ -531,11 +531,11 @@ namespace Eggnog.Tests.Cases
             {
                 var (k, d) = s.Vars<string, Set<long>>("k", "d");
                 s.When(d.Is(choice.Of(k)));
-                s.Where(Primitives.Greater.Of(Primitives.Count<long>().Of(d), 1L));
+                s.Where(Int64Primitives.Greater.Of(Primitives.SetLength<long>().Of(d), 1L));
                 var v = s.Cases("v", d);
-                s.Assume(choice.Of(k).Is(Primitives.Singleton<long>().Of(v)), ((Term<Node>)x).Is(y));
+                s.Assume(choice.Of(k).Is(Primitives.SetOf<long>().Of(v)), ((Term<Node>)x).Is(y));
             });
-            root.Assume(choice.Of("k").Is(Set.Of(1L, 2L)));
+            root.Assume(choice.Of("k").Is(Set.Of([1L, 2L])));
             var scope = root;
             if (frozen)
             {
@@ -572,7 +572,7 @@ namespace Eggnog.Tests.Cases
             });
             graph.Root.Freeze();
             var scope = graph.Root.CreateChild();
-            scope.Assume(dom.Of("k").Is(Set.Of("a", "b")), pick.Of("k").Is("a"));
+            scope.Assume(dom.Of("k").Is(Set.Of(["a", "b"])), pick.Of("k").Is("a"));
 
             Assert.ThrowsAny<Exception>(() => scope.Run(Schedule.Split(split, rules)));
 
@@ -599,10 +599,10 @@ namespace Eggnog.Tests.Cases
             {
                 var (k, d) = s.Vars<string, Set<string>>("k", "d");
                 s.When(present.In(schema).Of(k), d.Is(dom.Of(k)));
-                s.Where(Primitives.Greater.Of(Primitives.Count<string>().Of(d), 1L));
+                s.Where(Int64Primitives.Greater.Of(Primitives.SetLength<string>().Of(d), 1L));
                 var v = s.Cases("v", d);
                 s.Key(k);
-                s.Assume(dom.Of(k).Is(Primitives.Singleton<string>().Of(v)));
+                s.Assume(dom.Of(k).Is(Primitives.SetOf<string>().Of(v)));
             });
             Assert.Equal(new[] { schema }, written.ReadScopes);
 
@@ -621,7 +621,7 @@ namespace Eggnog.Tests.Cases
                 s.When(t.Fact.In(t.Outer).Of(p), d.Is(dom.Of(p)));
                 var v = s.Cases("v", d);
                 s.Key(p);
-                s.Assume(dom.Of(p).Is(Primitives.Singleton<string>().Of(v)));
+                s.Assume(dom.Of(p).Is(Primitives.SetOf<string>().Of(v)));
             });
 
         /// <summary>
@@ -642,8 +642,8 @@ namespace Eggnog.Tests.Cases
             c.Graph.Root.Freeze();
             var scope = c.Graph.Root.CreateChild(c.Schema);
             scope.Assume(
-                c.Dom.Of("k1").Is(Set.Of("a", "b")), outer.Of("k1"),
-                c.Dom.Of("k2").Is(Set.Of("c", "d")), inner.Of("k2"));
+                c.Dom.Of("k1").Is(Set.Of(["a", "b"])), outer.Of("k1"),
+                c.Dom.Of("k2").Is(Set.Of(["c", "d"])), inner.Of("k2"));
             var schedule = Schedule.Split(outerSplit, Schedule.Split(innerSplit, Settle(c)));
 
             // Below the limit: the inner split is taken in both outer cases, and nothing is skipped.
@@ -670,7 +670,7 @@ namespace Eggnog.Tests.Cases
             Assert.Equal(new[] { t.Outer }, split.ReadScopes);
             var outer = t.Root.CreateChild(t.Outer);
             var inner = outer.CreateChild();
-            inner.Assume(dom.Of("k").Is(Set.Of("a", "b")), dom.Of("m").Is(Set.Of("c", "d", "e")));
+            inner.Assume(dom.Of("k").Is(Set.Of(["a", "b"])), dom.Of("m").Is(Set.Of(["c", "d", "e"])));
 
             Assert.Equal(0, inner.Run(Schedule.Split(split, t.Rules)).CasesOpened);
 
@@ -713,7 +713,7 @@ namespace Eggnog.Tests.Cases
             var split = ScopedSplit(t, dom);
             t.DefinePaths();
             var untagged = t.Root.CreateChild();
-            untagged.Assume(t.Edge.Of(1L, 2L), dom.Of("k").Is(Set.Of("a", "b")));
+            untagged.Assume(t.Edge.Of(1L, 2L), dom.Of("k").Is(Set.Of(["a", "b"])));
             var version = untagged.Version;
 
             var refused = Assert.Throws<InvalidOperationException>(() => untagged.Run(Schedule.Sequence(t.Rules, Schedule.Split(split, t.Rules))));
@@ -739,7 +739,7 @@ namespace Eggnog.Tests.Cases
                 s.Where(p, _ => throw new InvalidOperationException("in a matcher"));
                 var v = s.Cases("v", d);
                 s.Key(p);
-                s.Assume(c.Dom.Of(p).Is(Primitives.Singleton<string>().Of(v)));
+                s.Assume(c.Dom.Of(p).Is(Primitives.SetOf<string>().Of(v)));
             });
 
             var failure = Assert.Throws<RuleEvaluationException>(() => scope.Run(Schedule.Split(failing, c.Horn)));
@@ -863,8 +863,8 @@ namespace Eggnog.Tests.Cases
         public void AStoppedSplitCaseAnswersOnlyWhatNeedsNoModel()
         {
             var (c, scope) = Discriminated("kind", "a", "b");
-            scope.Assume(c.Present.Of("x"), c.Dom.Of("x").Is(Set.Of("p")));
-            c.DeclareBranch(scope, "kind", "b", c.Dom.Of("x").Is(Set.Of("q")));
+            scope.Assume(c.Present.Of("x"), c.Dom.Of("x").Is(Set.Of(["p"])));
+            c.DeclareBranch(scope, "kind", "b", c.Dom.Of("x").Is(Set.Of(["q"])));
             Scope? stopped = null;
             string? refusedPath = null;
 
@@ -884,7 +884,7 @@ namespace Eggnog.Tests.Cases
             Assert.NotNull(stopped);
             Assert.Equal(stopped.Path, refusedPath);
             Assert.False(scope.IsContradictory);
-            Assert.Equal(Set.Of("a"), scope.Get(c.Dom.Of("kind")));
+            Assert.Equal(Set.Of(["a"]), scope.Get(c.Dom.Of("kind")));
             Assert.Empty(scope.Children);
         }
 
@@ -925,14 +925,14 @@ namespace Eggnog.Tests.Cases
                 s.When(t.Tag.Of(n), d.Is(labels.Of(n)));
                 var v = s.Cases("v", d);
                 s.Key(n);
-                s.Assume(labels.Of(n).Is(Primitives.Singleton<string>().Of(v)));
+                s.Assume(labels.Of(n).Is(Primitives.SetOf<string>().Of(v)));
             });
             foreach (var label in new[] { "x", "y" })
             {
                 t.Rules.DefineRule($"labelled {label}", r =>
                 {
                     var n = r.Var<Node>("n");
-                    r.When(labels.Of(n).Is(Set.Of(label)));
+                    r.When(labels.Of(n).Is(Set.Of([label])));
                     r.Then(t.Num.Of(1L));
                 });
             }
@@ -940,7 +940,7 @@ namespace Eggnog.Tests.Cases
             var scope = t.Root.CreateChild();
             var a = scope.Make(t.A.Of());
             var b = scope.Make(t.B.Of());
-            scope.Assume(t.Tag.Of(a), t.Tag.Of(b), labels.Of(a).Is(Set.Of("x", "y")));
+            scope.Assume(t.Tag.Of(a), t.Tag.Of(b), labels.Of(a).Is(Set.Of(["x", "y"])));
             scope.Union(a, b);
 
             var report = scope.Run(Schedule.Split(split, t.Rules));
@@ -981,8 +981,8 @@ namespace Eggnog.Tests.Cases
             c.Graph.Root.Freeze();
             var scope = c.Graph.Root.CreateChild(c.Schema);
             scope.Assume(
-                c.Dom.Of("k1").Is(Set.Of("x", "y")), first.Of("k1"),
-                c.Dom.Of("k2").Is(Set.Of("u", "v")), second.Of("k2"));
+                c.Dom.Of("k1").Is(Set.Of(["x", "y"])), first.Of("k1"),
+                c.Dom.Of("k2").Is(Set.Of(["u", "v"])), second.Of("k2"));
             var steps = new List<RunStep>();
 
             var report = scope.Run(Schedule.Saturate(Schedule.Split(splitA, inA), Schedule.Split(splitB, inB)), new RunOptions { Observer = steps.Add });
@@ -1007,7 +1007,7 @@ namespace Eggnog.Tests.Cases
         {
             var t = new ChooseSplitTheory();
             var root = t.Graph.Root;
-            root.Assume(t.Dom.Of("one").Is(Set.Of("x")), t.Dom.Of("two").Is(Set.Of("y", "z")));
+            root.Assume(t.Dom.Of("one").Is(Set.Of(["x"])), t.Dom.Of("two").Is(Set.Of(["y", "z"])));
 
             var report = root.Run(Schedule.Split(t.Split, t.Rules));
 
@@ -1032,7 +1032,7 @@ namespace Eggnog.Tests.Cases
             t.Graph.Root.Freeze();
             var outer = t.Graph.Root.CreateChild(t.Schema);
             var inner = outer.CreateChild();
-            inner.Assume(t.Dom.Of("kind").Is(Set.Of("a", "b")));
+            inner.Assume(t.Dom.Of("kind").Is(Set.Of(["a", "b"])));
 
             var before = inner.Run(Schedule.Split(t.Split, t.Rules));
             Assert.Equal(0, before.CasesOpened);
@@ -1056,7 +1056,7 @@ namespace Eggnog.Tests.Cases
             var c = new PredicateTheory(new EGraph());
             c.Graph.Root.Freeze();
             var scope = c.Graph.Root.CreateChild(c.Schema);
-            scope.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of("a", "b")), c.Discriminator.Of("kind"));
+            scope.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of(["a", "b"])), c.Discriminator.Of("kind"));
             c.DeclareBranch(scope, "kind", "a", c.Form.Of("ref", "uuid-lower"));
             c.DeclareBranch(scope, "kind", "b", c.Form.Of("ref", "uuid-lower"));
             var versions = new List<(RunStep Step, long Version)>();
@@ -1098,7 +1098,7 @@ namespace Eggnog.Tests.Cases
             var root = t.Graph.Root;
             string[] keys = ["z", "m", "a", "q"];
             foreach (var key in keys)
-                root.Assume(t.Dom.Of(key).Is(Set.Of("y", "x")));
+                root.Assume(t.Dom.Of(key).Is(Set.Of(["y", "x"])));
 
             // What each case assumed, by the serial its path ends in: the order the cases were made in.
             var assumed = new SortedDictionary<int, string>();
@@ -1135,7 +1135,7 @@ namespace Eggnog.Tests.Cases
             var c = new PredicateTheory(new EGraph());
             c.Graph.Root.Freeze();
             var scope = c.Graph.Root.CreateChild(c.Schema);
-            scope.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of("a", "b")), c.Discriminator.Of("kind"));
+            scope.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of(["a", "b"])), c.Discriminator.Of("kind"));
             c.DeclareBranch(scope, "kind", "a", c.Form.Of("ref", "uuid-lower"));
             c.DeclareBranch(scope, "kind", "b", c.Graph.Contradiction.Of());
             var settle = Schedule.Saturate(c.Horn, c.Lattice);
@@ -1163,7 +1163,7 @@ namespace Eggnog.Tests.Cases
             Assert.Single(vacuous);
             Assert.True(disposedSeen, "the vacuous case's context was disposed during the run");
             Assert.True(scope.Check(c.Form.Of("ref", "uuid-lower")));         // what the only live case proves
-            Assert.Equal(Set.Of("a"), scope.Get(c.Dom.Of("kind")));
+            Assert.Equal(Set.Of(["a"]), scope.Get(c.Dom.Of("kind")));
         }
 
         /// <summary>
@@ -1180,7 +1180,7 @@ namespace Eggnog.Tests.Cases
             var innerSplit = c.Graph.DefineDomainSplit("inner", c.Dom, [inner], c.Case);
             c.Graph.Root.Freeze();
             var scope = c.Graph.Root.CreateChild(c.Schema);
-            scope.Assume(c.Dom.Of("k1").Is(Set.Of("a", "b")), outer.Of("k1"), c.Dom.Of("k2").Is(Set.Of("c", "d")), inner.Of("k2"));
+            scope.Assume(c.Dom.Of("k1").Is(Set.Of(["a", "b"])), outer.Of("k1"), c.Dom.Of("k2").Is(Set.Of(["c", "d"])), inner.Of("k2"));
             var q = scope.Make(c.StrEq.Of("k2", "c"));
             var nested = new List<Scope>();
             Pred? fromNested = null;
@@ -1219,7 +1219,7 @@ namespace Eggnog.Tests.Cases
         {
             var t = new ChooseSplitTheory();
             var root = t.Graph.Root;
-            root.Assume(t.Dom.Of("kind").Is(Set.Of("a", "b")));
+            root.Assume(t.Dom.Of("kind").Is(Set.Of(["a", "b"])));
 
             var report = root.Run(Schedule.Split(t.Split, t.Rules), new RunOptions { RowLimit = 0 });
 
@@ -1250,7 +1250,7 @@ namespace Eggnog.Tests.Cases
                 s.Assume(t.Chosen.Of(p, v));
             }, tag);
             var root = t.Graph.Root;
-            root.Assume(t.Dom.Of("kind").Is(Set.Of("a", "b")));
+            root.Assume(t.Dom.Of("kind").Is(Set.Of(["a", "b"])));
             var cases = new List<Scope>();
 
             root.Run(Schedule.Split(tagged, t.Rules), new RunOptions
@@ -1277,7 +1277,7 @@ namespace Eggnog.Tests.Cases
             var t = new ChooseSplitTheory();
             var other = new ChooseSplitTheory();
             var root = t.Graph.Root;
-            root.Assume(t.Dom.Of("kind").Is(Set.Of("a", "b")));
+            root.Assume(t.Dom.Of("kind").Is(Set.Of(["a", "b"])));
             var seen = t.Graph.DefineRelation<string>("seen");
             t.Rules.DefineRule("see", r => { var p = r.Var<string>("p"); r.When(t.Dom.Of(p).Is(r.Var<Set<string>>("d"))); r.Then(seen.Of(p)); });
 
@@ -1299,7 +1299,7 @@ namespace Eggnog.Tests.Cases
             var seen = t.Graph.DefineRelation<string>("seen");
             t.Rules.DefineRule("see", r => { var p = r.Var<string>("p"); r.When(t.Dom.Of(p).Is(r.Var<Set<string>>("d"))); r.Then(seen.Of(p)); });
             var root = t.Graph.Root;
-            root.Assume(t.Dom.Of("kind").Is(Set.Of("a", "b")));
+            root.Assume(t.Dom.Of("kind").Is(Set.Of(["a", "b"])));
 
             Assert.Throws<InvalidOperationException>(() => root.Run(Schedule.Sequence(t.Rules, Schedule.Split(t.Split, t.Rules))));
 
@@ -1331,7 +1331,7 @@ namespace Eggnog.Tests.Cases
                 var a = root.Make(t.A.Of());
                 root.Make(t.B.Of());
                 root.Make(t.Lit.Of(1L));
-                root.Assume(dom.Of("k").Is(Set.Of("x", "y")));
+                root.Assume(dom.Of("k").Is(Set.Of(["x", "y"])));
                 t.Rules.DefineRule("x", r => { r.When(chosen.Of("k", "x")); r.Then(t.B.Of().Is(a), t.Tag.Of(a)); });
                 t.Rules.DefineRule("y", r => { r.When(chosen.Of("k", "y")); r.Then(t.Lit.Of(1L).Is(a), t.Tag.Of(a)); });
 
@@ -1361,7 +1361,7 @@ namespace Eggnog.Tests.Cases
         {
             var t = new ChooseSplitTheory();
             var root = t.Graph.Root;
-            root.Assume(t.Dom.Of("kind").Is(Set.Of("x", "y")));
+            root.Assume(t.Dom.Of("kind").Is(Set.Of(["x", "y"])));
             t.Rules.DefineRule("y contradicts", r => { r.When(t.Chosen.Of("kind", "y")); r.Then(t.Graph.Contradiction.Of()); });
             var inCase = Schedule.Sequence(Schedule.Saturate(t.Rules), Schedule.Until(Schedule.Saturate(t.Rules), t.Present.Of("never")));
 
@@ -1395,7 +1395,7 @@ namespace Eggnog.Tests.Cases
             var root = t.Root;
             var a = root.Make(t.A.Of());
             var b = root.Make(t.B.Of());
-            root.Assume(domain.Of(a).Is(Set.Of("x", "y")), domain.Of(b).Is(Set.Of("x", "y")));
+            root.Assume(domain.Of(a).Is(Set.Of(["x", "y"])), domain.Of(b).Is(Set.Of(["x", "y"])));
             root.Freeze();
             using var child = root.CreateChild();
             Assert.True(child.Union(a, b));
@@ -1430,7 +1430,7 @@ namespace Eggnog.Tests.Cases
 
             graph.Root.Freeze();
             var scope = graph.Root.CreateChild();
-            scope.Assume(options.Of("x").Is(Set.Of("a", "b")), choice.Of("x").Is("a"));
+            scope.Assume(options.Of("x").Is(Set.Of(["a", "b"])), choice.Of("x").Is("a"));
 
             var failure = Record.Exception(() => scope.Run(Schedule.Split(split, Schedule.Saturate(rules))));
 
@@ -1452,7 +1452,7 @@ namespace Eggnog.Tests.Cases
             var c = new PredicateTheory(graph);
             graph.Root.Freeze();
             var scope = graph.Root.CreateChild(c.Schema);
-            scope.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of("a", "b")), c.Discriminator.Of("kind"));
+            scope.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of(["a", "b"])), c.Discriminator.Of("kind"));
             c.DeclareBranch(scope, "kind", "a", c.Form.Of("ref", "uuid-lower"));
             c.DeclareBranch(scope, "kind", "b", c.Form.Of("ref", "uuid-lower"));
 
@@ -1503,7 +1503,7 @@ namespace Eggnog.Tests.Cases
             var split = graph.SplitRules.Single();
             graph.Root.Freeze();
             var scope = graph.Root.CreateChild();
-            scope.Assume(key.Of("k"), domain.Of("k").Is(Set.Of("a", "b")));
+            scope.Assume(key.Of("k"), domain.Of("k").Is(Set.Of(["a", "b"])));
 
             var failure = Record.Exception(() => scope.Run(Schedule.Split(split, Schedule.Saturate(rules))));
 
@@ -1523,7 +1523,7 @@ namespace Eggnog.Tests.Cases
             var c = new PredicateTheory(new EGraph());
             c.Graph.Root.Freeze();
             var scope = c.Graph.Root.CreateChild(c.Schema);
-            scope.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of("a", "b")), c.Discriminator.Of("kind"));
+            scope.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of(["a", "b"])), c.Discriminator.Of("kind"));
             var settle = Schedule.Saturate(c.Horn, c.Lattice);
             scope.Run(settle);
             var version = scope.Version;
@@ -1550,8 +1550,8 @@ namespace Eggnog.Tests.Cases
             c.Graph.Root.Freeze();
             var scope = c.Graph.Root.CreateChild(c.Schema);
             scope.Assume(
-                outerKey.Of("k0"), c.Present.Of("k0"), c.Dom.Of("k0").Is(Set.Of("a", "b")),
-                innerKey.Of("k1"), c.Present.Of("k1"), c.Dom.Of("k1").Is(Set.Of("x", "y")));
+                outerKey.Of("k0"), c.Present.Of("k0"), c.Dom.Of("k0").Is(Set.Of(["a", "b"])),
+                innerKey.Of("k1"), c.Present.Of("k1"), c.Dom.Of("k1").Is(Set.Of(["x", "y"])));
             var settle = Schedule.Saturate(c.Horn, c.Lattice);
             var nested = Schedule.Split(outer, Schedule.Saturate(settle, Schedule.Split(inner, settle)));
 
@@ -1581,20 +1581,20 @@ namespace Eggnog.Tests.Cases
             rules.DefineRule("count in a", r =>
             {
                 var n = r.Var<long>("n");
-                r.When(dom.Of("k").Is(Set.Of("a")), n.Is(counter.Of("c")));
+                r.When(dom.Of("k").Is(Set.Of(["a"])), n.Is(counter.Of("c")));
                 r.Where(n, n => n < 2);
-                r.Then(counter.Of("c").Is(Primitives.Add.Of(n, 1L)));
+                r.Then(counter.Of("c").Is(Int64Primitives.Add.Of(n, 1L)));
             });
             rules.DefineRule("count in b", r =>
             {
                 var n = r.Var<long>("n");
-                r.When(dom.Of("k").Is(Set.Of("b")), n.Is(counter.Of("c")));
+                r.When(dom.Of("k").Is(Set.Of(["b"])), n.Is(counter.Of("c")));
                 r.Where(n, n => limitInB is null || n < limitInB);
-                r.Then(counter.Of("c").Is(Primitives.Add.Of(n, 1L)));
+                r.Then(counter.Of("c").Is(Int64Primitives.Add.Of(n, 1L)));
             });
-            rules.DefineRule("facts in a", r => { r.When(dom.Of("k").Is(Set.Of("a"))); r.Then(fact.Of("x"), fact.Of("a only")); });
-            rules.DefineRule("fact in b", r => { r.When(dom.Of("k").Is(Set.Of("b"))); r.Then(fact.Of("x")); });
-            graph.Root.Assume(discriminator.Of("k"), dom.Of("k").Is(Set.Of("a", "b")), counter.Of("c").Is(0L));
+            rules.DefineRule("facts in a", r => { r.When(dom.Of("k").Is(Set.Of(["a"]))); r.Then(fact.Of("x"), fact.Of("a only")); });
+            rules.DefineRule("fact in b", r => { r.When(dom.Of("k").Is(Set.Of(["b"]))); r.Then(fact.Of("x")); });
+            graph.Root.Assume(discriminator.Of("k"), dom.Of("k").Is(Set.Of(["a", "b"])), counter.Of("c").Is(0L));
             return (graph, split, rules, dom, counter, fact);
         }
 
@@ -1659,7 +1659,7 @@ namespace Eggnog.Tests.Cases
             var inB = new List<(int Index, long Counter)>();
             void Observe(RunStep step)
             {
-                if (step.Kind == RunStepKind.Iteration && step.Scope.IsCase && step.Scope.Get(dom.Of("k")).Equals(Set.Of("b")))
+                if (step.Kind == RunStepKind.Iteration && step.Scope.IsCase && step.Scope.Get(dom.Of("k")).Equals(Set.Of(["b"])))
                     inB.Add((step.Index, step.Scope.Get(counter.Of("c"))));
             }
 
@@ -1694,11 +1694,11 @@ namespace Eggnog.Tests.Cases
         public void TheLiftAfterTheStepDeepensTakesWhatACutOffCaseDerivedWhileDeepening()
         {
             var (graph, split, rules, dom, counter, fact) = CountingCases(null);
-            rules.DefineRule("y in a", r => { r.When(dom.Of("k").Is(Set.Of("a"))); r.Then(fact.Of("y")); });
+            rules.DefineRule("y in a", r => { r.When(dom.Of("k").Is(Set.Of(["a"]))); r.Then(fact.Of("y")); });
             rules.DefineRule("y in b from 4", r =>
             {
                 var n = r.Var<long>("n");
-                r.When(dom.Of("k").Is(Set.Of("b")), n.Is(counter.Of("c")));
+                r.When(dom.Of("k").Is(Set.Of(["b"])), n.Is(counter.Of("c")));
                 r.Where(n, n => n >= 4);
                 r.Then(fact.Of("y"));
             });
@@ -1765,7 +1765,7 @@ namespace Eggnog.Tests.Cases
             AssumeAConstantContainerInEachCase<Vec<Node>>(where, rootHolds, graph =>
             {
                 graph.Values.RegisterVec<Node>();
-                return ((one, two) => Vec.Of(one, two), one => Vec.Of(one, one));
+                return ((one, two) => Vec.Of([one, two]), one => Vec.Of([one, one]));
             });
 
         /// <summary>
@@ -1783,7 +1783,7 @@ namespace Eggnog.Tests.Cases
             AssumeAConstantContainerInEachCase<Set<Node>>(where, rootHolds, graph =>
             {
                 graph.Values.RegisterSet<Node>();
-                return ((one, two) => Set.Of(one, two), one => Set.Of(one));
+                return ((one, two) => Set.Of([one, two]), one => Set.Of([one]));
             });
 
         /// <summary>
@@ -1834,7 +1834,7 @@ namespace Eggnog.Tests.Cases
             var inCase = graph.DefineRuleset("in-case");
             inCase.DefineRule("union in case 1", r =>
             {
-                r.When(choice.Of("k").Is(Set.Of(1L)));
+                r.When(choice.Of("k").Is(Set.Of([1L])));
                 r.Then(num.Of(1L).Is(num.Of(2L)));
             });
 
@@ -1849,9 +1849,9 @@ namespace Eggnog.Tests.Cases
             {
                 var (k, d) = s.Vars<string, Set<long>>("k", "d");
                 s.When(d.Is(choice.Of(k)));
-                s.Where(Primitives.Greater.Of(Primitives.Count<long>().Of(d), 1L));
+                s.Where(Int64Primitives.Greater.Of(Primitives.SetLength<long>().Of(d), 1L));
                 var v = s.Cases("v", d);
-                s.Assume(choice.Of(k).Is(Primitives.Singleton<long>().Of(v)), g.Of(k).Is(original(one, two)), h.Of(k).Is(same(one)));
+                s.Assume(choice.Of(k).Is(Primitives.SetOf<long>().Of(v)), g.Of(k).Is(original(one, two)), h.Of(k).Is(same(one)));
             });
 
             if (where == "frozen root")
@@ -1859,7 +1859,7 @@ namespace Eggnog.Tests.Cases
 
             using var child = where == "writable root" ? null : root.CreateChild();
             var scope = child ?? root;
-            scope.Assume(choice.Of("k").Is(Set.Of(1L, 2L)));
+            scope.Assume(choice.Of("k").Is(Set.Of([1L, 2L])));
             var type = graph.Values.TypeOf<T>();
 
             // Each case's state at its last step: what egglog's push checks after (run-schedule (saturate in-case)).
@@ -1952,7 +1952,7 @@ namespace Eggnog.Tests.Cases
             var root = graph.Root;
             var one = root.Make(num.Of(1L));
             var two = root.Make(num.Of(2L));
-            var map = Map.Of((Vec.Of(one), 1L), (Vec.Of(two), 2L));
+            var map = Map.Of((Vec.Of([one]), 1L), (Vec.Of([two]), 2L));
             if (unionFirst)
                 root.Union(one, two);
 
@@ -1960,15 +1960,15 @@ namespace Eggnog.Tests.Cases
             {
                 var (k, d) = s.Vars<string, Set<long>>("k", "d");
                 s.When(d.Is(choice.Of(k)));
-                s.Where(Primitives.Greater.Of(Primitives.Count<long>().Of(d), 1L));
+                s.Where(Int64Primitives.Greater.Of(Primitives.SetLength<long>().Of(d), 1L));
                 var v = s.Cases("v", d);
-                s.Assume(choice.Of(k).Is(Primitives.Singleton<long>().Of(v)), g.Of(k).Is(map));
+                s.Assume(choice.Of(k).Is(Primitives.SetOf<long>().Of(v)), g.Of(k).Is(map));
             });
 
             if (unionFirst == false)
                 root.Union(one, two);
 
-            root.Assume(choice.Of("k").Is(Set.Of(1L, 2L)));
+            root.Assume(choice.Of("k").Is(Set.Of([1L, 2L])));
             var refused = Assert.Throws<ArgumentException>(() => root.Assume(g.Of("host").Is(map)));
             Assert.Contains("hold classes that are one now", refused.Message, StringComparison.Ordinal);
 

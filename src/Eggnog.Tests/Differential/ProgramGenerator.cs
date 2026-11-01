@@ -558,7 +558,7 @@ namespace Eggnog.Tests.Differential
                     body.Add(DiffFact.Filter(DiffTerm.Prim(DiffPrimitive.StringLow, Pick(strings))));
                     break;
                 case 3 when sets.Count > 0:
-                    body.Add(DiffFact.Filter(DiffTerm.Prim(random.Next(2) == 0 ? DiffPrimitive.SetBig : DiffPrimitive.SetEmpty, Pick(sets))));
+                    body.Add(DiffFact.Filter(DiffTerm.Prim(random.Next(2) == 0 ? DiffPrimitive.SetBig : DiffPrimitive.SetIsEmpty, Pick(sets))));
                     break;
                 case 4 when numbers.Count > 0:
                 {
