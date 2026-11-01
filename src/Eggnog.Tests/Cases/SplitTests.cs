@@ -507,6 +507,52 @@ namespace Eggnog.Tests.Cases
         }
 
         /// <summary>
+        /// A case's assumption that unions two classes whose rows of a function without a lattice hold different values
+        /// fails the run as a write conflict does: the failure names the case, its inner exception is the
+        /// <see cref="FactConflictException"/> of the merge, and the scope the run was called on is faulted, whether
+        /// the split runs at a writable root or in a child of a frozen one.
+        /// </summary>
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void AnAssumedUnionWhoseRowsConflictIsAnEvaluationFailureOfTheRun(bool frozen)
+        {
+            var graph = new EGraph();
+            graph.DefineSort<Node>("Math");
+            var a = graph.DefineConstructor<Node>("A");
+            var b = graph.DefineConstructor<Node>("B");
+            var h = graph.DefineFunction<Node, long>("h");
+            var choice = graph.DefineFunction<string, Set<long>>("choice", ValueLattice.Intersect<long>());
+            var root = graph.Root;
+            var x = root.Make(a.Of());
+            var y = root.Make(b.Of());
+            root.Assume(h.Of(x).Is(1L), h.Of(y).Is(2L));
+            var split = graph.DefineSplit("pick", s =>
+            {
+                var (k, d) = s.Vars<string, Set<long>>("k", "d");
+                s.When(d.Is(choice.Of(k)));
+                s.Where(Int64Primitives.Greater.Of(Primitives.SetLength<long>().Of(d), 1L));
+                var v = s.Cases("v", d);
+                s.Assume(choice.Of(k).Is(Primitives.SetOf<long>().Of(v)), ((Term<Node>)x).Is(y));
+            });
+            root.Assume(choice.Of("k").Is(Set.Of([1L, 2L])));
+            var scope = root;
+            if (frozen)
+            {
+                root.Freeze();
+                scope = root.CreateChild();
+            }
+
+            var failure = Assert.Throws<RuleEvaluationException>(() => scope.Run(Schedule.Split(split, Schedule.Saturate(graph.DefineRuleset("in case")))));
+
+            Assert.Contains("split 'pick': case 0 of", failure.Message, StringComparison.Ordinal);
+            Assert.Contains("whose merge makes two rows meet that hold different values", failure.Message, StringComparison.Ordinal);
+            var conflict = Assert.IsType<FactConflictException>(failure.InnerException);
+            Assert.Same(h, conflict.Table);
+            Assert.True(scope.IsFaulted);
+        }
+
+        /// <summary>
         /// The cases of a split whose assumption conflicts are disposed when the run ends, as they are whether the run
         /// completes, stops at a limit or throws, and the scope's split records are gone.
         /// </summary>

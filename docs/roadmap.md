@@ -26,6 +26,9 @@ gates").
 - **Containers under one id.** When a rebuild leaves two different containers under one id, egglog's read of the id
   gives the one its rebuild renamed or reinserted last; here it gives either. Only a union of an ill-typed element, the
   old value of another sort a merge's class constant keeps, reaches it (architecture 2.13, item 6).
+- **Unions of a failed run or command.** egglog's run whose write fails, and its command that fails before its
+  rebuild, leave their unions unrebuilt, unseen until a later command rebuilds; here the run and the host fact rebuild
+  them (architecture 2.13, item 7).
 - **egglog 3.0.0.** The engine follows `5e655cae` until the behaviour items of
   [`egglog-3.0.0-todo.md`](egglog-3.0.0-todo.md) are followed: join-key order, container term forms, escaped string
   literals, duplicate rule names, the thread count per graph.

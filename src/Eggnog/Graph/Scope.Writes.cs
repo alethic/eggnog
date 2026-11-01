@@ -70,14 +70,17 @@ namespace Eggnog
         /// sort (a union); a call run for its effect alone (<see cref="Fact.Exists"/>, egglog's bare action). Facts that
         /// hold already write nothing, so they move neither <see cref="Version"/> nor any extractor. A fact that fails
         /// ends the call as egglog's failed command ends its program: what it staged before it failed stands, the terms
-        /// its calls made and what its primitives wrote, while its own write does not happen; the facts before it stand,
-        /// and the facts after it are not written. On a case whose contradiction stopped it, or a scope under one, the
+        /// its calls made and what its primitives wrote, while its own write does not happen, unless what failed is a write
+        /// its primitives made, which alone is dropped, or the rebuild after the fact, whose merges made two rows of a
+        /// function without a lattice meet with different values, which keeps one of the rows and everything the fact
+        /// staged; the facts before it stand, and the facts after it are not written. On a case whose contradiction stopped it, or a scope under one, the
         /// call does nothing.
         /// </summary>
         /// <param name="facts">The facts; none, a <c>null</c> array included, write nothing.</param>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
-        /// <exception cref="FactConflictException">A function without a lattice holds another value, or a union the facts
-        /// make would merge two of its keys that hold different values.</exception>
+        /// <exception cref="FactConflictException">A function without a lattice holds another value, and the write is not
+        /// made; or a merge the facts make merges two of its keys that hold different values, and the merge stands, the
+        /// rebuild keeping one of the rows, as egglog's.</exception>
         /// <exception cref="ArgumentException">A fact is a value equality that is not a function write or a filter; or it
         /// writes through a scoped view (<c>T.In(tag)</c>) or a <see cref="Fact.In"/>, which are read-only.</exception>
         /// <exception cref="InvalidOperationException">The scope is frozen (write in a child of it) or faulted, or in use on
@@ -131,9 +134,10 @@ namespace Eggnog
         /// stopped it, or a scope under one.</returns>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
         /// <exception cref="ArgumentException">A class value is not usable in this scope.</exception>
-        /// <exception cref="FactConflictException">The union would merge two keys of a function without a lattice that
-        /// hold different values or classes, directly or through the congruences it causes, when the rebuild compares
-        /// them; nothing is written.</exception>
+        /// <exception cref="FactConflictException">The union merged two keys of a function without a lattice that hold
+        /// different values or classes, directly or through the congruences it causes, when the rebuild compares them:
+        /// the union stands, as egglog's failed command keeps it, and the rebuild keeps one of the rows, whose value is
+        /// <see cref="FactConflictException.StoredValue"/>.</exception>
         /// <exception cref="InvalidOperationException">The scope is frozen (write in a child of it) or faulted, or in use on
         /// another thread; or the call comes from a run observer or a user delegate the engine invoked.</exception>
         /// <exception cref="RuleEvaluationException">A merge failed, and the union stands, as egglog's failed command
@@ -394,7 +398,9 @@ namespace Eggnog
         /// an earlier call's merge of classes makes, as egglog's next command sees it after the rebuild: the batch then
         /// flushes and rebuilds its earlier calls before that call. Each fact of a call is a command: one that fails keeps
         /// what it staged before it failed, as egglog's failed command does, the terms its calls made and what its
-        /// primitives wrote, but not its own write; the batch's other facts stand, the call's own earlier facts included,
+        /// primitives wrote, but not its own write, unless what failed is a write its primitives made, which alone is
+        /// dropped, or the rebuild after the fact, which keeps what the fact staged; the batch's other facts stand, the
+        /// call's own earlier facts included,
         /// and the call's later facts are not written; an exception <paramref name="write"/> lets escape propagates once
         /// they are written.
         /// </summary>
@@ -402,8 +408,8 @@ namespace Eggnog
         /// A call from another thread, or from a user delegate the engine invoked, is refused and rejects the batch:
         /// <see cref="Write"/> then writes nothing more, even when <paramref name="write"/> caught the exception, and the
         /// class values the batch's <c>Make</c> calls returned since its last flush are invalid; so does a flush of the
-        /// batch that fails for want of ids or epochs, or for a conflict. A flush whose merge failed stands, as egglog's
-        /// failed command, and the batch goes on. A call needs the earlier calls rebuilt when, after a merge of classes, it reads a function
+        /// batch that fails for want of ids or epochs. A flush whose merge or rebuild failed stands, as egglog's failed
+        /// command, and the batch goes on. A call needs the earlier calls rebuilt when, after a merge of classes, it reads a function
         /// whose keys are classes, computes over classes, writes a function that holds classes, or one with a merge that
         /// is not a lattice whose keys are classes or whose merge compares classes or calls tables, or deletes a row keyed
         /// by classes, or, below the root, holds a constant container of classes the scope does not see yet, which it may
@@ -412,9 +418,11 @@ namespace Eggnog
         /// merge expression merges or reads, and that merge only the engine evaluates; after a merge expression that
         /// calls a primitive over the tables; and after a merge of classes, when the graph has a function of a sort that
         /// holds classes or is keyed by a map of them, whose rows the rebuild compares pass by pass, as egglog rebuilds
-        /// after each command. A conflict a merge of the batch would cause is found in the fact that causes it, which then
-        /// fails, keeping only the terms it made: two rows of a function of a sort that its merges make meet are compared
-        /// at the end of that fact, as the rebuild's passes will compare them. While the batch is open, the scopes it
+        /// after each command. A conflict a merge of the batch causes, two rows of a function without a lattice that the
+        /// merge makes meet with different values, is found in the fact that causes it, at its end, as the rebuild's
+        /// passes will compare the rows: the batch flushes and rebuilds the fact, after its earlier calls when they merged
+        /// classes, so that the rebuild keeps the row egglog's keeps, and the fact then fails, everything it staged
+        /// standing, as egglog's command fails after its rebuild. While the batch is open, the scopes it
         /// reads through (its writable ancestors) refuse writes and runs, which would change what the batch's calls were checked against. Other calls of the thread
         /// domain are allowed, reads and queries of the ancestors and writes into descendants and siblings included; the
         /// batch is brought up to date with them before each of its calls and before it commits, without moving
@@ -424,9 +432,8 @@ namespace Eggnog
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
         /// <exception cref="InvalidOperationException">The scope is frozen (write in a child of it) or faulted, or in use on
         /// another thread; or the call comes from a run observer or a user delegate the engine invoked.</exception>
-        /// <exception cref="FactConflictException">Two rows of a function of a sort that the batch's merges make meet hold
-        /// different classes when the rebuild compares them; the fact whose merge made them meet is not
-        /// written.</exception>
+        /// <exception cref="FactConflictException">A call of the batch failed so and <paramref name="write"/> let the
+        /// exception escape (see <see cref="ScopeWriter"/>).</exception>
         /// <exception cref="RuleEvaluationException">A merge failed as a flush merged the batch's calls: what the flush
         /// staged stands, as egglog's failed command keeps it, and the scope is not faulted. A flush before a later call
         /// fails that call, which writes nothing, and the batch goes on, as egglog's later commands do.</exception>

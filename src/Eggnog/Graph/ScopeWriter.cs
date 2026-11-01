@@ -15,7 +15,10 @@ namespace Eggnog
     /// <see cref="InvalidOperationException"/> instead of interleaving with the batch, which it rejects:
     /// <see cref="Scope.Write"/> then writes nothing more. In any other call that throws, the fact that failed keeps
     /// what it staged before it failed, as egglog's failed command does: the terms its calls made and what its primitives
-    /// wrote, but not its own write; and the batch's other facts stand, the call's own earlier ones included. The batch
+    /// wrote, but not its own write, unless what failed is a write its primitives made, which alone is dropped, or the
+    /// rebuild after the fact, whose merges made two rows of a function without a lattice meet with different values,
+    /// which keeps one of the rows and everything the fact staged; and the batch's other facts stand, the call's own
+    /// earlier ones included. The batch
     /// flushes before a call that needs what an earlier call's merge of classes makes, as egglog's next command runs after
     /// the last one's rebuild (see <see cref="Scope.Write"/>). While the batch is open, the scope's writable ancestors refuse writes and runs.
     /// </remarks>
@@ -46,11 +49,12 @@ namespace Eggnog
         /// </summary>
         /// <param name="facts">The facts.</param>
         /// <exception cref="ArgumentException">A fact is not a write.</exception>
-        /// <exception cref="FactConflictException">A function without a lattice would get a second value, from the facts
-        /// or from a merge of the batch, two classes of a function of a sort that the batch's merges make meet included;
-        /// the fact that fails keeps the terms it made, but not its write.</exception>
+        /// <exception cref="FactConflictException">A function without a lattice would get a second value from the facts,
+        /// and the fact that fails keeps the terms it made, but not its write; or a merge of the fact made two of its rows
+        /// meet with different values or classes, and the fact stands, the rebuild keeping one of the rows.</exception>
         /// <exception cref="InvalidOperationException">The call came from another thread, or from a user delegate the
-        /// engine invoked.</exception>
+        /// engine invoked; or a merge of the fact makes two rows conflict, which flushes the batch, while a scope under
+        /// this one has a <see cref="Scope.Write"/> batch open, and the fact writes nothing.</exception>
         /// <exception cref="ObjectDisposedException">The batch has ended.</exception>
         public void Assume(params ReadOnlySpan<Fact> facts)
         {
@@ -100,10 +104,12 @@ namespace Eggnog
         /// <param name="a">One class.</param>
         /// <param name="b">The other class.</param>
         /// <exception cref="ArgumentException">A class value is not usable in this scope.</exception>
-        /// <exception cref="FactConflictException">The union would merge two keys of a function without a lattice that
-        /// hold different values, or two different classes; the union writes nothing.</exception>
+        /// <exception cref="FactConflictException">The union merged two keys of a function without a lattice that hold
+        /// different values, or two different classes: the union stands, flushed and rebuilt, and the rebuild keeps one of
+        /// the rows, as egglog's.</exception>
         /// <exception cref="InvalidOperationException">The call came from another thread, or from a user delegate the
-        /// engine invoked.</exception>
+        /// engine invoked; or the union makes two rows conflict, which flushes the batch, while a scope under this one
+        /// has a <see cref="Scope.Write"/> batch open, and the union writes nothing.</exception>
         /// <exception cref="ObjectDisposedException">The batch has ended.</exception>
         public void Union<TSort>(TSort a, TSort b) where TSort : struct, ISort<TSort>
         {

@@ -6,12 +6,14 @@ namespace Eggnog
 
     /// <summary>
     /// A host write that would give a function without a lattice a second value for one key, against the stored value or
-    /// another write of the same batch. Nothing is written.
+    /// another write of the same batch. The write that conflicts is not made.
     /// </summary>
     /// <remarks>
-    /// A union of the batch (a host <c>Union</c>, a sort equality, or a constructor write that gives an existing key
-    /// another class) can also make two keys of such a function equal, directly or through the congruences it causes;
-    /// when their values differ, that is this exception too, found before anything is staged.
+    /// A union of the batch (a host <c>Union</c>, a sort equality, a constructor write that gives an existing key another
+    /// class, or a primitive's union) can also make two keys of such a function equal, directly or through the
+    /// congruences it causes; when their values differ, that is this exception too, as egglog's rebuild after the command
+    /// panics: the union stands, the rebuild keeps one of the rows, whose value is <see cref="StoredValue"/>, and the
+    /// fact fails after it, with the rebuild's failure as the inner exception.
     /// </remarks>
     public sealed class FactConflictException : InvalidOperationException
     {
@@ -25,7 +27,24 @@ namespace Eggnog
         /// <param name="newValue">The conflicting value.</param>
         /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
         public FactConflictException(TableHandle table, ReadOnlySpan<object> key, object storedValue, object newValue)
-            : base(Describe(table, key, storedValue, newValue))
+            : base(Describe(table, key, storedValue, newValue, false))
+        {
+            Table = table;
+            Key = Array.AsReadOnly(key.ToArray());
+            StoredValue = storedValue;
+            NewValue = newValue;
+        }
+
+        /// <summary>
+        /// Initializes a new instance for two rows that a merge of classes made meet, after the rebuild kept one.
+        /// </summary>
+        /// <param name="table">The function.</param>
+        /// <param name="key">The decoded keys, canonical after the rebuild; copied.</param>
+        /// <param name="storedValue">The value of the row the rebuild kept.</param>
+        /// <param name="newValue">The value of the other row.</param>
+        /// <param name="innerException">The rebuild's failure.</param>
+        internal FactConflictException(TableHandle table, ReadOnlySpan<object> key, object storedValue, object newValue, Exception innerException)
+            : base(Describe(table, key, storedValue, newValue, true), innerException)
         {
             Table = table;
             Key = Array.AsReadOnly(key.ToArray());
@@ -44,12 +63,13 @@ namespace Eggnog
         public IReadOnlyList<object> Key { get; }
 
         /// <summary>
-        /// Gets the stored value, or the batch's earlier one.
+        /// Gets the stored value, or the batch's earlier one; for rows a merge of classes made meet, the value of the row
+        /// the rebuild kept.
         /// </summary>
         public object StoredValue { get; }
 
         /// <summary>
-        /// Gets the conflicting value.
+        /// Gets the conflicting value; for rows a merge of classes made meet, the value of the other row.
         /// </summary>
         public object NewValue { get; }
 
@@ -57,7 +77,7 @@ namespace Eggnog
         /// Checks the arguments, then builds the message.
         /// </summary>
         /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
-        static string Describe(TableHandle table, ReadOnlySpan<object> key, object storedValue, object newValue)
+        static string Describe(TableHandle table, ReadOnlySpan<object> key, object storedValue, object newValue, bool merged)
         {
             ArgumentNullException.ThrowIfNull(table);
             ArgumentNullException.ThrowIfNull(storedValue);
@@ -69,7 +89,10 @@ namespace Eggnog
             var keys = string.Join(" ", formatted);
             var stored = Format(table.Output, storedValue);
             var written = Format(table.Output, newValue);
-            return $"Function '{table.Name}' has no lattice and already holds {stored} at ({table.Name}{(keys.Length > 0 ? " " + keys : "")}); {written} conflicts with it. The fact was not written.";
+            var at = $"({table.Name}{(keys.Length > 0 ? " " + keys : "")})";
+            return merged
+                ? $"Function '{table.Name}' has no lattice, and a merge of classes made its rows of {stored} and {written} meet at {at}; the merge stands, and the rebuild kept {stored}."
+                : $"Function '{table.Name}' has no lattice and already holds {stored} at {at}; {written} conflicts with it, and was not written.";
         }
 
         /// <summary>

@@ -74,9 +74,9 @@ namespace Eggnog.Tests.Definitions
 
         /// <summary>
         /// A union that makes two keys equal leaves one row when their classes are equal, and is a conflict when they
-        /// differ, as egglog's assert-equal merge panics; the batch refuses it before anything is written. A later union
-        /// of the two classes in the same batch is egglog's next command, which does not save it: (union (A) (B)) fails,
-        /// (union (Lit 1) (Lit 2)) stands.
+        /// differ, as egglog's assert-equal merge panics at the rebuild after the union: the union stands, the rebuild
+        /// keeps the row of the class made first, and the two classes stay apart (probe e3.egg). A later union of the
+        /// two classes in the same batch is egglog's next command, which stands.
         /// </summary>
         [Fact]
         public void AUnionOfKeysNeedsTheirClassesEqual()
@@ -89,30 +89,41 @@ namespace Eggnog.Tests.Definitions
             var two = t.Root.Make(t.Lit.Of(2L));
             t.Root.Assume(f.Of(a).Is(one), f.Of(b).Is(two));
 
-            Assert.Throws<FactConflictException>(() => t.Root.Union(a, b));
-            Assert.False(t.Root.AreEqual(a, t.B.Of()));
-            Assert.Equal(2, t.Root.CountRows(f));
+            var conflict = Assert.Throws<FactConflictException>(() => t.Root.Union(a, b));
+            Assert.True(t.Root.AreEqual(a, t.B.Of()));
+            Assert.Equal(1, t.Root.CountRows(f));
+            Assert.True(t.Root.AreEqual(one, (Node)conflict.StoredValue));
+            Assert.True(t.Root.AreEqual(two, (Node)conflict.NewValue));
+            Assert.True(t.Root.AreEqual(t.Root.Get(f.Of(b)), one));
+            Assert.False(t.Root.AreEqual(one, two));
 
+            var c = t.Root.Make(t.Lit.Of(3L));
+            var d = t.Root.Make(t.Lit.Of(4L));
+            var three = t.Root.Make(t.Lit.Of(30L));
+            var four = t.Root.Make(t.Lit.Of(40L));
+            t.Root.Assume(f.Of(c).Is(three), f.Of(d).Is(four));
             t.Root.Write(w =>
             {
-                Assert.Throws<FactConflictException>(() => w.Union(a, b));
-                w.Union(one, two);
+                Assert.Throws<FactConflictException>(() => w.Union(c, d));
+                w.Union(three, four);
             });
-            Assert.False(t.Root.AreEqual(a, b));
-            Assert.True(t.Root.AreEqual(one, two));
+            Assert.True(t.Root.AreEqual(c, d));
+            Assert.True(t.Root.AreEqual(three, four));
             Assert.Equal(2, t.Root.CountRows(f));
             Assert.False(t.Root.IsFaulted);
 
             // With the classes one, the union of the keys leaves one row.
-            t.Root.Union(a, b);
-            Assert.Equal(1, t.Root.CountRows(f));
+            var e = t.Root.Make(t.Lit.Of(5L));
+            t.Root.Assume(f.Of(e).Is(one));
+            t.Root.Union(a, e);
+            Assert.Equal(2, t.Root.CountRows(f));
         }
 
         /// <summary>
         /// Classes that only congruence makes one do not agree in time: the rebuild compares the outputs
         /// <c>(Wrap 1)</c> and <c>(Wrap 2)</c> as its first pass finds them, before it merges them, and its assert-equal
-        /// merge panics, as egglog's does. The batch refuses that before anything is written, rather than fault the
-        /// scope.
+        /// merge panics, as egglog's does when one action makes both unions (probe e17.egg): both unions stand, the
+        /// rebuild keeps the row of <c>(Wrap 1)</c>, and the fact fails after it, without faulting the scope.
         /// </summary>
         [Fact]
         public void ClassesThatOnlyCongruenceMakesOneAreAConflict()
@@ -124,16 +135,23 @@ namespace Eggnog.Tests.Definitions
             var one = t.Root.Make(t.Lit.Of(1L));
             var two = t.Root.Make(t.Lit.Of(2L));
             t.Root.Assume(f.Of(a).Is(t.Wrap.Of(one)), f.Of(b).Is(t.Wrap.Of(two)));
-
-            Assert.Throws<FactConflictException>(() => t.Root.Write(w =>
+            var o = t.Graph.DefineFunction<long, long>("o");
+            var both = Primitive.CreateWrite("both", [], (ITableWriter tables, ReadOnlySpan<object> _, out long result) =>
             {
-                w.Union(a, b);
-                w.Union(one, two);
-            }));
+                tables.Union(a, b);
+                tables.Union(one, two);
+                result = 0;
+                return true;
+            });
+
+            var conflict = Assert.Throws<FactConflictException>(() => t.Root.Assume(o.Of(0L).Is(both.Of())));
+            Assert.IsType<RuleEvaluationException>(conflict.InnerException);
 
             Assert.False(t.Root.IsFaulted);
-            Assert.False(t.Root.AreEqual(a, t.B.Of()));
-            Assert.Equal(2, t.Root.CountRows(f));
+            Assert.True(t.Root.AreEqual(a, t.B.Of()));
+            Assert.True(t.Root.AreEqual(one, two));
+            Assert.Equal(1, t.Root.CountRows(f));
+            Assert.Equal(0L, t.Root.Get(o.Of(0L)));
         }
 
         /// <summary>

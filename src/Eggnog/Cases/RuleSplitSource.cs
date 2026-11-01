@@ -136,6 +136,10 @@ namespace Eggnog
                     {
                         batch.PlanFact(fact);
                     }
+                    catch (FactConflictException merged) when (merged.InnerException is not null)
+                    {
+                        throw Refuse(scope, parent, caseIndex, $"assumes {fact}, whose merge makes two rows meet that hold different values", merged);
+                    }
                     catch (Exception refused) when (refused is FactConflictException or ArgumentException or InvalidOperationException)
                     {
                         throw Refuse(scope, parent, caseIndex, $"assumes {fact}, which cannot be written", refused);
@@ -154,10 +158,6 @@ namespace Eggnog
                 {
                     throw scope.FaultWith(panic);
                 }
-                catch (FactConflictException conflict)
-                {
-                    throw Refuse(scope, parent, caseIndex, "makes two rows meet that hold different classes", conflict);
-                }
             }
 
             batch.Origin.Committed = true;
@@ -166,7 +166,8 @@ namespace Eggnog
         /// <summary>
         /// Faults a case whose assumptions cannot be written: the run writes them, so the refusal is a run's write
         /// conflict, an evaluation failure, which <c>Run</c> turns into a fault of its scope as well. Nothing of the
-        /// batch is written.
+        /// batch is written but what it flushed before the assumption that failed, and, for an assumption whose merges
+        /// made two rows of a function without a lattice meet, that assumption, rebuilt: the case is faulted either way.
         /// </summary>
         RuleEvaluationException Refuse(Scope scope, Scope parent, int caseIndex, string what, Exception refused)
         {

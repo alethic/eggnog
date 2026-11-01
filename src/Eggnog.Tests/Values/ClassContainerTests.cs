@@ -252,7 +252,8 @@ namespace Eggnog.Tests.Values
         public void AMergeThatMakesTwoKeysOneVectorConflicts()
         {
             // (function g (MV) i64 :no-merge) (set (g (vec-of (Num 1))) 10) (set (g (vec-of (Num 2))) 20)
-            // (union (Num 1) (Num 2)) panics in egglog: "Illegal merge attempted for function g". The batch refuses it.
+            // (union (Num 1) (Num 2)) panics in egglog at its rebuild, "Illegal merge attempted for function g"; probe
+            // c1.egg: the union stands, and the rebuild keeps the row of the vector made first, 10.
             var graph = new EGraph();
             graph.DefineSort<Node>("Math");
             var num = graph.DefineConstructor<long, Node>("Num");
@@ -264,22 +265,25 @@ namespace Eggnog.Tests.Values
             var one = root.Make(num.Of(1L));
             var two = root.Make(num.Of(2L));
 
-            Assert.Throws<FactConflictException>(() => root.Union(one, two));
-            Assert.False(root.AreEqual(one, two));
-            Assert.Equal(2, root.CountRows(g));
+            var conflict = Assert.Throws<FactConflictException>(() => root.Union(one, two));
+            Assert.Equal(10L, conflict.StoredValue);
+            Assert.Equal(20L, conflict.NewValue);
+            Assert.True(root.AreEqual(one, two));
+            Assert.Equal(1, root.CountRows(g));
 
             // Equal values meet without conflict, and the rows become one.
             root.Assume(g.Of(of.Of(num.Of(3L))).Is(30L), g.Of(of.Of(num.Of(4L))).Is(30L));
             root.Union(root.Make(num.Of(3L)), root.Make(num.Of(4L)));
-            Assert.Equal(3, root.CountRows(g));
+            Assert.Equal(2, root.CountRows(g));
             Assert.True(root.Check(g.Of(of.Of(num.Of(4L))).Is(30L)));
+            Assert.True(root.Check(g.Of(of.Of(num.Of(2L))).Is(10L)));
         }
 
         [Fact]
         public void RowsThatMeetWithDifferentVectorsOfClassesConflict()
         {
             // (function f (Math) MV :no-merge): a union of the keys makes the rows meet; their vectors are of classes the
-            // union leaves apart, so the merge panics in egglog, and the batch refuses it.
+            // union leaves apart, so the merge panics in egglog's rebuild, and the union fails after it.
             var graph = new EGraph();
             graph.DefineSort<Node>("Math");
             var num = graph.DefineConstructor<long, Node>("Num");
@@ -311,7 +315,9 @@ namespace Eggnog.Tests.Values
             // with two classes, "Illegal merge attempted for function f". Here KP is keyed by a pair of a class and an
             // i32, which holds the cells of the pair of a class and an i64 that keys f's second row, so the two are one
             // container, and the check's replay of the passes merges it with the other pair as the engine does, whichever
-            // type names it first: the batch refuses the union before anything is written, at the root and in a child.
+            // type names it first. Probes c2.egg and c2p.egg, the second in a push: the union stands, the rebuild keeps
+            // f's row of (C), the classes (C) and (D) stay apart, and the pop puts f's two rows back; so here, at the root
+            // and in a child.
             var graph = new EGraph();
             graph.DefineSort<Node>("Math");
             var num = graph.DefineConstructor<long, Node>("Num");
@@ -337,9 +343,11 @@ namespace Eggnog.Tests.Values
             var conflict = Assert.Throws<FactConflictException>(() => scope.Union(zero, one));
             Assert.Contains("Function 'f'", conflict.Message, StringComparison.Ordinal);
             Assert.False(scope.IsFaulted);
-            Assert.False(scope.AreEqual(zero, one));
-            Assert.Equal(2, scope.CountRows(f));
+            Assert.True(scope.AreEqual(zero, one));
+            Assert.Equal(1, scope.CountRows(f));
             Assert.Equal(1, scope.CountRows(kp));
+            Assert.False(scope.AreEqual(scope.Make(c.Of()), scope.Make(d.Of())));
+            Assert.True(scope.Check(f.Of(pair.Of(num.Of(1L), 1L)).Is(c.Of())));
             scope.Engine.Context.CheckInvariants();
             if (child == false)
                 return;
@@ -645,7 +653,8 @@ namespace Eggnog.Tests.Values
         {
             // (function f (Math) VVM :no-merge) (set (f (Num 1)) (vec-of (vec-of (Num 3)))) (set (f (Num 2)) (vec-of (vec-of (Num 4))))
             // then one action of (union (Num 3) (Num 4)) (union (Num 1) (Num 2)), here a primitive that makes both unions:
-            // egglog's rebuild merges the outer vectors a pass after the rows meet, and panics; the batch refuses it. Two
+            // egglog's rebuild merges the outer vectors a pass after the rows meet, and panics; probe c3.egg: both unions
+            // stand, and the rebuild keeps the row of (vec-of (vec-of (Num 3))), as the fact's own write stands. Two
             // commands are fine, in one batch or two.
             foreach (var oneAction in new[] { true, false })
             {
@@ -672,7 +681,11 @@ namespace Eggnog.Tests.Values
                     });
                     Assert.Throws<FactConflictException>(() => root.Assume(o.Of(0L).Is(both.Of())));
                     Assert.False(root.IsFaulted);
-                    Assert.False(root.AreEqual(three, four));
+                    Assert.True(root.AreEqual(three, four));
+                    Assert.True(root.AreEqual(one, two));
+                    Assert.Equal(0L, root.Get(o.Of(0L)));
+                    Assert.Equal(1, root.CountRows(f));
+                    Assert.True(root.Check(f.Of(num.Of(2L)).Is(outer.Of(inner.Of(num.Of(3L))))));
                 }
                 else
                 {
@@ -1007,13 +1020,11 @@ namespace Eggnog.Tests.Values
         [InlineData(true)]
         public void AChildsMergeThatMakesTwoKeysOneVectorConflictsAsTheRootsDoes(bool replay)
         {
-            // Probe child-conflict.egg: the program of AMergeThatMakesTwoKeysOneVectorConflicts in a push, where
-            // egglog at 5e655cae panics on (union (Num 1) (Num 2)) as at its root, "Illegal merge attempted for function
-            // g", which (fail ...) catches, and (union (Num 3) (Num 4)) then makes two rows of one value one. egglog keeps
-            // the failed union's write in the push, where the library refuses the union before anything is written, in a
-            // child as at the root, so the expected values are those of a fresh root running the same commands
-            // (replay). The batch's check reads the vectors through the child's view, whose copies the child's
-            // container pass rebuilds; the root keeps its four rows.
+            // Probe c5.egg: the program of AMergeThatMakesTwoKeysOneVectorConflicts in a push, where egglog at 5e655cae
+            // panics on (union (Num 1) (Num 2)) at its rebuild as at its root, "Illegal merge attempted for function g",
+            // keeps the union and g's row of 10, three rows, and (union (Num 3) (Num 4)) then makes two rows of one value
+            // one; the pop puts the four rows back. The same holds in a child as at the root (replay). The batch's check
+            // reads the vectors through the child's view, whose copies the child's container pass rebuilds.
             var graph = new EGraph();
             graph.DefineSort<Node>("Math");
             var num = graph.DefineConstructor<long, Node>("Num");
@@ -1030,14 +1041,14 @@ namespace Eggnog.Tests.Values
             var scope = replay ? root : root.CreateChild();
             Assert.Throws<FactConflictException>(() => scope.Union(one, two));
             Assert.False(scope.IsFaulted);
-            Assert.False(scope.AreEqual(one, two));
-            Assert.Equal(4, scope.CountRows(g));
+            Assert.True(scope.AreEqual(one, two));
+            Assert.Equal(3, scope.CountRows(g));
 
             scope.Union(three, four);
-            Assert.Equal(3, scope.CountRows(g));
+            Assert.Equal(2, scope.CountRows(g));
             Assert.True(scope.Check(g.Of(of.Of(num.Of(4L))).Is(30L)));
+            Assert.True(scope.Check(g.Of(of.Of(num.Of(2L))).Is(10L)));
             Assert.True(scope.Check(of.Of(num.Of(3L)).Is(of.Of(num.Of(4L)))));
-            Assert.Throws<FactConflictException>(() => scope.Union(one, two));
             scope.Engine.Context.CheckInvariants();
             if (replay)
                 return;
@@ -1050,14 +1061,16 @@ namespace Eggnog.Tests.Values
         [Fact]
         public void AChildsLaterMergeIsCheckedAgainstTheVectorsItsEarlierMergeRebuilt()
         {
-            // Probe child-second-merge.egg, which egglog at 5e655cae runs clean: g of (vec-of (Num 1) (Num 3)) 10 and
+            // Probe c4.egg, after child-second-merge.egg: g of (vec-of (Num 1) (Num 3)) 10 and
             // of (vec-of (Num 2) (Num 4)) 20, both :no-merge, and c of (vec-of (Num 5) (Num 7)) (Num 10) and of (vec-of
             // (Num 6) (Num 8)) (Num 20). In a push (union (Num 1) (Num 2)) rebuilds the second vector to (vec-of (Num 1)
             // (Num 4)), which g still reads as 20, and then (union (Num 3) (Num 4)) would make g's two rows meet, a panic
             // that (fail ...) catches; so for c, with (union (Num 5) (Num 6)) then (union (Num 7) (Num 8)), unless (union
-            // (Num 10) (Num 20)) comes between. Here each later merge is a host merge of the child after the earlier one
-            // flushed: its check reads the vector the child's container pass rebuilt, through the child's view, where the
-            // root's holds the displaced class, and refuses the merge before anything is written.
+            // (Num 10) (Num 20)) comes between. Each failed union stands, and the rebuild keeps the row of the vector made
+            // first, g's 10 and c's (Num 10), with (Num 10) and (Num 20) apart; the pops put both functions' two rows
+            // back. Here each later merge is a host merge of the child after the earlier one flushed: its check reads the
+            // vector the child's container pass rebuilt, through the child's view, where the root's holds the displaced
+            // class.
             var graph = new EGraph();
             graph.DefineSort<Node>("Math");
             var num = graph.DefineConstructor<long, Node>("Num");
@@ -1080,8 +1093,9 @@ namespace Eggnog.Tests.Values
                 Assert.Equal(2, child.CountRows(g));
                 Assert.Throws<FactConflictException>(() => child.Union(n[3], n[4]));
                 Assert.False(child.IsFaulted);
-                Assert.False(child.AreEqual(n[3], n[4]));
-                Assert.Equal(2, child.CountRows(g));
+                Assert.True(child.AreEqual(n[3], n[4]));
+                Assert.Equal(1, child.CountRows(g));
+                Assert.Equal(10L, child.Get(g.Of(of.Of(num.Of(2L), num.Of(4L)))));
             }
 
             using (var child = root.CreateChild())
@@ -1090,7 +1104,9 @@ namespace Eggnog.Tests.Values
                 Assert.True(child.AreEqual(child.Get(c.Of(of.Of(num.Of(5L), num.Of(8L)))), n[20]));
                 Assert.Throws<FactConflictException>(() => child.Union(n[7], n[8]));
                 Assert.False(child.IsFaulted);
-                Assert.False(child.AreEqual(n[7], n[8]));
+                Assert.True(child.AreEqual(n[7], n[8]));
+                Assert.True(child.AreEqual(child.Get(c.Of(of.Of(num.Of(6L), num.Of(8L)))), n[10]));
+                Assert.False(child.AreEqual(n[10], n[20]));
             }
 
             using (var child = root.CreateChild())
@@ -1116,8 +1132,9 @@ namespace Eggnog.Tests.Values
             // AVectorOfVectorsMergesAPassAfterTheVectorsItHolds in a push: one action of (union (Num 3) (Num 4))
             // (union (Num 1) (Num 2)), a rule's in egglog, panics there, "Illegal merge attempted for function f", and
             // the two as two commands make f's rows one, (check (= (f (Num 1)) (f (Num 2)))); after the pop they are
-            // apart. In the child the batch replays the passes of the child's rebuild over its view and refuses the one
-            // action before anything is written.
+            // apart. Probe c3p.egg: the one action's unions both stand there, as at the root, and the rebuild keeps the
+            // row of (vec-of (vec-of (Num 3))). In the child the batch replays the passes of the child's rebuild over its
+            // view to find the conflict.
             var graph = new EGraph();
             graph.DefineSort<Node>("Math");
             var num = graph.DefineConstructor<long, Node>("Num");
@@ -1145,8 +1162,11 @@ namespace Eggnog.Tests.Values
                 {
                     Assert.Throws<FactConflictException>(() => child.Assume(o.Of(0L).Is(both.Of())));
                     Assert.False(child.IsFaulted);
-                    Assert.False(child.AreEqual(three, four));
-                    Assert.False(child.Check(f.Of(num.Of(1L)).Is(f.Of(num.Of(2L)))));
+                    Assert.True(child.AreEqual(three, four));
+                    Assert.True(child.AreEqual(one, two));
+                    Assert.Equal(0L, child.Get(o.Of(0L)));
+                    Assert.Equal(1, child.CountRows(f));
+                    Assert.True(child.Check(f.Of(num.Of(1L)).Is(f.Of(num.Of(2L)))));
                 }
                 else
                 {

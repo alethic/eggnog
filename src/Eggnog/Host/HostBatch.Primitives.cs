@@ -8,7 +8,8 @@ namespace Eggnog
     {
 
         /// <summary>
-        /// The writes of primitives over the tables held back while a fact is planned (<see cref="PlanFactUnions"/>).
+        /// The writes of primitives over the tables held back while a fact is planned, until its write point
+        /// (<see cref="PlanHeldWrites"/>).
         /// </summary>
         List<Action>? factWrites;
 
@@ -17,6 +18,74 @@ namespace Eggnog
         /// primitive's read does not see, as egglog's lookup does not see the rows its command stages.
         /// </summary>
         int factTerms;
+
+        /// <summary>
+        /// The results of the pure primitives over no classes that the fact being planned computed, in order, while the
+        /// facts before it merged classes: a merge of the fact that makes rows conflict then has the fact dropped and
+        /// planned again after their flush (<see cref="EndFact"/>), and the plan again takes these results in the same
+        /// order instead of calling the primitives a second time, as egglog's command evaluates its calls once. Their
+        /// arguments and results are values, which the flush leaves as they are.
+        /// </summary>
+        List<(Primitive Primitive, uint[] Arguments, uint Cell)>? computed;
+
+        /// <summary>
+        /// The next of <see cref="computed"/> that the fact's plan again takes, or -1 while the fact is planned the first
+        /// time.
+        /// </summary>
+        int replayAt = -1;
+
+        /// <summary>
+        /// Notes the result of a pure primitive over no classes, for a plan of the fact again (<see cref="computed"/>).
+        /// </summary>
+        void NoteComputed(Primitive primitive, uint[] arguments, uint cell)
+        {
+            if (replayAt < 0 && mergedBeforeFact)
+                (computed ??= new List<(Primitive, uint[], uint)>()).Add((primitive, arguments, cell));
+        }
+
+        /// <summary>
+        /// Gets the result the fact's first plan computed for the next call of a pure primitive over no classes, when the
+        /// fact is planned again and the call is the one the first plan made next, of the same primitive with the same
+        /// arguments; the calls after one that differs are made again.
+        /// </summary>
+        bool TryReplay(Primitive primitive, uint[] arguments, out uint cell)
+        {
+            cell = 0;
+            if (replayAt < 0 || computed is null || replayAt >= computed.Count)
+                return false;
+
+            var (noted, given, result) = computed[replayAt];
+            if (ReferenceEquals(noted, primitive) == false || given.AsSpan().SequenceEqual(arguments) == false)
+            {
+                replayAt = computed.Count;
+                return false;
+            }
+
+            replayAt++;
+            cell = result;
+            return true;
+        }
+
+        /// <summary>
+        /// Starts the plan of a fact again, which takes the results its first plan computed (<see cref="computed"/>);
+        /// a stopped scope plans it no more.
+        /// </summary>
+        void ReplayComputed()
+        {
+            if (stopped)
+                ForgetComputed();
+            else
+                replayAt = 0;
+        }
+
+        /// <summary>
+        /// Forgets the results the fact computed, as it ends or fails.
+        /// </summary>
+        void ForgetComputed()
+        {
+            computed?.Clear();
+            replayAt = -1;
+        }
 
         /// <summary>
         /// Reads a function's value, or a constructor's class, at a key for a primitive of a host write, egglog's
@@ -192,8 +261,9 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Holds back a write of a primitive of a host write until the end of the fact, as egglog stages a command's
-        /// writes: a relation's row, a function's value or a subsumption, planned then as the fact or the term it is.
+        /// Holds back a write of a primitive of a host write until the write point of the fact, as egglog stages a
+        /// command's writes: a relation's row, a function's value or a subsumption, planned then as the fact or the term it
+        /// is, before the fact's own write, which egglog's command stages after its primitives' writes.
         /// </summary>
         /// <param name="write">Plans the write.</param>
         internal void HoldWrite(Action write) => (factWrites ??= new List<Action>()).Add(write);

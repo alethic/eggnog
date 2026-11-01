@@ -67,6 +67,14 @@ namespace Eggnog.Relations
         /// </summary>
         internal const string DefaultPanicMessage = "primitive panicked";
 
+        /// <summary>
+        /// Gets the message of the panic of a function's assert-equal merge, egglog's for a function without a merge
+        /// (lib.rs:1186-1192), by which a caller tells which function's merge failed.
+        /// </summary>
+        /// <param name="functionName">The function's name.</param>
+        /// <returns>The message.</returns>
+        internal static string IllegalMergeMessage(string functionName) => $"Illegal merge attempted for function {functionName}";
+
         readonly Store store;
         readonly Database db;
         readonly TableId ufTable;
@@ -404,7 +412,7 @@ namespace Eggnog.Relations
                 case MergeFnKind.New:
                     return ResolvedMergeFn.New();
                 case MergeFnKind.AssertEq:
-                    return ResolvedMergeFn.AssertEq(NewPanic($"Illegal merge attempted for function {functionName}"));
+                    return ResolvedMergeFn.AssertEq(NewPanic(IllegalMergeMessage(functionName)));
                 case MergeFnKind.UnionId:
                     return ResolvedMergeFn.UnionId(ufTable);
                 case MergeFnKind.Primitive:

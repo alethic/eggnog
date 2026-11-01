@@ -116,10 +116,11 @@ namespace Eggnog.Tests.Values
             // Probe set-child.egg, which egglog at 5e655cae runs clean: the program of
             // ElementsThatBecomeOneBecomeOneElementAndGetReadsCellOrder, with g of (set-of (Num 3) (Num 4)) 10 and of
             // (set-of (Num 3)) 20, and (union (Num 1) (Num 2)) in a push, where (extract $x) is (S (set-of (Num 2))),
-            // (s) has two elements, (set-get (s) 1) is (Num 1) and none is at 2, and (fail (union (Num 3) (Num 4)))
-            // panics as g's rows would meet; in a second push the same union by a rule; after the pops (extract $x) is
-            // (S (set-of (Num 2) (Num 1))) and (s) has three. The first union is the child's host merge, which the batch
-            // checks against the sets of the child's view.
+            // (s) has two elements, (set-get (s) 1) is (Num 1) and none is at 2, and (union (Num 3) (Num 4)) panics at
+            // its rebuild as g's rows meet, keeping the union and the row of the set made first, 10 (probe s1.egg); in a
+            // second push the first union by a rule; after the pops (extract $x) is (S (set-of (Num 2) (Num 1))) and (s)
+            // has three. The first union is the child's host merge, which the batch checks against the sets of the
+            // child's view.
             var t = new Theory();
             var g = t.Graph.DefineFunction<Set<Node>, long>("g");
             var go = t.Graph.DefineRelation("go");
@@ -147,7 +148,9 @@ namespace Eggnog.Tests.Values
                 Assert.True(child.Check(t.S.Of(t.Of(2L)).Is(x)));
                 Assert.Throws<FactConflictException>(() => child.Union(child.Make(t.Num.Of(3L)), child.Make(t.Num.Of(4L))));
                 Assert.False(child.IsFaulted);
-                Assert.Equal(2, child.CountRows(g));
+                Assert.True(child.AreEqual(child.Make(t.Num.Of(3L)), child.Make(t.Num.Of(4L))));
+                Assert.Equal(1, child.CountRows(g));
+                Assert.True(child.Check(g.Of(t.Of(3L)).Is(10L)));
                 child.Engine.Context.CheckInvariants();
             }
 
@@ -226,6 +229,61 @@ namespace Eggnog.Tests.Values
                 s.Assume(domain.Of(k).Is(Primitives.SetOf<Node>().Of(v)));
             }));
             Assert.Contains("holds classes", exception.Message);
+        }
+
+        [Theory]
+        [InlineData(false, "child")]
+        [InlineData(false, "writable child")]
+        [InlineData(false, "grandchild")]
+        [InlineData(false, "writable grandchild")]
+        [InlineData(true, "child")]
+        [InlineData(true, "writable child")]
+        [InlineData(true, "grandchild")]
+        [InlineData(true, "writable grandchild")]
+        public void AFailedRunBelowTheRootKeepsTheRowAtTheKeyOfASetChangedInPlace(bool atRoot, string scope)
+        {
+            // (function h2 (S SS) i64 :no-merge) (Z) (W) (push) (set (h2 (B) (set-of (A))) 2)
+            // (set (h2 (Z) (set-of (A))) 1) (fail (run u1 1)), u1 unioning (Z) (B) and (W) (A): one pass changes {A}
+            // in place and moves (B, {A}) onto the key of (Z, {A}), which stays; egglog's refresh re-stamps after its
+            // tables rebuild, so the row at the key, 1, stands, with (Z, {A}) written at the root before the push too
+            // (probes f.egg and g.egg).
+            var graph = new EGraph();
+            graph.DefineSort<Node>("S");
+            graph.Values.RegisterSet<Node>();
+            var z = graph.DefineConstructor<Node>("Z");
+            var w = graph.DefineConstructor<Node>("W");
+            var a = graph.DefineConstructor<Node>("A");
+            var b = graph.DefineConstructor<Node>("B");
+            var h2 = graph.DefineFunction<Node, Set<Node>, long>("h2");
+            var u1 = graph.DefineRuleset("u1");
+            u1.DefineRule("u1", r => r.Then(z.Of().Is(b.Of()), w.Of().Is(a.Of())));
+            var root = graph.Root;
+            root.Make(z.Of());
+            root.Make(w.Of());
+            Term<Set<Node>> Of(ConstructorTerm<Node> term) => Primitives.SetOf<Node>().Of(term);
+            if (atRoot)
+                root.Assume(h2.Of(z.Of(), Of(a.Of())).Is(1L));
+
+            if (scope is "child" or "grandchild" or "writable grandchild")
+                root.Freeze();
+
+            var s = root.CreateChild();
+            if (scope is "grandchild" or "writable grandchild")
+            {
+                if (scope == "grandchild")
+                    s.Freeze();
+
+                s = s.CreateChild();
+            }
+
+            s.Assume(h2.Of(b.Of(), Of(a.Of())).Is(2L));
+            if (atRoot == false)
+                s.Assume(h2.Of(z.Of(), Of(a.Of())).Is(1L));
+
+            Assert.Throws<RuleEvaluationException>(() => s.Run(u1));
+            Assert.Equal(1L, s.Get(h2.Of(z.Of(), Of(w.Of()))));
+            Assert.Equal(1, s.CountRows(h2));
+            s.Engine.Context.CheckInvariants();
         }
 
     }

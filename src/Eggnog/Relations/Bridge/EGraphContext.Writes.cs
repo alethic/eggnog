@@ -465,7 +465,7 @@ namespace Eggnog.Relations
                     database.RecordFailure(state);
                 }
 
-                changed = database.MergeAll(timestamp);
+                changed = database.MergeWrites(timestamp);
             }
             catch when (IsRoot == false)
             {

@@ -305,12 +305,11 @@ namespace Eggnog
             }
 
             if (scope.HasBatchBelow)
-                throw new InvalidOperationException(
-                    $"Scope '{scope.Path}' cannot be written or run while a scope under it has a Write batch open; write it before or after the batch.");
+                throw BatchBelow();
 
-            // A flush whose merge fails, as egglog's command whose merge panics, wrote what it staged, and the batch goes
-            // on afresh, as egglog's later commands do. One that fails otherwise (the ids or the epochs ran out, a
-            // conflict) leaves the batch nothing more to write: its later calls plan afresh, and are dropped.
+            // A flush whose merge or rebuild fails, as egglog's command whose merge panics, wrote what it staged, and the
+            // batch goes on afresh, as egglog's later commands do. One that fails otherwise (the ids or the epochs ran
+            // out) leaves the batch nothing more to write: its later calls plan afresh, and are dropped.
             try
             {
                 scope.Commit(this);
@@ -331,6 +330,12 @@ namespace Eggnog
             ClearPlan();
             stopped = scope.IsStopped;
         }
+
+        /// <summary>
+        /// Gets the refusal of a flush while a scope under this one has a <see cref="Scope.Write"/> batch open.
+        /// </summary>
+        InvalidOperationException BatchBelow() =>
+            new($"Scope '{scope.Path}' cannot be written or run while a scope under it has a Write batch open; write it before or after the batch.");
 
         /// <summary>
         /// Forgets what the batch planned, once a flush wrote it or failed, and starts planning afresh with a new origin.

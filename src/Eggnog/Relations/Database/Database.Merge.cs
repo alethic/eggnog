@@ -21,6 +21,12 @@ namespace Eggnog.Relations
         long[] roundOrder = Array.Empty<long>();
 
         /// <summary>
+        /// Whether a child's union-find merges after the other tables of its stratum, in the merge of a run's or a
+        /// host flush's writes (<see cref="MergeWrites"/>). Domain thread only.
+        /// </summary>
+        bool unionFindLast;
+
+        /// <summary>
         /// The tables of the stratum being merged, taken out of the table map. Merge scratch.
         /// </summary>
         TableInfo?[] stratumInfos = Array.Empty<TableInfo?>();
@@ -80,6 +86,43 @@ namespace Eggnog.Relations
         {
             ThrowIfFrozen();
             return MergeAllCore(ResolveTimestamp(timestamp));
+        }
+
+        /// <summary>
+        /// Merges what a run or a host flush staged, as <see cref="MergeAll"/> does; in a child context's database, its
+        /// union-find merges after the other tables of its stratum. A child's merge canonicalizes the rows it inserts
+        /// against its union-find (<see cref="SortedWritesTable.Merge"/>), where egglog's merge leaves them as staged for
+        /// its rebuild: merged before the unions staged with them, they keep their keys until the rebuild moves them, in
+        /// the order the table holds them, so that of two rows that come to share a key the child keeps the row egglog
+        /// keeps, and a row written over an ancestor's key merges with the ancestor's row there, as egglog's flush merges
+        /// it with the row its table holds.
+        /// </summary>
+        /// <param name="timestamp">The epoch of the run or flush (see <see cref="MergeAll"/>).</param>
+        /// <returns><c>true</c> if any merge added rows or staged writes.</returns>
+        /// <exception cref="InvalidOperationException">As <see cref="MergeAll"/>.</exception>
+        public bool MergeWrites(uint? timestamp = null)
+        {
+            ThrowIfFrozen();
+            return MergeWritesCore(ResolveTimestamp(timestamp));
+        }
+
+        /// <summary>
+        /// <see cref="MergeWrites"/> with the timestamp resolved.
+        /// </summary>
+        bool MergeWritesCore(uint timestamp)
+        {
+            if (layers is null)
+                return MergeAllCore(timestamp);
+
+            unionFindLast = true;
+            try
+            {
+                return MergeAllCore(timestamp);
+            }
+            finally
+            {
+                unionFindLast = false;
+            }
         }
 
         /// <summary>
@@ -214,7 +257,36 @@ namespace Eggnog.Relations
             }
 
             Array.Sort(roundOrder, 0, count);
+            if (unionFindLast)
+                MoveUnionFindLast(count);
+
             return count;
+        }
+
+        /// <summary>
+        /// Moves a child's union-find, when the round holds it, after the other tables of its stratum in
+        /// <see cref="roundOrder"/> (<see cref="MergeWrites"/>). O(round).
+        /// </summary>
+        void MoveUnionFindLast(int count)
+        {
+            var unionFind = layers!.Owner.Store.UnionFindTable;
+            for (var i = 0; i < count; i++)
+            {
+                if (TableOf(roundOrder[i]) != unionFind)
+                    continue;
+
+                var key = roundOrder[i];
+                var level = LevelOf(key);
+                var j = i;
+                while (j + 1 < count && LevelOf(roundOrder[j + 1]) == level)
+                {
+                    roundOrder[j] = roundOrder[j + 1];
+                    j++;
+                }
+
+                roundOrder[j] = key;
+                return;
+            }
         }
 
         /// <summary>
