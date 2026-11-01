@@ -69,8 +69,8 @@ namespace Eggnog
         /// <summary>
         /// Subsumes the row of a key: egglog's <c>subsume</c>. The table must be subsumable, and hold the row.
         /// </summary>
-        /// <param name="table">The relation or constructor, of the call's graph, defined
-        /// <see cref="TableOptions.Subsumable"/>.</param>
+        /// <param name="table">The relation or constructor, of the call's graph, subsumable (<see
+        /// cref="RelationOptions.Subsumable"/>, <see cref="ConstructorOptions.Subsumable"/>).</param>
         /// <param name="keys">One value per key column.</param>
         /// <exception cref="ArgumentException">The table, or a value, is not one the call may write, or the table is not
         /// subsumable.</exception>

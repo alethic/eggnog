@@ -126,8 +126,8 @@ namespace Eggnog
         /// is made subsumed.
         /// </summary>
         /// <typeparam name="TSort">The sort.</typeparam>
-        /// <param name="term">The term: an application of a constructor defined <see
-        /// cref="TableOptions.Subsumable"/>.</param>
+        /// <param name="term">The term: an application of a subsumable constructor (<see
+        /// cref="ConstructorOptions.Subsumable"/>).</param>
         /// <exception cref="ArgumentException">The constructor is not subsumable, or a subterm reads a function,
         /// computes, is a variable, or holds a class value this scope cannot use.</exception>
         /// <exception cref="InvalidOperationException">The call came from another thread, or from a user delegate the
@@ -151,7 +151,7 @@ namespace Eggnog
         /// Adds the subsumption of ground relation rows to the batch (see <see cref="Scope.Subsume(ReadOnlySpan{Fact})"/>). A row
         /// the batch inserts, before or after this call, is inserted subsumed.
         /// </summary>
-        /// <param name="rows">The rows, of relations defined <see cref="TableOptions.Subsumable"/>.</param>
+        /// <param name="rows">The rows, of subsumable relations (<see cref="RelationOptions.Subsumable"/>).</param>
         /// <exception cref="ArgumentException">A fact is not a relation row of the scope written, a relation is not
         /// subsumable, or a term in a row is not ground or holds a class value this scope cannot use.</exception>
         /// <exception cref="InvalidOperationException">The call came from another thread, or from a user delegate the

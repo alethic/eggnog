@@ -188,8 +188,8 @@ namespace Eggnog
         /// under one, the call does nothing.
         /// </summary>
         /// <typeparam name="TSort">The sort.</typeparam>
-        /// <param name="term">The term: an application of a constructor defined <see
-        /// cref="TableOptions.Subsumable"/>.</param>
+        /// <param name="term">The term: an application of a subsumable constructor (<see
+        /// cref="ConstructorOptions.Subsumable"/>).</param>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
         /// <exception cref="ArgumentException">The constructor is not subsumable, or a subterm reads a function
         /// (<c>Get</c> it first), computes, is a variable, or holds a class value this scope cannot use.</exception>
@@ -243,7 +243,7 @@ namespace Eggnog
         /// fails keeps the terms its keys made, as egglog's failed command does, and the rows before it stand. On a case
         /// whose contradiction stopped it, or a scope under one, the call does nothing.
         /// </summary>
-        /// <param name="rows">The rows, of relations defined <see cref="TableOptions.Subsumable"/>.</param>
+        /// <param name="rows">The rows, of subsumable relations (<see cref="RelationOptions.Subsumable"/>).</param>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
         /// <exception cref="ArgumentException">A fact is not a relation row, a relation is not subsumable, a term in a
         /// row is not ground or holds a class value this scope cannot use, or a row writes through a scoped view

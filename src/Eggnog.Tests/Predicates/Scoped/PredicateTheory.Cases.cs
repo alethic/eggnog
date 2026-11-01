@@ -40,7 +40,7 @@ namespace Eggnog.Tests.Predicates.Scoped
             Case = Graph.DefineScopeTag("case");
 
             // A path is mentioned when a comparison or test over it is a term of the running scope.
-            Mentioned = Graph.DefineRelation<string>("mentioned", new TableOptions { Role = TableRole.Analysis });
+            Mentioned = Graph.DefineRelation<string>("mentioned", new RelationOptions { Analysis = true });
             foreach (var comparison in new[] { StrEq, StrGe, StrGt, UuidEq, InstantGt })
             {
                 Horn.DefineRule($"{comparison.Name} mentions its path", r =>

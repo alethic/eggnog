@@ -120,13 +120,13 @@ namespace Eggnog.Tests.Rules
             {
                 var (x, y) = r.Vars<long, long>("x", "y");
                 r.When(t.Num.Of(x));
-                r.Where(Primitives.Less.Of(x, y));
+                r.Where(Int64Primitives.Less.Of(x, y));
             }, "variable 'y' is not bound by any When clause");
             AssertRefused(t, "nested", r =>
             {
                 var (x, y) = r.Vars<long, long>("x", "y");
                 r.When(t.Num.Of(x));
-                r.Where(Primitives.Less.Of(Primitives.Add.Of(y, 1L), x));
+                r.Where(Int64Primitives.Less.Of(Int64Primitives.Add.Of(y, 1L), x));
             }, "variable 'y' is not bound by any When clause");
             AssertRefused(t, "head", r =>
             {
@@ -141,7 +141,7 @@ namespace Eggnog.Tests.Rules
         {
             var t = new NodeTheory();
             var present = t.Graph.DefineRelation<string>("present");
-            var inset = t.Graph.DefineRelation<Node>("inset", new TableOptions { Role = TableRole.Analysis });
+            var inset = t.Graph.DefineRelation<Node>("inset", new RelationOptions { Analysis = true });
             AssertRefused(t, "writer", r =>
             {
                 var (n, p) = r.Vars<Node, string>("n", "p");
@@ -449,8 +449,8 @@ namespace Eggnog.Tests.Rules
         public void AnAnalysisWriterReadingAScopedAtomIsRefused()
         {
             var t = new ScopeTheory();
-            var source = t.Graph.DefineRelation<string>("source", new TableOptions { Role = TableRole.Analysis });
-            var analysis = t.Graph.DefineRelation<string>("analysis", new TableOptions { Role = TableRole.Analysis });
+            var source = t.Graph.DefineRelation<string>("source", new RelationOptions { Analysis = true });
+            var analysis = t.Graph.DefineRelation<string>("analysis", new RelationOptions { Analysis = true });
             var e = Assert.Throws<RuleDefinitionException>(() => t.Rules.DefineRule("analysis from scoped", r =>
             {
                 var x = r.Var<string>("x");

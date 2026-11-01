@@ -277,7 +277,7 @@ namespace Eggnog.Tests.Host
             var graph = new EGraph();
             graph.DefineSort<Node>("T");
             var f = graph.DefineFunction<string, long>("f");
-            var c = graph.DefineConstructor<string, Node>("C", options: new TableOptions { Subsumable = true });
+            var c = graph.DefineConstructor<string, Node>("C");
             var root = graph.Root;
 
             root.Delete(f.Of("zz"));

@@ -154,8 +154,8 @@ namespace Eggnog.Tests.Rules
         {
             var t = new NodeTheory();
             var sum = t.Graph.DefineFunction<long, long>("sum", FunctionMerge.Of<long>("sum", (a, b) => a + b));
-            var plain = t.Graph.DefineRelation<long>("plain", new TableOptions { Subsumable = false });
-            var analysis = t.Graph.DefineRelation<long>("analysis", new TableOptions { Role = TableRole.Analysis });
+            var plain = t.Graph.DefineRelation<long>("plain", new RelationOptions { Subsumable = false });
+            var analysis = t.Graph.DefineRelation<long>("analysis", new RelationOptions { Analysis = true });
             t.Root.Assume(t.Num.Of(1L), plain.Of(1L));
 
             Assert.Contains("only the root writes it", Fail(t, t.Root.CreateChild(), (ctx, x) => ctx.Set(sum, [ctx.Get(x)], 1L)));
@@ -322,7 +322,7 @@ namespace Eggnog.Tests.Rules
         public void ACaughtRefusalStillFailsTheRule()
         {
             var t = new NodeTheory();
-            var plain = t.Graph.DefineRelation<long>("plain", new TableOptions { Subsumable = false });
+            var plain = t.Graph.DefineRelation<long>("plain", new RelationOptions { Subsumable = false });
             t.Root.Assume(t.Num.Of(1L), plain.Of(1L));
 
             var message = Fail(t, t.Root.CreateChild(), (ctx, x) =>

@@ -122,7 +122,7 @@ namespace Eggnog
         public void Where<T1, T2>(Term<T1> a, Term<T2> b, Func<T1, T2, bool> predicate) => Where(Compute.Of(a, b, predicate));
 
         /// <summary>
-        /// Adds a filter on a boolean term, e.g. <c>Primitives.Greater.Of(Primitives.Count&lt;string&gt;().Of(d), 1L)</c>.
+        /// Adds a filter on a boolean term, e.g. <c>Int64Primitives.Greater.Of(Primitives.SetLength&lt;string&gt;().Of(d), 1L)</c>.
         /// </summary>
         /// <param name="condition">The condition.</param>
         public void Where(Term<bool> condition)

@@ -42,8 +42,9 @@ namespace Eggnog
         public object? Output { get; }
 
         /// <summary>
-        /// Gets whether the row is subsumed (<see cref="TableOptions.Subsumable"/>): rule bodies, queries and split
-        /// rules no longer match it, and extraction skips it. Always <c>false</c> for a table that is not subsumable.
+        /// Gets whether the row is subsumed (<see cref="RelationOptions.Subsumable"/>, <see cref="ConstructorOptions.Subsumable"/>):
+        /// rule bodies, queries and split rules no longer match it, and extraction skips it. Always <c>false</c> for a
+        /// table that is not subsumable.
         /// </summary>
         public bool Subsumed { get; }
 

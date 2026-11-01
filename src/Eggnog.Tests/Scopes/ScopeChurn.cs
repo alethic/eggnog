@@ -129,7 +129,7 @@ namespace Eggnog.Tests.Scopes
             {
                 var d = r.Var<Set<string>>("d");
                 r.When(c.Present.Of("kind"), d.Is(c.Dom.Of("kind")));
-                r.Where(Primitives.Contains<string>().Of(d, "a"));
+                r.Where(Primitives.SetContains<string>().Of(d, "a"));
                 r.Then(c.Ne.Of("kind", constant));
             });
         }

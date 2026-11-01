@@ -5,7 +5,7 @@ namespace Eggnog.Tests.Differential
 {
 
     /// <summary>
-    /// A primitive a random program may call: a named built-in of <see cref="Primitives"/> or a lambda, with its
+    /// A primitive a random program may call: a named built-in of <see cref="Int64Primitives"/> or <see cref="Primitives"/>, or a lambda, with its
     /// signature, its meaning for the reference interpreter, the engine primitive for Eggnog, and its C# spelling for a
     /// printed program. Every primitive is pure, total on the values a program reaches, and bounded, so runs stay
     /// small.
@@ -36,32 +36,32 @@ namespace Eggnog.Tests.Differential
         }
 
         /// <summary>Gets <c>+</c> over <c>i64</c>.</summary>
-        public static DiffPrimitive Add { get; } = Named("+", "Add", new[] { DiffType.I64, DiffType.I64 }, DiffType.I64, a => (long)a[0] + (long)a[1], () => Primitives.Add);
+        public static DiffPrimitive Add { get; } = Named("+", "Int64Primitives.Add", new[] { DiffType.I64, DiffType.I64 }, DiffType.I64, a => (long)a[0] + (long)a[1], () => Int64Primitives.Add);
 
         /// <summary>Gets <c>max</c> over <c>i64</c>.</summary>
-        public static DiffPrimitive Max { get; } = Named("max", "Max", new[] { DiffType.I64, DiffType.I64 }, DiffType.I64, a => Math.Max((long)a[0], (long)a[1]), () => Primitives.Max);
+        public static DiffPrimitive Max { get; } = Named("max", "Int64Primitives.Max", new[] { DiffType.I64, DiffType.I64 }, DiffType.I64, a => Math.Max((long)a[0], (long)a[1]), () => Int64Primitives.Max);
 
         /// <summary>Gets <c>&lt;</c>.</summary>
-        public static DiffPrimitive Less { get; } = Named("<", "Less", new[] { DiffType.I64, DiffType.I64 }, DiffType.Bool, a => (long)a[0] < (long)a[1], () => Primitives.Less);
+        public static DiffPrimitive Less { get; } = Named("<", "Int64Primitives.Less", new[] { DiffType.I64, DiffType.I64 }, DiffType.Bool, a => (long)a[0] < (long)a[1], () => Int64Primitives.Less);
 
         /// <summary>Gets <c>&gt;</c>.</summary>
-        public static DiffPrimitive Greater { get; } = Named(">", "Greater", new[] { DiffType.I64, DiffType.I64 }, DiffType.Bool, a => (long)a[0] > (long)a[1], () => Primitives.Greater);
+        public static DiffPrimitive Greater { get; } = Named(">", "Int64Primitives.Greater", new[] { DiffType.I64, DiffType.I64 }, DiffType.Bool, a => (long)a[0] > (long)a[1], () => Int64Primitives.Greater);
 
         /// <summary>Gets <c>&lt;=</c>.</summary>
-        public static DiffPrimitive LessOrEqual { get; } = Named("<=", "LessOrEqual", new[] { DiffType.I64, DiffType.I64 }, DiffType.Bool, a => (long)a[0] <= (long)a[1], () => Primitives.LessOrEqual);
+        public static DiffPrimitive LessOrEqual { get; } = Named("<=", "Int64Primitives.LessOrEqual", new[] { DiffType.I64, DiffType.I64 }, DiffType.Bool, a => (long)a[0] <= (long)a[1], () => Int64Primitives.LessOrEqual);
 
         /// <summary>Gets <c>&gt;=</c>.</summary>
-        public static DiffPrimitive GreaterOrEqual { get; } = Named(">=", "GreaterOrEqual", new[] { DiffType.I64, DiffType.I64 }, DiffType.Bool, a => (long)a[0] >= (long)a[1], () => Primitives.GreaterOrEqual);
+        public static DiffPrimitive GreaterOrEqual { get; } = Named(">=", "Int64Primitives.GreaterOrEqual", new[] { DiffType.I64, DiffType.I64 }, DiffType.Bool, a => (long)a[0] >= (long)a[1], () => Int64Primitives.GreaterOrEqual);
 
         /// <summary>Gets <c>set-length</c>.</summary>
-        public static DiffPrimitive SetLength { get; } = Named("set-length", "Count<int>()", new[] { DiffType.IntSet }, DiffType.I64, a => (long)((Set<int>)a[0]).Count, () => Primitives.Count<int>());
+        public static DiffPrimitive SetLength { get; } = Named("set-length", "Primitives.SetLength<int>()", new[] { DiffType.IntSet }, DiffType.I64, a => (long)((Set<int>)a[0]).Count, () => Primitives.SetLength<int>());
 
         /// <summary>Gets <c>set-is-empty</c>.</summary>
-        public static DiffPrimitive SetEmpty { get; } = Named("set-is-empty", "IsEmpty<int>()", new[] { DiffType.IntSet }, DiffType.Bool, a => ((Set<int>)a[0]).IsEmpty, () => Primitives.IsEmpty<int>());
+        public static DiffPrimitive SetIsEmpty { get; } = Named("set-is-empty", "Primitives.SetIsEmpty<int>()", new[] { DiffType.IntSet }, DiffType.Bool, a => ((Set<int>)a[0]).IsEmpty, () => Primitives.SetIsEmpty<int>());
 
         /// <summary>Gets <c>set-union</c>.</summary>
-        public static DiffPrimitive SetUnion { get; } = Named("set-union", "Union<int>()", new[] { DiffType.IntSet, DiffType.IntSet }, DiffType.IntSet,
-            a => ((Set<int>)a[0]).Union((Set<int>)a[1]), () => Primitives.Union<int>());
+        public static DiffPrimitive SetUnion { get; } = Named("set-union", "Primitives.SetUnion<int>()", new[] { DiffType.IntSet, DiffType.IntSet }, DiffType.IntSet,
+            a => ((Set<int>)a[0]).Union((Set<int>)a[1]), () => Primitives.SetUnion<int>());
 
         /// <summary>Gets the lambda <c>x =&gt; (x * 3 + 1) % 7</c>.</summary>
         public static DiffPrimitive Affine { get; } = Lambda("affine", new[] { DiffType.I64 }, DiffType.I64, "x => (x * 3 + 1) % 7",
@@ -130,7 +130,7 @@ namespace Eggnog.Tests.Differential
         /// Makes a named primitive.
         /// </summary>
         static DiffPrimitive Named(string name, string member, DiffType[] parameters, DiffType result, Func<object[], object> evaluate, Func<Primitive> create) =>
-            new(name, false, parameters, result, args => $"Primitives.{member}.Of({string.Join(", ", args)})", evaluate, create);
+            new(name, false, parameters, result, args => $"{member}.Of({string.Join(", ", args)})", evaluate, create);
 
         /// <summary>
         /// Makes a lambda.

@@ -138,14 +138,15 @@ namespace Eggnog.Tests.Definitions
         }
 
         [Fact]
-        public void TheTermRoleIsRefusedForRelationsAndFunctions()
+        public void EachKindTakesItsRoleFromItsOptions()
         {
             var graph = new EGraph();
-            var term = new TableOptions { Role = TableRole.Term };
-            Assert.Throws<ArgumentException>(() => graph.DefineRelation<long>("r", term));
-            Assert.Throws<ArgumentException>(() => graph.DefineFunction<long, long>("f", options: term));
             graph.DefineSort<Node>("Node");
-            Assert.Equal(TableRole.Term, graph.DefineConstructor<long, Node>("c", options: new TableOptions { Role = TableRole.Analysis }).Role);
+            Assert.Equal(TableRole.Fact, graph.DefineRelation<long>("r").Role);
+            Assert.Equal(TableRole.Analysis, graph.DefineRelation<long>("ar", new RelationOptions { Analysis = true }).Role);
+            Assert.Equal(TableRole.Fact, graph.DefineFunction<long, long>("f").Role);
+            Assert.Equal(TableRole.Analysis, graph.DefineFunction<long, long>("af", options: new FunctionOptions { Analysis = true }).Role);
+            Assert.Equal(TableRole.Term, graph.DefineConstructor<long, Node>("c").Role);
         }
 
         [Fact]
@@ -165,9 +166,9 @@ namespace Eggnog.Tests.Definitions
         {
             var graph = new EGraph();
             graph.DefineSort<Node>("Node");
-            var free = graph.DefineConstructor<Node>("free", cost: 0, options: new TableOptions { Extractable = false });
+            var free = graph.DefineConstructor<Node>("free", cost: 0, options: new ConstructorOptions { Unextractable = true });
             Assert.Equal<ulong>(0, free.Cost);
-            Assert.False(free.Extractable);
+            Assert.True(free.Unextractable);
         }
 
         [Fact]
@@ -176,10 +177,10 @@ namespace Eggnog.Tests.Definitions
             var graph = new EGraph();
             graph.DefineSort<Node>("Node");
             var present = graph.DefineRelation<string>("present");
-            var analysis = graph.DefineRelation<Node>("analysis", new TableOptions { Role = TableRole.Analysis });
+            var analysis = graph.DefineRelation<Node>("analysis", new RelationOptions { Analysis = true });
             var dom = graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
             var lit = graph.DefineConstructor<long, Node>("Lit", cost: 3);
-            var unlifted = graph.DefineRelation<string>("unlifted", new TableOptions { Lift = false });
+            var unlifted = graph.DefineRelation<string>("unlifted", new RelationOptions { Lift = false });
 
             Assert.Equal(new TableHandle[] { graph.Contradiction, present, analysis, dom, lit, unlifted }, graph.Tables);
             Assert.Equal(1, present.Index);
@@ -198,7 +199,7 @@ namespace Eggnog.Tests.Definitions
             Assert.Equal(TableKind.Constructor, lit.Kind);
             Assert.Equal(TableRole.Term, lit.Role);
             Assert.True(lit.Lift);
-            Assert.True(lit.Extractable);
+            Assert.False(lit.Unextractable);
             Assert.Equal<ulong>(3, lit.Cost);
             Assert.False(lit.IsValueOnly);
             Assert.False(unlifted.Lift);
@@ -288,7 +289,7 @@ namespace Eggnog.Tests.Definitions
                     started.Set();
                     return Volatile.Read(ref keepGoing) == 1;
                 });
-                r.Then(tick.Of(Primitives.Add.Of(x, 1L)));
+                r.Then(tick.Of(Int64Primitives.Add.Of(x, 1L)));
             });
             graph.Root.Assume(tick.Of(0L));
 

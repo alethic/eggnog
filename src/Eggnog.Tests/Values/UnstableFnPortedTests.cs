@@ -30,15 +30,15 @@ namespace Eggnog.Tests.Values
             // (sort IntFn (UnstableFn (i64 i64) i64)) (let plus (unstable-fn "+")) (check (= (unstable-app plus 2 3) 5))
             graph.Values.RegisterFn<long, long, long>();
             var plus = graph.DefineFunction<UnstableFn<long, long, long>>("plus");
-            graph.Root.Assume(plus.Of().Is(Primitives.UnstableFn<long, long, long>(Primitives.Add).Of()));
+            graph.Root.Assume(plus.Of().Is(Primitives.UnstableFn<long, long, long>(Int64Primitives.Add).Of()));
             Assert.True(graph.Root.Check(Primitives.UnstableApp<long, long, long>().Of(plus.Of(), 2L, 3L).Is(5L)));
-            Assert.Equal(UnstableFn.Of<long, long, long>(Primitives.Add), graph.Root.Get(plus.Of()));
+            Assert.Equal(UnstableFn.Of<long, long, long>(Int64Primitives.Add), graph.Root.Get(plus.Of()));
 
             // (sort I2I (UnstableFn (i64) i64))
             // (function merge-plus () i64 :merge (unstable-app (unstable-fn "+" old) new)) (set (merge-plus) 1) (set (merge-plus) 2)
             graph.Values.RegisterFn<long, long>();
             var app = Primitives.UnstableApp<long, long>();
-            var add = Primitives.UnstableFn<long, long>(Primitives.Add);
+            var add = Primitives.UnstableFn<long, long>(Int64Primitives.Add);
             var mergePlus = graph.DefineFunction("merge-plus", FunctionMerge.Expression<long>((old, @new) => app.Of(add.Of(old), @new)));
             graph.Root.Assume(mergePlus.Of().Is(1L));
             graph.Root.Assume(mergePlus.Of().Is(2L));
@@ -64,7 +64,7 @@ namespace Eggnog.Tests.Values
 
             // (sort IntToUnit (UnstableFn (i64) Unit)) (check (= (unstable-app (unstable-fn "<" 1) 2) ()))
             graph.Values.RegisterFn<long, ValueTuple>();
-            var less = Primitives.UnstableFn<long, ValueTuple>(Primitives.Fallible(Primitives.Less));
+            var less = Primitives.UnstableFn<long, ValueTuple>(Primitives.Fallible(Int64Primitives.Less));
             var test = Primitives.UnstableApp<long, ValueTuple>();
             Assert.True(graph.Root.Check(test.Of(less.Of(1L), 2L).Is(default(ValueTuple))));
             Assert.False(graph.Root.Check(test.Of(less.Of(2L), 1L).Is(default(ValueTuple))));
@@ -291,7 +291,7 @@ namespace Eggnog.Tests.Values
             rules.DefineRule("fold", r =>
             {
                 var (x, y) = r.Vars<long, long>("x", "y");
-                r.Rewrite(mul.Of(num.Of(x), num.Of(y)), num.Of(Primitives.Multiply.Of(x, y)));
+                r.Rewrite(mul.Of(num.Of(x), num.Of(y)), num.Of(Int64Primitives.Multiply.Of(x, y)));
             });
 
             // (datatype MathList (Nil) (Cons Math MathList)) (sort MathFn (UnstableFn (Math) Math))
@@ -387,7 +387,7 @@ namespace Eggnog.Tests.Values
             });
 
             // (let $res (composed-i64-math $square-fn (unstable-fn "*" 2) 4)) (check (= $res (Num 64)))
-            var res = graph.Root.Make(composedLong.Of(squareFn.Of(), Primitives.UnstableFn<long, long>(Primitives.Multiply).Of(2L), 4L));
+            var res = graph.Root.Make(composedLong.Of(squareFn.Of(), Primitives.UnstableFn<long, long>(Int64Primitives.Multiply).Of(2L), 4L));
             graph.Root.Run(Schedule.Saturate(rules));
             Assert.True(graph.Root.AreEqual(res, num.Of(64L)));
 

@@ -5,7 +5,7 @@ namespace Eggnog
 
     /// <summary>
     /// A relation over 2 key columns: a set of tuples, defined with
-    /// <see cref="EGraph.DefineRelation{T1, T2}(string, TableOptions)"/>.
+    /// <see cref="EGraph.DefineRelation{T1, T2}(string, RelationOptions)"/>.
     /// </summary>
     /// <typeparam name="T1">The type of key 1.</typeparam>
     /// <typeparam name="T2">The type of key 2.</typeparam>

@@ -57,7 +57,7 @@ rules.DefineRule("times one", r =>
 rules.DefineRule("fold add", r =>
 {
     var (x, y) = r.Vars<long, long>("x", "y");
-    r.Rewrite(add.Of(num.Of(x), num.Of(y)), num.Of(Primitives.Add.Of(x, y)));
+    r.Rewrite(add.Of(num.Of(x), num.Of(y)), num.Of(Int64Primitives.Add.Of(x, y)));
 });
 
 var root = graph.Root;
@@ -79,9 +79,9 @@ ExtractedTerm best = root.Extract(e);                              // (Add (Var 
 | `Constructor<..., TSort>` | Terms: one class per key (`DefineConstructor`), with a cost for extraction. |
 | `RelationN`, `FunctionN<TOut>`, `ConstructorN<TSort>`, `PrimitiveN<TResult>` | Tables and primitives of any arity, as egglog's take, where the typed ones stop at four: defined by their key or parameter types (`DefineRelationN`, `DefineFunctionN`, `DefineConstructorN`, `Primitive.Create`), and applied to terms or values. |
 | `Term<T>`, `Fact` | Expressions and statements, written with `Of`, `Is`, `IsNot`, primitives and lambdas; used in rules, writes, checks and queries. |
-| `Primitive`, `PrimitiveAccess`, `ITables` | Functions of values in terms: egglog's (`Primitives`, `DoublePrimitives`, `StringPrimitives`, ...) or your own (`Primitive.Create`, `CreatePartial`); and, as egglog's primitives over the database, ones that read or write the tables (`CreateRead`, `CreateWrite`, `CreateFull`), refused where the call site's context does not allow it, as egglog's are. A table's handle carries its output type or sort (`FunctionHandle<TOut>`, `ConstructorHandle<TSort>`), so `tables.Make(lit, 1L)` and `tables.TryLookup(f, [k], out var v)` infer it. |
+| `Primitive`, `PrimitiveAccess`, `ITables` | Functions of values in terms: egglog's (`Int64Primitives`, `DoublePrimitives`, `StringPrimitives`, ..., and `Primitives` for the containers' and the generic ones) or your own (`Primitive.Create`, `CreatePartial`); and, as egglog's primitives over the database, ones that read or write the tables (`CreateRead`, `CreateWrite`, `CreateFull`), refused where the call site's context does not allow it, as egglog's are. A table's handle carries its output type or sort (`FunctionHandle<TOut>`, `ConstructorHandle<TSort>`), so `tables.Make(lit, 1L)` and `tables.TryLookup(f, [k], out var v)` infer it. |
 | `Ruleset`, `RuleBuilder` | Named groups of rules; a rule has a body (`When`, `Where`) and a head (`Then`, `Rewrite`, `Subsume`, `Delete`: egglog's `delete`, also `Scope.Delete`; `ThenCall` and `ThenCallFull`: egglog's `rust_rule` and `rust_rule_full`, host code). |
-| `TableOptions` | A table's role, lift policy and extractability, and whether its rows may be subsumed (`Subsumable`): egglog's `subsume`, through `RuleBuilder.Subsume`, `Rewrite(left, right, subsume: true)` and `Scope.Subsume`. Rules, queries and extraction skip a subsumed row; checks and lookups still see it. |
+| `RelationOptions`, `FunctionOptions`, `ConstructorOptions` | A table's options, one type per kind: a relation's or function's role (`Analysis`) and lift policy; a constructor's lift policy and extractability (`Unextractable`, egglog's `:unextractable`); and whether a relation's or constructor's rows may be subsumed (`Subsumable`, by default yes): egglog's `subsume`, through `RuleBuilder.Subsume`, `Rewrite(left, right, subsume: true)` and `Scope.Subsume`. Rules, queries and extraction skip a subsumed row; checks and lookups still see it. |
 | `Schedule` | What a run does: `Run`, `Repeat`, `Saturate`, `Sequence`, `Until`, `Split`, and `RunWith`, a step under a scheduler. |
 | `IRuleScheduler`, `RuleScheduler`, `BackOffScheduler` | egglog's schedulers: which of a rule's matches fire in a step (`EGraph.AddScheduler`, `Schedule.RunWith`); egglog-experimental's back-off. |
 | `Scope` | Where facts are written, rules run and reads answered: the root or a child (`CreateChild`), writable or frozen (`Freeze`). |

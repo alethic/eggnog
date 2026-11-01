@@ -220,7 +220,7 @@ namespace Eggnog
                 Output = SortOf(constructor.Output!),
                 IsConstructor = true,
                 Cost = constructor.Cost,
-                Unextractable = constructor.Extractable == false || unextractable.Contains(constructor),
+                Unextractable = constructor.Unextractable || unextractable.Contains(constructor),
             });
         }
 

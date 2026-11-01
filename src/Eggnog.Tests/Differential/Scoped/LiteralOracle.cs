@@ -156,7 +156,7 @@ namespace Eggnog.Tests.Differential
                         b.When(Atom(atom, atom.Tag >= 0 ? Resolve(scope, atom.Tag) : scope, variables));
 
                     if (rule.FilterVar is { } filtered)
-                        b.When(new FilterFact(Compute.Of(Primitives.Less, variables[filtered], Term.Constant(integer, rule.FilterBelow))));
+                        b.When(new FilterFact(Compute.Of(Int64Primitives.Less, variables[filtered], Term.Constant(integer, rule.FilterBelow))));
 
                     foreach (var atom in rule.Head)
                         b.Then(Atom(atom, scope, variables));

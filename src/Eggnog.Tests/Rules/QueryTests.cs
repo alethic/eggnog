@@ -163,7 +163,7 @@ namespace Eggnog.Tests.Rules
             {
                 to = q.Var<long>("to");
                 q.When(edge.Of(1L, to));
-                q.Where(Primitives.Greater.Of(to, 2L));
+                q.Where(Int64Primitives.Greater.Of(to, 2L));
             });
 
             var seen = new List<long>();

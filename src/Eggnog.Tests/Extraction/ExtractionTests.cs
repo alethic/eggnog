@@ -18,7 +18,7 @@ namespace Eggnog.Tests.Extraction
         public void AClassWithNoFiniteTermHasNoExtraction()
         {
             var t = new NodeTheory();
-            var hidden = t.Graph.DefineConstructor<Node>("Hidden", options: new TableOptions { Extractable = false });
+            var hidden = t.Graph.DefineConstructor<Node>("Hidden", options: new ConstructorOptions { Unextractable = true });
             var h = t.Root.Make(hidden.Of());
             var extractor = t.Root.CreateExtractor();
             Assert.False(extractor.TryExtract(h, out var term));
@@ -97,7 +97,7 @@ namespace Eggnog.Tests.Extraction
         public void UnextractableHeadsAreSkipped()
         {
             var t = new NodeTheory();
-            var fast = t.Graph.DefineConstructor<long, Node>("Fast", cost: 0, options: new TableOptions { Extractable = false });
+            var fast = t.Graph.DefineConstructor<long, Node>("Fast", cost: 0, options: new ConstructorOptions { Unextractable = true });
             var slow = t.Graph.DefineConstructor<long, Node>("Slow", cost: 10);
             var f = t.Root.Make(fast.Of(1L));
             t.Root.Union(f, t.Root.Make(slow.Of(1L)));

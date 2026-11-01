@@ -94,13 +94,13 @@ namespace Eggnog.Tests.Values
         public void AFilterPrimitiveHasEgglogsFallibleForm()
         {
             // (check (< 1 2)) holds, and (< 2 1) has no result: the Unit-valued primitive egglog names "<".
-            var fallible = Primitives.Fallible(Primitives.Less);
+            var fallible = Primitives.Fallible(Int64Primitives.Less);
             Assert.Equal("<", fallible.Name);
-            Assert.Same(fallible, Primitives.Fallible(Primitives.Less));
+            Assert.Same(fallible, Primitives.Fallible(Int64Primitives.Less));
             Assert.Equal(typeof(ValueTuple), fallible.ResultType);
             Assert.Equal("multiset-contains-swapped", Primitives.Fallible(Primitives.MultiSetContainsSwapped<long>()).Name);
             Assert.Equal("!=", Primitives.Fallible(Primitives.NotEqual<string>()).Name);
-            Assert.Throws<ArgumentException>(() => Primitives.Fallible(Primitives.Add));
+            Assert.Throws<ArgumentException>(() => Primitives.Fallible(Int64Primitives.Add));
 
             // In a rule, through a function value: (rule ((= f (lt)) (keys k) (= () (unstable-app f k))) ((set (hit k) 1))): the
             // keys above 3.

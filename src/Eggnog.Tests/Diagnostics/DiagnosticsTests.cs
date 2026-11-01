@@ -104,8 +104,8 @@ namespace Eggnog.Tests.Diagnostics
             {
                 var x = r.Var<long>("x");
                 r.When(t.Num.Of(x));
-                r.Where(Primitives.Less.Of(x, 3L));
-                r.Then(t.Num.Of(Primitives.Add.Of(x, 1L)));
+                r.Where(Int64Primitives.Less.Of(x, 3L));
+                r.Then(t.Num.Of(Int64Primitives.Add.Of(x, 1L)));
             });
             var copy = t.Rules.DefineRule("copy", r =>
             {
@@ -455,8 +455,8 @@ namespace Eggnog.Tests.Diagnostics
             {
                 var x = r.Var<long>("x");
                 r.When(t.Num.Of(x));
-                r.Where(Primitives.Less.Of(x, 3L));
-                r.Then(t.Num.Of(Primitives.Add.Of(x, 1L)));
+                r.Where(Int64Primitives.Less.Of(x, 3L));
+                r.Then(t.Num.Of(Int64Primitives.Add.Of(x, 1L)));
             });
             var errors = new List<Exception?>();
             var q = t.Graph.DefineQuery("q", b =>
@@ -495,8 +495,8 @@ namespace Eggnog.Tests.Diagnostics
             {
                 var x = r.Var<long>("x");
                 r.When(t.Num.Of(x));
-                r.Where(Primitives.Less.Of(x, 3L));
-                r.Then(t.Num.Of(Primitives.Add.Of(x, 1L)));
+                r.Where(Int64Primitives.Less.Of(x, 3L));
+                r.Then(t.Num.Of(Int64Primitives.Add.Of(x, 1L)));
             });
             Assert.Throws<FormatException>(() => t.Root.Run(Schedule.Saturate(t.Rules), new RunOptions
             {
@@ -516,8 +516,8 @@ namespace Eggnog.Tests.Diagnostics
             {
                 var x = r.Var<long>("x");
                 r.When(t.Num.Of(x));
-                r.Where(Primitives.Less.Of(x, 5L));
-                r.Then(t.Num.Of(Primitives.Add.Of(x, 1L)));
+                r.Where(Int64Primitives.Less.Of(x, 5L));
+                r.Then(t.Num.Of(Int64Primitives.Add.Of(x, 1L)));
             });
             var observed = new List<RunStep>();
             var report = t.Root.Run(Schedule.Saturate(t.Rules), new RunOptions { RecordSteps = true, Observer = observed.Add });
@@ -539,8 +539,8 @@ namespace Eggnog.Tests.Diagnostics
             {
                 var x = r.Var<long>("x");
                 r.When(t.Num.Of(x));
-                r.Where(Primitives.Less.Of(x, 5L));
-                r.Then(t.Num.Of(Primitives.Add.Of(x, 1L)));
+                r.Where(Int64Primitives.Less.Of(x, 5L));
+                r.Then(t.Num.Of(Int64Primitives.Add.Of(x, 1L)));
             });
             var report = t.Root.Run(Schedule.Saturate(t.Rules), new RunOptions { RecordSteps = true });
             Assert.False(string.IsNullOrEmpty(report.Rules[rule].Plan));
@@ -552,8 +552,8 @@ namespace Eggnog.Tests.Diagnostics
             {
                 var x = r.Var<long>("x");
                 r.When(plain.Num.Of(x));
-                r.Where(Primitives.Less.Of(x, 5L));
-                r.Then(plain.Num.Of(Primitives.Add.Of(x, 1L)));
+                r.Where(Int64Primitives.Less.Of(x, 5L));
+                r.Then(plain.Num.Of(Int64Primitives.Add.Of(x, 1L)));
             });
             Assert.Null(plain.Root.Run(Schedule.Saturate(plain.Rules)).Rules[r2].Plan);
         }

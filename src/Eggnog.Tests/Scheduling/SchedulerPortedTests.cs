@@ -30,8 +30,8 @@ namespace Eggnog.Tests.Scheduling
             {
                 var x = rule.Var<long>("x");
                 rule.When(r.Of(x));
-                rule.Where(Primitives.Less.Of(x, 100L));
-                rule.Then(r.Of(Primitives.Add.Of(x, 1L)));
+                rule.Where(Int64Primitives.Less.Of(x, 100L));
+                rule.Then(r.Of(Int64Primitives.Add.Of(x, 1L)));
             });
             graph.Root.Assume(r.Of(0L));
             graph.Root.Run(Schedule.Saturate(main));

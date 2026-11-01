@@ -5,7 +5,7 @@ namespace Eggnog
 
     /// <summary>
     /// A function over 0 key columns, with a value or class output, defined with
-    /// <see cref="EGraph.DefineFunction{TOut}(string, ValueLattice{TOut}, TableOptions)"/>.
+    /// <see cref="EGraph.DefineFunction{TOut}(string, ValueLattice{TOut}, FunctionOptions)"/>.
     /// </summary>
     /// <typeparam name="TOut">The type of the value.</typeparam>
     public sealed class Function<TOut> : FunctionHandle<TOut>

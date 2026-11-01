@@ -64,8 +64,8 @@ namespace Eggnog.Tests.Predicates.Scoped
             InstantGt = graph.DefineConstructor<string, string, Pred>("InstantGt", cost: 1000);
 
             // Query bookkeeping is never lifted; the analyses are derived from terms alone.
-            var queryOnly = new TableOptions { Lift = false };
-            var analysis = new TableOptions { Role = TableRole.Analysis };
+            var queryOnly = new RelationOptions { Lift = false };
+            var analysis = new FunctionOptions { Analysis = true };
             WhereClause = graph.DefineRelation<Pred>("where", queryOnly);
             Conjunct = graph.DefineRelation<Pred>("conjunct", queryOnly);
             InSet = graph.DefineFunction<Pred, string, Set<string>>("inset", ValueLattice.Intersect<string>(), analysis);
@@ -230,14 +230,14 @@ namespace Eggnog.Tests.Predicates.Scoped
             {
                 var (e, p, v) = r.Vars<Pred, string, string>("e", "p", "v");
                 r.When(e.Is(StrEq.Of(p, v)));
-                r.Then(InSet.Of(e, p).Is(Primitives.Singleton<string>().Of(v)));
+                r.Then(InSet.Of(e, p).Is(Primitives.SetOf<string>().Of(v)));
             });
             Horn.DefineRule("inset of or", r =>
             {
                 var (e, a, b, p) = r.Vars<Pred, Pred, Pred, string>("e", "a", "b", "p");
                 var (sa, sb) = r.Vars<Set<string>, Set<string>>("sa", "sb");
                 r.When(e.Is(Or.Of(a, b)), sa.Is(InSet.Of(a, p)), sb.Is(InSet.Of(b, p)));
-                r.Then(InSet.Of(e, p).Is(Primitives.Union<string>().Of(sa, sb)));
+                r.Then(InSet.Of(e, p).Is(Primitives.SetUnion<string>().Of(sa, sb)));
             });
             Horn.DefineRule("inset admits", r =>
             {
@@ -260,7 +260,7 @@ namespace Eggnog.Tests.Predicates.Scoped
                 var (e, a, b, p) = r.Vars<Pred, Pred, Pred, string>("e", "a", "b", "p");
                 var (sa, sb) = r.Vars<Set<string>, Set<string>>("sa", "sb");
                 r.When(e.Is(Or.Of(a, b)), sa.Is(Admits.Of(a, p)), sb.Is(Admits.Of(b, p)));
-                r.Then(Admits.Of(e, p).Is(Primitives.Union<string>().Of(sa, sb)));
+                r.Then(Admits.Of(e, p).Is(Primitives.SetUnion<string>().Of(sa, sb)));
             });
 
             // What a conjunct establishes, written to the running scope: the query.
@@ -289,13 +289,13 @@ namespace Eggnog.Tests.Predicates.Scoped
             {
                 var (p, n) = r.Vars<string, long>("p", "n");
                 r.When(Conjunct.Of(NumGt.Of(p, n)));
-                r.Then(Present.Of(p), Lo.Of(p).Is(Primitives.Add.Of(n, 1L)), Types.Of(p).Is(Set.Of(["number"])));
+                r.Then(Present.Of(p), Lo.Of(p).Is(Int64Primitives.Add.Of(n, 1L)), Types.Of(p).Is(Set.Of(["number"])));
             });
             Horn.DefineRule("a numeric upper bound", r =>
             {
                 var (p, n) = r.Vars<string, long>("p", "n");
                 r.When(Conjunct.Of(NumLt.Of(p, n)));
-                r.Then(Present.Of(p), Hi.Of(p).Is(Primitives.Subtract.Of(n, 1L)), Types.Of(p).Is(Set.Of(["number"])));
+                r.Then(Present.Of(p), Hi.Of(p).Is(Int64Primitives.Subtract.Of(n, 1L)), Types.Of(p).Is(Set.Of(["number"])));
             });
         }
 
@@ -317,8 +317,8 @@ namespace Eggnog.Tests.Predicates.Scoped
             {
                 var (p, v, d) = r.Vars<string, string, Set<string>>("p", "v", "d");
                 r.When(Ne.Of(p, v), d.Is(Dom.Of(p)));
-                r.Where(Primitives.Contains<string>().Of(d, v));
-                r.Then(Dom.Of(p).Is(Primitives.Remove<string>().Of(d, v)));
+                r.Where(Primitives.SetContains<string>().Of(d, v));
+                r.Then(Dom.Of(p).Is(Primitives.SetRemove<string>().Of(d, v)));
             });
             Lattice.DefineRule("a lower bound narrows an integer domain", r =>
             {
@@ -336,28 +336,28 @@ namespace Eggnog.Tests.Predicates.Scoped
             {
                 var (p, d) = r.Vars<string, Set<string>>("p", "d");
                 r.When(Present.Of(p), d.Is(Dom.Of(p)));
-                r.Where(Primitives.IsEmpty<string>().Of(d));
+                r.Where(Primitives.SetIsEmpty<string>().Of(d));
                 r.Then(Graph.Contradiction.Of());
             });
             Lattice.DefineRule("an empty integer domain", r =>
             {
                 var (p, d) = r.Vars<string, Set<long>>("p", "d");
                 r.When(Present.Of(p), d.Is(IDom.Of(p)));
-                r.Where(Primitives.IsEmpty<long>().Of(d));
+                r.Where(Primitives.SetIsEmpty<long>().Of(d));
                 r.Then(Graph.Contradiction.Of());
             });
             Lattice.DefineRule("no possible type", r =>
             {
                 var (p, t) = r.Vars<string, Set<string>>("p", "t");
                 r.When(Present.Of(p), t.Is(Types.Of(p)));
-                r.Where(Primitives.IsEmpty<string>().Of(t));
+                r.Where(Primitives.SetIsEmpty<string>().Of(t));
                 r.Then(Graph.Contradiction.Of());
             });
             Lattice.DefineRule("crossed bounds", r =>
             {
                 var (p, l, h) = r.Vars<string, long, long>("p", "l", "h");
                 r.When(Present.Of(p), l.Is(Lo.Of(p)), h.Is(Hi.Of(p)));
-                r.Where(Primitives.Greater.Of(l, h));
+                r.Where(Int64Primitives.Greater.Of(l, h));
                 r.Then(Graph.Contradiction.Of());
             });
         }
@@ -404,7 +404,7 @@ namespace Eggnog.Tests.Predicates.Scoped
                 var (e, p) = r.Vars<Pred, string>("e", "p");
                 var (s, d) = r.Vars<Set<string>, Set<string>>("s", "d");
                 r.When(s.Is(InSet.Of(e, p)), Present.In(Schema).Of(p), d.Is(Dom.In(Schema).Of(p)));
-                r.Where(Primitives.IsSubsetOf<string>().Of(d, s));
+                r.Where(Primitives.SetIsSubset<string>().Of(d, s));
                 r.Then(e.Is(PTrue.Of()));
             });
             Rewrite.DefineRule("declared presence", r =>
