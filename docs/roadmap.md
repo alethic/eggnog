@@ -169,6 +169,25 @@ of them fall on the same side of the gate; otherwise it is inconclusive, up to f
 - **The `RunOptions` remarks.** `TimeLimit` and `RowLimit` say a run overshoots by at most one iteration; it is one
   iteration or one lift, as the class summary says.
 
+The API items below come from egglog-python's
+([`history/egglog-python-comparison.md`](history/egglog-python-comparison.md)).
+
+- **An extracted term as input.** `ExtractedTerm.ToTerm<TSort>()`, and a typed match against a constructor handle
+  (`TryMatch`, or a `Deconstruct` for C# patterns), so a host can write a result back or compile it without walking
+  `Head` and `Arguments`. Lands when every term the extraction tests extract converts back to a term whose `Make` is
+  `AreEqual` to the class it came from.
+- **A transcript as egglog text.** An opt-in recorder that writes the session's definitions and commands as `.egg`
+  source, and invalidates the transcript (reading it throws) once the session does what egglog cannot express: a C#
+  lambda, a callback, a split, scopes beyond one push and pop chain. It makes a host's program runnable by the egglog
+  binary and the differential tests. Lands when the ported egglog tests' transcripts run in the egglog binary with the
+  same answers.
+- **An egglog-to-Eggnog page.** One table from each egglog command to the API, for users who know egglog first; its
+  examples compiled and run by the tests, as the README's are.
+- **One declaration per constructor.** A source generator from a partial method declaration to the definition and its
+  typed helpers, trimming- and AOT-safe; and a documented pattern for C# 14 extension operators over `Term<TSort>`.
+- **Cost models beyond a `ulong` sum.** A callback over a node and its children's costs, returning any ordered cost.
+  Greedy-DAG extraction waits on [`egglog-3.0.0-todo.md`](egglog-3.0.0-todo.md).
+
 ## Parked
 
 Each waits on its trigger.
