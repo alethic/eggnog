@@ -42,7 +42,7 @@ egraph.extract(e)
 | Schedules | `run(n)`, `run(rs)`, `.saturate()`, `* n`, `+` and `seq`, `run(rs, fact)`, `back_off`; a default ruleset. | `Schedule.Run`, `Sequence`, `Repeat`, `Saturate`, `Until`, `RunWith`, `Split`; `RunOptions` limits and cancellation. |
 | Writes | `register(actions)`, `let(name, expr)`. | `Make` (a typed class), `Assume`, `Union`, `Delete`, `Subsume`, `Write` batches. |
 | Reads | `check`, `check_fail`, `.value`, `lookup_function_value`, `function_values`, `match` on expressions. | `Check`, `Get`, `TryGet`, `AreEqual`, `Find`, `Rows`, `CountRows`; queries (`DefineQuery`) that deliver bindings. |
-| Extraction | A Python expression, usable again; tree or greedy-DAG; `TreeCostModel` and `DagCostModel` over any ordered cost; `set_cost`, `extract_multiple`, `keep_best`. | An `ExtractedTerm` (head, arguments, cost, s-expression); `CostModel` of head, row and value costs summed as `ulong`; `ExtractVariants`; a reusable `Extractor`; no DAG extraction. |
+| Extraction | A Python expression, usable again; tree or greedy-DAG; `TreeCostModel` and `DagCostModel` over any ordered cost; `set_cost`, `extract_multiple`, `keep_best`. | An `ExtractedTerm` (head, arguments, class and cost per node, typed `TryMatch`, s-expression), which converts to no `Term`; `CostModel` of head, row and value costs summed as `ulong`; `ExtractVariants`; a reusable `Extractor`; no DAG extraction. |
 | Push and pop | `with egraph:`, one stack. | A tree of scopes: cheap children, freeze, threads, tags, local rules, scoped reads. |
 | Case splits | None. | `Schedule.Split` and lift. |
 | Threads | Access to one `EGraph` is serialized; parallel work uses separate graphs. | A frozen scope is read from any number of threads, each with children of its own. |
@@ -54,10 +54,13 @@ egglog after `5e655cae` (greedy-DAG extraction, `keep_best`, `Maybe` and `catch`
 
 ## What Eggnog takes
 
-1. **An extracted term as input.** egglog-python's `extract` returns an expression of the kind the host wrote, which it
-   registers again or destructures (`get_callable_args(expr, Math.__add__)`, `match`). An `ExtractedTerm` converts to
-   nothing: a host that compiles its result walks `Head` and `Arguments` itself. Wanted: `ExtractedTerm.ToTerm<TSort>()`,
-   and a typed match against a handle (`t.TryMatch(add, out var a, out var b)`) or a `Deconstruct` for C# patterns.
+1. **One term type.** egglog-python's `extract` returns an expression of the kind the host wrote, which it registers
+   again or destructures with the same calls as any expression (`get_callable_args(expr, Math.__add__)`, `match`).
+   Eggnog's `ExtractedTerm` destructures (`TryMatch` against a constructor handle) but converts to no `Term`, and the
+   reading API is its own: `Term` has almost none. What sets it apart is two facts about one extraction, each node's
+   cost under the cost model and its class in the scope; neither belongs on the term. Wanted: `Extract` returns a ground
+   `Term<TSort>` in a result that holds the cost and per-subterm cost and class lookups, the read side moves to `Term`,
+   and `ExtractedTerm` goes.
 2. **A transcript as egglog text.** `EGraph(save_egglog_string=True)` records the session as `.egg` source the egglog
    binary runs. Emitting egglog is not the closed front end, which parses it, and Eggnog already renders terms as
    egglog does. egglog-python's rule for what egglog cannot express carries over: once a session does something

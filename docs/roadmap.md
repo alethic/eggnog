@@ -172,10 +172,15 @@ of them fall on the same side of the gate; otherwise it is inconclusive, up to f
 The API items below come from egglog-python's
 ([`history/egglog-python-comparison.md`](history/egglog-python-comparison.md)).
 
-- **An extracted term as input.** `ExtractedTerm.ToTerm<TSort>()`, and a typed match against a constructor handle
-  (`TryMatch`, or a `Deconstruct` for C# patterns), so a host can write a result back or compile it without walking
-  `Head` and `Arguments`. Lands when every term the extraction tests extract converts back to a term whose `Make` is
-  `AreEqual` to the class it came from.
+- **One term type: extraction returns a `Term<TSort>`.** An `ExtractedTerm` is a term plus two facts about one
+  extraction: each node's cost under the cost model and its class in the scope. Neither belongs on the term, and
+  carrying them is what makes it a second type that converts to nothing and is tied to its scope. `Extract<TSort>`
+  returns a result holding a ground `Term<TSort>`, its `Cost`, and `CostOf(subterm)` and `ClassOf(subterm)` for the
+  callers that need them (subterms are shared instances, so they key the lookups). Containers and function values
+  become the primitive terms that make them (`VecOf`, `UnstableFn`). The read side of `ExtractedTerm` (`Head`,
+  arguments, `TryMatch`, `Mentions`) moves to `Term`, so a host reads a term it built as it reads one it extracted;
+  `ExtractedTerm` and `ExtractedArgument<T>` go. Lands when every term the extraction tests extract, written back with
+  `Make`, is `AreEqual` to the class it came from, and renders as its `ExtractedTerm` renders today.
 - **A transcript as egglog text.** An opt-in recorder that writes the session's definitions and commands as `.egg`
   source, and invalidates the transcript (reading it throws) once the session does what egglog cannot express: a C#
   lambda, a callback, a split, scopes beyond one push and pop chain. It makes a host's program runnable by the egglog
