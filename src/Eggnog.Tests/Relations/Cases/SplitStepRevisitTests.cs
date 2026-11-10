@@ -38,7 +38,7 @@ namespace Eggnog.Relations.Tests
                 new LiftTable(g.Edge, LiftTableKind.Relation),
                 new LiftTable(g.Path, LiftTableKind.Relation),
                 new LiftTable(g.Mark, LiftTableKind.Relation));
-            var driver = new SplitDriver([source], schedule, null, spec, SplitOptions.Default);
+            var driver = new SplitDriver([source], schedule, spec, SplitOptions.Default);
 
             try
             {
@@ -81,7 +81,7 @@ namespace Eggnog.Relations.Tests
             var source = new TestSplitSource(0, _ => [([b.Rep], 2)], (@case, i, _) => @case.StageUnion(b, i == 0 ? t : f));
             var schedule = new RecordingSchedule((@case, _, _) => @case.Saturate([loop], 8).Iterations > 1);
             var spec = new LiftSpec(new LiftTable(g.Edge, LiftTableKind.Relation));
-            var driver = new SplitDriver([source], schedule, null, spec, SplitOptions.Default);
+            var driver = new SplitDriver([source], schedule, spec, SplitOptions.Default);
 
             try
             {
@@ -133,7 +133,7 @@ namespace Eggnog.Relations.Tests
             });
 
             var schedule = new RecordingSchedule();
-            var driver = new SplitDriver([source], schedule, null, MarkSpec(g), SplitOptions.Default);
+            var driver = new SplitDriver([source], schedule, MarkSpec(g), SplitOptions.Default);
             try
             {
                 Assert.True(driver.Step(g.Root, 0, new SplitReport()));
@@ -172,7 +172,7 @@ namespace Eggnog.Relations.Tests
                 g.Assert(@case, g.Mark, t);
             });
 
-            var driver = new SplitDriver([source], new RecordingSchedule(), null, MarkSpec(g), SplitOptions.Default);
+            var driver = new SplitDriver([source], new RecordingSchedule(), MarkSpec(g), SplitOptions.Default);
             try
             {
                 var first = new SplitReport();

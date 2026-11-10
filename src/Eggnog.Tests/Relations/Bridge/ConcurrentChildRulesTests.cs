@@ -15,13 +15,16 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Rules in concurrent children: sixteen children of a frozen root run on eight threads through
-    /// <see cref="ConcurrentChildren"/>, each staging host writes (rows, terms and unions over root and child-local
-    /// ids) and saturating a rule set that derives relations, mints constructor terms, unions classes and raises a
-    /// lattice. Each child must end equal, modulo the renaming of the ids it minted, to a serial replay of the same
-    /// program in a fresh child of the same root; its <see cref="EGraphContext.CheckInvariants"/> must pass; and the
-    /// frozen root must be unchanged bit for bit: every row of every table in physical order with its timestamp, the
-    /// union-find's rows and parent array, and the root's version.
+    /// Rules in concurrent children: sixteen children of a frozen root run eight at a time, each on a task of its own as
+    /// a host drives them, each staging host writes (rows, terms and unions over root and child-local ids) and saturating
+    /// a rule set that derives relations, mints constructor terms, unions classes and raises a lattice. Each child must
+    /// end equal, modulo the renaming of the ids it minted, to a serial replay of the same program in a fresh child of
+    /// the same root; its <see cref="EGraphContext.CheckInvariants"/> must pass; and the frozen root must be unchanged
+    /// bit for bit: every row of every table in physical order with its timestamp, the union-find's rows and parent
+    /// array, and the root's version. Children with the default heuristics must also make every call into user code on
+    /// their own task's thread (<see cref="ChildThreadProbe"/>): the growth bound of
+    /// <see cref="ConcurrentChildrenTests.SiblingsWithTheDefaultHeuristicsRunOnTheirOwnThreadsOnly"/>, over more
+    /// children, programs and shapes.
     /// </summary>
     /// <remarks>
     /// Renaming. A child's ids come from its id blocks, so the same program mints different ids in different children.
@@ -48,8 +51,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Serial children (the default under a frozen parent) lease one thread each and run eight at a time; children
-        /// given two threads through <see cref="ContextOptions.Parallelism"/> lease two and run four at a time.
+        /// Eight at a time: serial children (the default under a frozen parent), which must make every call into user
+        /// code on their own task's thread; and children given two threads through
+        /// <see cref="ContextOptions.Parallelism"/>, which together may use sixteen.
         /// </summary>
         [Theory]
         [InlineData(1, 1)]
@@ -58,19 +62,19 @@ namespace Eggnog.Relations.Tests
         [InlineData(4, 1)]
         [InlineData(5, 2)]
         [InlineData(6, 2)]
-        public void SixteenChildrenOnEightThreadsEqualSerialReplays(int seed, int childThreads)
+        public void SixteenChildrenEightAtATimeEqualSerialReplays(int seed, int childThreads)
         {
             Run(seed, Children, Threads, childThreads, forceParallel: false, rounds: 2, freezeRaces: 0);
         }
 
         /// <summary>
-        /// The soak (<see cref="ConcurrentSoak"/>, <c>EGGNOG_CONCURRENT_SOAK</c>): each seed draws 2 to 32 children, a
-        /// budget of 2 to 8 threads, programs of 1 to 4 rounds, and in half the iterations children of two or four
-        /// threads. In half, the children's rule sets are forced onto the parallel executor; when the children also have
-        /// two or four threads, about a quarter of the iterations, the tasks of one child's run create its layers
-        /// concurrently, while at one thread the executor runs every task on the calling thread. In half, a relation is
-        /// defined on another thread while the root freezes, and the children write it, after the same race has run on
-        /// up to 400 fresh graphs.
+        /// The soak (<see cref="ConcurrentSoak"/>, <c>EGGNOG_CONCURRENT_SOAK</c>): each seed draws 2 to 32 children, of
+        /// which 2 to 8 run at a time (the root's degree of parallelism too), programs of 1 to 4 rounds, and in half the
+        /// iterations children of two or four threads. In half, the children's rule sets are forced onto the parallel
+        /// executor; when the children also have two or four threads, about a quarter of the iterations, the tasks of one
+        /// child's run create its layers concurrently, while at one thread the executor runs every task on the calling
+        /// thread, and the growth bound checks that it does. In half, a relation is defined on another thread while the
+        /// root freezes, and the children write it, after the same race has run on up to 400 fresh graphs.
         /// </summary>
         [Fact]
         public void Soak()
@@ -84,18 +88,19 @@ namespace Eggnog.Relations.Tests
                 var forceParallel = random.Next(2) == 0;
                 var rounds = random.Next(1, 5);
                 var freezeRaces = random.Next(2) == 0 ? 0 : random.Next(1, 401);
-                var draws = $"{children} children, {threads} threads, {childThreads} per child, forced parallel {forceParallel}, {rounds} rounds, {freezeRaces} freeze races";
+                var draws = $"{children} children, {threads} at a time, {childThreads} threads per child, forced parallel {forceParallel}, {rounds} rounds, {freezeRaces} freeze races";
                 return (draws, () => Run(seed, children, threads, childThreads, forceParallel, rounds, freezeRaces));
             });
         }
 
         /// <summary>
-        /// Runs <paramref name="children"/> children of a frozen root concurrently within a budget of
-        /// <paramref name="threads"/> threads, and compares each with a serial replay and the root with itself.
+        /// Runs <paramref name="children"/> children of a frozen root concurrently, each on a task of its own, at most
+        /// <paramref name="threads"/> at a time; compares each with a serial replay and the root with itself; and, when
+        /// the children are serial, checks that each made every call into user code on its own task's thread.
         /// </summary>
         /// <param name="seed">The seed of the root's facts and of every child's program.</param>
         /// <param name="children">The number of children.</param>
-        /// <param name="threads">The e-graph's degree of parallelism: the budget the children share.</param>
+        /// <param name="threads">The root's degree of parallelism, and the most children that run at the same time.</param>
         /// <param name="childThreads">Each child's degree of parallelism.</param>
         /// <param name="forceParallel">Whether every child's rule sets, and every replay's, run on the parallel executor
         /// whatever their size.</param>
@@ -110,7 +115,8 @@ namespace Eggnog.Relations.Tests
 
             var options = childThreads == 1 ? null : new ContextOptions { Parallelism = new ParallelHeuristics(childThreads) };
             var g = new ContextGraph(new ParallelHeuristics(threads));
-            var (rules, seen) = Rules(g);
+            var probe = new ChildThreadProbe(g);
+            var (rules, seen) = Rules(g, probe);
             var random = new Random(seed);
             var ids = Enumerable.Range(0, RootIds).Select(_ => g.Root.FreshId()).ToArray();
             for (var i = 0; i < RootIds; i++)
@@ -134,18 +140,39 @@ namespace Eggnog.Relations.Tests
                 foreach (var child in contexts)
                     child.Context.Database.ParallelRuleSetsOverride = true;
 
+            // Children of a frozen root, none an ancestor of another: each has a thread domain of its own.
+            Assert.True(g.Root.IsFrozen);
+            Assert.Equal(children, contexts.Select(c => c.Context.Domain).Distinct().Count());
+
             var transcripts = new string[children];
             var arrived = 0;
-            var degree = Math.Min(children, Math.Max(1, threads / childThreads));
-            ConcurrentChildren.Run(contexts, (child, i) =>
+            var atOnce = Math.Min(children, threads);
+            var errors = HostTasks.Run(children, atOnce, i =>
             {
-                // Best effort to overlap the first bodies of every worker (the thread pool may supply fewer in time).
+                var child = contexts[i];
+                if (childThreads == 1)
+                    probe.Enter(child);
+
+                // Best effort to overlap the first bodies of the tasks that run at once (the thread pool may supply
+                // fewer threads in time).
                 Interlocked.Increment(ref arrived);
-                SpinWait.SpinUntil(() => Volatile.Read(ref arrived) >= degree, TimeSpan.FromSeconds(1));
+                SpinWait.SpinUntil(() => Volatile.Read(ref arrived) >= atOnce, TimeSpan.FromSeconds(1));
                 var log = Replay(child, programs[i], rules);
                 child.CheckInvariants();
                 transcripts[i] = log + Normalize(g, child, (uint)rootIdBound, seen, extra);
             });
+
+            if (errors.Length > 0)
+                throw new AggregateException(errors);
+
+            // The growth bound: a serial child made every call into user code (its rules' probe calls, and the merges of
+            // the probe's lattice in its writes and rebuilds) on its own task's thread, whichever executor ran its rules.
+            if (childThreads == 1)
+            {
+                Assert.True(contexts.Sum(probe.CallsOf) > 0, "The probe saw no call.");
+                foreach (var child in contexts)
+                    Assert.Equal(0, probe.StraysOf(child));
+            }
 
             Assert.Equal(before, RootSnapshot(g));
             for (var i = 0; i < children; i++)
@@ -167,7 +194,6 @@ namespace Eggnog.Relations.Tests
             }
 
             Assert.Equal(before, RootSnapshot(g));
-            Assert.Equal(threads, g.EGraph.ParallelismBudget.Available);
         }
 
         /// <summary>
@@ -224,12 +250,15 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// The rule set, every rule query-determined (constructors, relations, a lattice; no table reads in actions):
         /// <c>edge → path</c>, transitivity, <c>path(x, y) → add(x, y)</c>, commutativity of <c>add</c>, two-cycles
-        /// collapse, <c>low</c> flows along edges, and <c>low(x) = v → mark(num(v))</c>; and six rules that write the
+        /// collapse, <c>low</c> flows along edges, and <c>low(x) = v → mark(num(v))</c>; six rules that write the
         /// relation <c>seen</c> from <c>edge</c>, <c>path</c>, <c>low</c> and <c>add</c>, so that on the parallel executor
-        /// the tasks of a child's first iteration create its layer of <c>seen</c> concurrently.
+        /// the tasks of a child's first iteration create its layer of <c>seen</c> concurrently; and two rules for the
+        /// growth bound, one that calls the probe's primitive on every <c>edge</c> and writes nothing, one that writes
+        /// <c>least(x) = 0</c> for every <c>edge(x, y)</c> into a lattice the probe's minimum merges. The transcripts
+        /// leave <c>least</c> out.
         /// </summary>
         /// <returns>The rules, and the relation <c>seen</c>.</returns>
-        static (EGraphRuleId[] Rules, FunctionId Seen) Rules(ContextGraph g)
+        static (EGraphRuleId[] Rules, FunctionId Seen) Rules(ContextGraph g, ChildThreadProbe probe)
         {
             var list = new List<EGraphRuleId> { g.EdgeToPath(), g.Transitive() };
 
@@ -289,6 +318,24 @@ namespace Eggnog.Relations.Tests
                 rb.Set(seen, [columns[column], RuleEntry.Const(g.Unit, g.UnitType)]);
                 list.Add(rb.Build());
             }
+
+            rb = g.EGraph.NewRule("probe", true);
+            rb.QueryTable(g.Edge, [rb.NewVar(ColumnTy.Id), rb.NewVar(ColumnTy.Id), rb.NewVar(g.UnitType)], false);
+            rb.CallExternalFunc(probe.Primitive, [], g.UnitType, static () => "probe");
+            list.Add(rb.Build());
+
+            var least = g.EGraph.AddTable(new FunctionConfig
+            {
+                Schema = [ColumnTy.Id, g.I64],
+                Default = DefaultVal.Fail,
+                Merge = MergeFn.Primitive(probe.Min, MergeFn.Old, MergeFn.New).AsLattice(),
+                Name = "least",
+            });
+            rb = g.EGraph.NewRule("least", true);
+            x = rb.NewVar(ColumnTy.Id);
+            rb.QueryTable(g.Edge, [x, rb.NewVar(ColumnTy.Id), rb.NewVar(g.UnitType)], false);
+            rb.Set(least, [x, RuleEntry.Const(g.Int(0), g.I64)]);
+            list.Add(rb.Build());
 
             return (list.ToArray(), seen);
         }

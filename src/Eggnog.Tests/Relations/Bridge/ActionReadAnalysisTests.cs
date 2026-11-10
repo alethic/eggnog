@@ -102,9 +102,8 @@ namespace Eggnog.Relations.Tests
             s.Graph.EGraph.FreeExternalFunction(freed);
             Assert.False(s.Determined(new ExternalInstr(freed, [], Y)));
 
-            // The bridge's own panics and the early stop read nothing.
+            // The bridge's own panics read nothing.
             Assert.False(new PanicFunction("p").ReadsTables);
-            Assert.False(new StopOnContradictionFunction().ReadsTables);
         }
 
         [Fact]

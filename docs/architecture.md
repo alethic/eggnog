@@ -583,11 +583,12 @@ runs on the scope's thread under the engine-call marker, so it cannot call into 
 scope.
 
 `RunOptions` bounds a run: `IterationLimit` (engine iterations, counted in every scope of the run, cases included),
-`TimeLimit`, `RowLimit` (rows in the own layers of the scope and its live cases), and for splits `CaseLimit`,
-`SplitDepthLimit` and `Lift` limits. The first three are off by default, so a `Saturate` runs until nothing changes, as
-egglog's does. Limits and cancellation are checked before every iteration and every split step; an iteration or a lift
-cannot be interrupted, so a run overshoots by at most one of them. Reaching a limit is not an error: the run stops
-soundly with fewer facts, and `RunReport.StopReason` says why.
+`TimeLimit`, `RowLimit` (rows in the own layers of the scope and its live cases, a case its contradiction stopped among
+them until the lift drops it, section 2.9), and for splits `CaseLimit`, `SplitDepthLimit` and `Lift` limits. The first
+three are off by default, so a `Saturate` runs until nothing changes, as egglog's does. Limits and cancellation are
+checked before every iteration and every split step; an iteration or a lift cannot be interrupted, so a run overshoots
+by at most one of them. Reaching a limit is not an error: the run stops soundly with fewer facts, and
+`RunReport.StopReason` says why.
 
 There is no iteration budget per case. To bound each case of a split, pass `Repeat(n, rules)` as the in-case schedule:
 `Split(rule, Repeat(n, horn, lattice))`. Under `Saturate` as the in-case schedule, one case that does not terminate
@@ -767,7 +768,16 @@ they have no model.
   the parent inside the theory's if-then-else constructor and `Union`s it with the original term.
 - **Contradicted cases.** A case whose rules derive `Contradiction` stops: it answers `IsContradictory` and identity
   members, `Run` returns at once with `StopReason = Contradiction`, and other reads and writes throw
-  `ScopeContradictedException`. Scopes beneath a stopped case answer as it does.
+  `ScopeContradictedException`. Scopes beneath a stopped case answer as it does. The case stops at the merge of the
+  iteration that derives the contradiction, after that iteration's search has run in full: every match of the iteration
+  runs, calling the user code of its rule and counting in the run's report, unless a failure stops the join first, and a
+  failure throws as in any run (section 2.12), so in a split step's case it faults the scope the run was called on. What
+  those matches write stays in the case until the lift drops it, and counts against `RowLimit` while the split step's
+  other cases run (section 2.6), so the run can stop at the limit before the lift. What they draw from the graph stays
+  after the case is dropped (section 2.12): the values they intern, containers of values included, keep their cells, by
+  which `ordering-min`, `ordering-max`, `set-get` and `multiset-pick` order values, and extraction breaks ties, in every
+  scope afterwards (section 2.2), and the ids they reserve count in `EGraph.Usage` and raise every id reserved after
+  them.
 
 ### 2.10 Extraction
 
@@ -1294,8 +1304,8 @@ entry's id in the parent.
 **Freeze and thread domains.** `Freeze` requires a frozen parent (or none). It rebuilds, compacts, builds rebuild and
 plan indexes, seals staging, compresses or flattens the union-find, builds every view, and publishes. A context that is
 not frozen shares one thread domain (`ThreadAffinityGuard`) with the descendants created under it; each child of a
-frozen context gets its own. A second thread entering a domain is refused rather than made to wait.
-`ConcurrentChildren` runs children of frozen contexts side by side within the graph's `ParallelismBudget`. A chain may
+frozen context gets its own. A second thread entering a domain is refused rather than made to wait. Children of frozen
+contexts run side by side, each on the thread its caller drives it from (section 3.10). A chain may
 be any depth, as egglog's stack of pushes may: a `LayeredSubset` keeps a 64-bit mask of its nonempty layers below 64
 and finds deeper ones by their per-layer entries, and a frame's dense refinement of a layer past 255, which its entry's
 layer byte does not hold, is a node the frame owns. Every walk over the levels of a chain (a rebuild, a clean test, a
@@ -1344,8 +1354,12 @@ The library's deletion (section 2.5) is the engine's, and the library refuses be
 refuse. Subsumption is not a retraction: a sticky value change of the row's subsumption cell, merged like an output
 (decision 1).
 
-**Contradiction.** A context created as a case stops when the contradiction relation gets a row: its stop flag is set,
-the rebuild loop checks it, and a stopped case is skipped by the lift and disposed.
+**Contradiction.** A context created as a case stops when the contradiction relation gets a row: its stop flag is set
+when a merge applies the row (the merge after an iteration's search, or a write's flush) or the row becomes visible from
+an ancestor (at the context's creation, in a catch-up, or when its parent stops), the rebuild loop checks it, and a
+stopped case is skipped by the lift and disposed. A rule's write of the row is an ordinary write, so the search that
+derives it runs in full, and what that search interns and the ids it reserves stay in the graph's pools and id counter
+after the case is disposed (section 2.9).
 
 **What the root pays.** A few per-call, per-batch, per-probe and per-refinement branches, freeze-time and
 child-creation work (each child, a query's transient child and a case included, also allocates its empty container
@@ -1381,9 +1395,10 @@ row, per staged row or per find, and the root's allocation probes pin this.
 Parallelism follows egglog's thresholds (table operations above 20,000 rows, rebuilds above 10,000, database-level
 operations above 10,000) with a configurable degree of parallelism in place of rayon's pool (`ParallelHeuristics`),
 using `Parallel.For` and the thread pool. A graph's degree of parallelism also fixes its tables' shard counts. Children
-of frozen contexts add concurrency across contexts. The engine's `ConcurrentChildren` runs several of them at once
-within the graph's `ParallelismBudget`, so that they do not oversubscribe the machine; the library leaves that
-concurrency to its caller's threads.
+of frozen contexts add concurrency across contexts, on their callers' threads, in the engine as in the library. A child
+of a frozen context is serial unless its options give it threads (`ContextOptions.Parallelism`), so siblings driven by
+`N` threads run on those `N` threads and queue no work of their own on the thread pool; siblings given threads of their
+own may together use more than the root's, since nothing bounds parallelism across contexts.
 
 ---
 
@@ -1481,8 +1496,10 @@ documentation).
 
 Inheritance and parallelism have their own equivalence tests: watermark inheritance on and off must give equal views
 with no more matches, and serial and parallel runs must give the same facts. Concurrent children of a frozen context
-(rule runs, storage programs, library queries) must each equal a serial replay; the default tests use fixed seeds, and
-an opt-in soak (`EGGNOG_CONCURRENT_SOAK`) draws fresh seeds, child counts and thread counts.
+(rule runs, storage programs, library queries), each driven from a task or thread of its own as a host drives them,
+must each equal a serial replay, and serial children running rules must make every call into user code on their own
+task's thread (the thread-pool growth bound); the default tests use fixed seeds, and an opt-in soak
+(`EGGNOG_CONCURRENT_SOAK`) draws fresh seeds, child counts and thread counts.
 
 ### 5.3 Conformance programs
 

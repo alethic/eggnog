@@ -14,8 +14,8 @@ namespace Eggnog.Relations
         public int CasesOpened { get; set; }
 
         /// <summary>
-        /// Gets or sets the number of requests not taken: covered by a live record, over a limit, not wanted by the
-        /// demand, or declined by their source.
+        /// Gets or sets the number of requests not taken: covered by a live record, over a limit, or declined by their
+        /// source.
         /// </summary>
         public int SplitsSkipped { get; set; }
 

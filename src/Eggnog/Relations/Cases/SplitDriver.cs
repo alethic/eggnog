@@ -20,7 +20,6 @@ namespace Eggnog.Relations
     /// from a source it shares with this one covers the request, and a record of an unrelated source at the same index
     /// in another driver's list does not) over the same cells; or by another request of the same step;</item>
     /// <item>skips a request over the limits (<see cref="SplitOptions.CaseLimit"/>, at least one case);</item>
-    /// <item>skips a request the demand rejects, before any case exists;</item>
     /// <item>opens the cases: a <see cref="CaseSet"/> recorded on the scope, then one case per index, each assumed by its
     /// source;</item>
     /// <item><b>phase A</b>: for every live record this driver opened in the scope, in creation order (those its earlier
@@ -37,8 +36,8 @@ namespace Eggnog.Relations
     /// what the cases derive from the scope's new facts is lifted, and a case those facts make vacuous is dropped; the
     /// lift memo makes a record whose cases and scope did not change cost one signature check. A step reports a change
     /// only when it opened cases or a lift changed the scope, never for in-case work, so a schedule that repeats it
-    /// until nothing changes ends. The driver never holds the scope's thread domain while it calls a source, the demand
-    /// or the schedule, which may create children (nested splits). Exceptions from a source or the schedule propagate;
+    /// until nothing changes ends. The driver never holds the scope's thread domain while it calls a source or the
+    /// schedule, which may create children (nested splits). Exceptions from a source or the schedule propagate;
     /// the records opened so far stay for <see cref="DisposeRecords"/>. After every lift the cases found vacuous are
     /// disposed; a lift whose cases are all vacuous contradicts the scope, and the step ends there.
     /// </para>
@@ -53,7 +52,6 @@ namespace Eggnog.Relations
 
         readonly ISplitSource[] sources;
         readonly ICaseSchedule inCase;
-        readonly ISplitDemand? demand;
         readonly LiftSpec spec;
         readonly SplitOptions options;
 
@@ -62,11 +60,10 @@ namespace Eggnog.Relations
         /// </summary>
         /// <param name="sources">The split sources; a request's <see cref="SplitKey.Source"/> indexes this list.</param>
         /// <param name="inCase">The in-case schedule.</param>
-        /// <param name="demand">Decides which splits are worth taking; <c>null</c> takes every one.</param>
         /// <param name="spec">The tables to lift.</param>
         /// <param name="options">The limits and case options.</param>
         /// <exception cref="ArgumentException">A source is null.</exception>
-        public SplitDriver(IReadOnlyList<ISplitSource> sources, ICaseSchedule inCase, ISplitDemand? demand, LiftSpec spec, SplitOptions options)
+        public SplitDriver(IReadOnlyList<ISplitSource> sources, ICaseSchedule inCase, LiftSpec spec, SplitOptions options)
         {
             ArgumentNullException.ThrowIfNull(sources);
             ArgumentNullException.ThrowIfNull(inCase);
@@ -78,7 +75,6 @@ namespace Eggnog.Relations
 
             CaseSet.CheckCaseOptions(options.CaseOptions, nameof(options));
             this.inCase = inCase;
-            this.demand = demand;
             this.spec = spec;
             this.options = options;
         }
@@ -122,7 +118,7 @@ namespace Eggnog.Relations
             foreach (var source in sources)
                 source.FindRequests(scope, requests, report);
 
-            // 2-5. Filter, then open the cases of each request taken.
+            // 2-4. Filter, then open the cases of each request taken.
             var opened = 0;
             var taken = new HashSet<SplitKey>();
             foreach (var request in requests)
@@ -132,12 +128,6 @@ namespace Eggnog.Relations
                     throw new InvalidOperationException($"A split request names source {key.Source}; the driver has {sources.Length}.");
 
                 if (taken.Contains(key) || IsCovered(scope, sources[key.Source], key.Values) || request.CaseCount < 1 || request.CaseCount > options.CaseLimit)
-                {
-                    report.SplitsSkipped++;
-                    continue;
-                }
-
-                if (demand is not null && demand.Wants(scope, request) == false)
                 {
                     report.SplitsSkipped++;
                     continue;
@@ -158,7 +148,7 @@ namespace Eggnog.Relations
             if (records.Count == 0)
                 return changed;
 
-            // 6. Phase A: run each case without nested splits, then lift (lift before deepening).
+            // 5. Phase A: run each case without nested splits, then lift (lift before deepening).
             foreach (var record in records)
             {
                 if (record.Cases.Cases.Count == 0)
@@ -169,7 +159,7 @@ namespace Eggnog.Relations
                     return changed;
             }
 
-            // 7. Phase B: deepen into the live cases, and lift again when that changed something.
+            // 6. Phase B: deepen into the live cases, and lift again when that changed something.
             if (depth + 1 >= options.DepthLimit)
                 return changed;
 

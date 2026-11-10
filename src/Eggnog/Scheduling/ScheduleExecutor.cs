@@ -512,10 +512,10 @@ namespace Eggnog
 
         /// <summary>
         /// Gets the run's driver of a split node, made on first use and kept for the run: its sources are the node's rules'
-        /// sources at their positions (<see cref="SplitRule.SourceAt"/>), its in-case schedule a
-        /// <see cref="ScheduleCaseRunner"/> of the node's, its lift spec the graph's, with no demand (the rules' bodies
-        /// decide which keys split), and the run's limits. Cases are made with <c>IsCase</c>, <c>StopOnContradiction</c>,
-        /// and the graph's <see cref="EGraph.InheritWatermarks"/>.
+        /// sources at their positions (<see cref="SplitRule.SourceAt"/>), whose bodies decide which keys split, its
+        /// in-case schedule a <see cref="ScheduleCaseRunner"/> of the node's, its lift spec the graph's, and the run's
+        /// limits. Cases are made with <c>IsCase</c>, <c>StopOnContradiction</c>, and the graph's
+        /// <see cref="EGraph.InheritWatermarks"/>.
         /// </summary>
         /// <param name="node">The split node.</param>
         /// <returns>The driver.</returns>
@@ -544,7 +544,7 @@ namespace Eggnog
                 CaseOptions = caseOptions,
             };
 
-            driver = new Relations.SplitDriver(sources, new ScheduleCaseRunner(this, node.InCase), null, LiftSpecBuilder.Build(graph), options);
+            driver = new Relations.SplitDriver(sources, new ScheduleCaseRunner(this, node.InCase), LiftSpecBuilder.Build(graph), options);
             drivers.Add(node, driver);
             return driver;
         }

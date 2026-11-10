@@ -11,12 +11,11 @@ each with what would reopen it.
 ## Fidelity with egglog
 
 Fidelity with upstream egglog comes first. A way an egglog feature behaves differently here is a defect to remove,
-unless .NET makes it unavoidable, and then it is recorded as such; an addition (scopes, case splits, host queries,
-partial and variadic user primitives) may restrict only itself, never an egglog feature, and takes no name or form egglog
-gives a meaning. The root, and any scope without live descendants, behaves as egglog does; restrictions apply only in
-child scopes and splits, where soundness needs them. Each item lands when egglog's own tests of the feature, ported to
-the C# API, pass; an item that touches the engine's root paths also passes the root gate ("Benchmarks and timed
-gates").
+unless .NET makes it unavoidable, and then it is recorded as such; an addition (scopes, case splits, host queries) may
+restrict only itself, never an egglog feature, and takes no name or form egglog gives a meaning. The root, and any scope
+without live descendants, behaves as egglog does; restrictions apply only in child scopes and splits, where soundness
+needs them. Each item lands when egglog's own tests of the feature, ported to the C# API, pass; an item that touches the
+engine's root paths also passes the root gate ("Benchmarks and timed gates").
 
 - **Table reads in rule heads.** egglog 3.0.0 allows lookups in the heads of `:naive` and `:unsafe-seminaive` rules; here
   heads never read but in a full rule callback, egglog's `rust_rule_full`, or a primitive of full access, a function
@@ -100,8 +99,9 @@ shift and the `BigRat` `pow` past `int.MaxValue` bits, which no .NET `BigInteger
   pinned by `ScopeChurnTests`). At 100 queries a second with 64 cases the clock ends a graph in under a day. The work is
   to find which of the nine advances a case needs.
 - **Parallelism soaks.** One-hour `EGGNOG_CONCURRENT_SOAK` runs on x64 (net8.0, net10.0) and on an arm64 CI runner,
-  which the owner runs by hand; the item closes when they come back clean. They widen the concurrent-children check to
-  fresh seeds; the targeted tests pin the known races, and nothing waits on the soaks.
+  which the owner runs by hand; the item closes when they come back clean. They widen the concurrent-children check
+  (children of a frozen root driven by host threads, each equal to a serial replay, with the thread-pool growth bound)
+  to fresh seeds; the targeted tests pin the known races, and nothing waits on the soaks.
 - **Cancelling split-step lifts.** A cancellation token checked between lift rounds, so a run overshoots `TimeLimit` by
   at most one iteration or one lift round. Worth doing if one lift's p99, from the library-path timings, exceeds 10% of
   a typical `TimeLimit`.

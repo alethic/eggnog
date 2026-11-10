@@ -48,9 +48,10 @@ namespace Eggnog
         /// <summary>
         /// Gets the most rows the run may leave held by the top-level scope and by the run's live cases themselves (not
         /// the rows they read from their ancestors), as estimated from row counts, every table and the union-find
-        /// included. <c>null</c>, the default, for no limit; must not be negative. Checked before every iteration: once
-        /// exceeded, the run stops with <see cref="RunStopReason.RowLimit"/>, so it overshoots by at most one
-        /// iteration.
+        /// included. A case its contradiction stopped is among them, with what its last iteration wrote, until its split
+        /// step's lift drops it. <c>null</c>, the default, for no limit; must not be negative. Checked before every
+        /// iteration: once exceeded, the run stops with <see cref="RunStopReason.RowLimit"/>, so it overshoots by at
+        /// most one iteration.
         /// </summary>
         public long? RowLimit { get; init; }
 

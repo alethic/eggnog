@@ -269,11 +269,6 @@ namespace Eggnog.Relations
                     break;
                 case RuleActionKind.Insert:
                     rule.Insert(Table, BuildRow(bindings, entries, Math, default, Entry, hasOutput: false));
-
-                    // A head write into the contradiction function stops a case's search early (so does a lookup-or-insert).
-                    if (bindings.TryGetStop(Table, out var stop))
-                        rule.CallExternal(stop, ReadOnlySpan<QueryEntry>.Empty);
-
                     break;
                 case RuleActionKind.Remove:
                     rule.Remove(Table, bindings.ConvertAll(entries));
@@ -501,12 +496,6 @@ namespace Eggnog.Relations
             var keys = bindings.ConvertAll(entries);
             var result = rule.LookupOrInsert(Table, keys, defaults, new ColumnId(math.OutputColumn));
             bindings.Bind(Result, result);
-
-            // A head write of the contradiction function's row stops a case's search early, as an insert does (the rule
-            // layer writes its contradiction relation through a lookup-or-insert); a lookup that finds the row held
-            // stops it too, which is no change, since the row's merge stops the case anyway.
-            if (bindings.TryGetStop(Table, out var stop))
-                rule.CallExternal(stop, ReadOnlySpan<QueryEntry>.Empty);
         }
 
         /// <summary>

@@ -96,8 +96,8 @@ namespace Eggnog.Relations
         /// Gets when the context's own operations (rule sets, rebuilds, merges, index builds) go parallel, and on how
         /// many threads: the root's are the e-graph's; a child's are <see cref="ContextOptions.Parallelism"/> when
         /// given, otherwise <see cref="ParallelHeuristics.Serial"/> for a child of a frozen context (siblings may run
-        /// concurrently, <see cref="ConcurrentChildren"/>) and its parent's for a child of a context that is not frozen
-        /// (the two never run concurrently). Fixed at creation.
+        /// concurrently, one host thread each) and its parent's for a child of a context that is not frozen (the two
+        /// never run concurrently). Fixed at creation.
         /// </summary>
         public ParallelHeuristics Parallelism => context.Database.Parallelism;
 

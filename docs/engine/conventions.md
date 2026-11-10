@@ -148,5 +148,5 @@ soaks of `ConcurrentChildRulesTests` and `ConcurrencyTests` catch the first with
 of `ConcurrentChildRulesTests` reaches the second, which needs the defining thread to be preempted for the whole of a
 freeze, so a one-minute soak catches it in some runs and not in others; soak longer to rely on it. The rules soak
 creates layers concurrently only in children of two or more threads whose rule sets are forced onto the parallel
-executor; `ChildParallelRuleSetTests.AForcedChildRunsItsRulesOnTwoThreadsAtOnce` fails if a child ignores the force,
-which would otherwise leave every concurrent test green and the soak without that reach.
+executor; `ChildForcedParallelRuleSetTests.AForcedChildRunsItsRulesOnTwoThreadsAtOnce` fails if a child ignores the
+force, which would otherwise leave every concurrent test green and the soak without that reach.
