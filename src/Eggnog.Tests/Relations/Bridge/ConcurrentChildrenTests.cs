@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -17,14 +18,15 @@ namespace Eggnog.Relations.Tests
     /// </summary>
     /// <remarks>
     /// The class runs in <see cref="ThreadPoolProbeCollection"/>: its tasks must meet at barriers within a bounded wait,
-    /// and the growth bound raises the pool's minimum while it runs, which only a test that runs alone may do.
+    /// and the growth bound raises the pool's minimum and counts the work items the whole pool completes while it runs,
+    /// which only a test that runs alone may do.
     /// </remarks>
     [Collection(ThreadPoolProbeCollection.Name)]
     public class ConcurrentChildrenTests
     {
 
         /// <summary>
-        /// How long tasks wait for each other at a barrier.
+        /// How long tasks wait for each other at a barrier, and the test for the thread pool to go idle.
         /// </summary>
         static readonly TimeSpan Patience = TimeSpan.FromSeconds(60);
 
@@ -204,7 +206,14 @@ namespace Eggnog.Relations.Tests
                 child.Dispose();
         }
 
-        const int Siblings = 6;
+        const int Siblings = 8;
+
+        /// <summary>
+        /// How many of the siblings have their rule sets forced onto the parallel executor; the others run theirs on
+        /// the serial executor, where the default heuristics put them.
+        /// </summary>
+        const int Forced = 6;
+
         const int Sources = 110;
         const int Targets = 100;
 
@@ -215,35 +224,68 @@ namespace Eggnog.Relations.Tests
         const int MinPoolThreads = 64;
 
         /// <summary>
+        /// How long the thread pool must complete and queue no work item before the siblings start: longer than the
+        /// work a test host gives the pool around a test's start takes to finish. A dotnet test session reports each
+        /// test over a pipe, and its log writes leave timers that fire a second later.
+        /// </summary>
+        static readonly TimeSpan IdlePool = TimeSpan.FromSeconds(1.5);
+
+        /// <summary>
+        /// How long the thread pool must complete and queue no work item after the siblings ran before their count is
+        /// read: a work item a pool thread ran counts only once that thread is back in the pool, which can be after the
+        /// task waiting for it has resumed.
+        /// </summary>
+        static readonly TimeSpan Settle = TimeSpan.FromMilliseconds(100);
+
+        /// <summary>
+        /// How many times the siblings run at most: the pool's count must keep within the bound in one of the runs.
+        /// </summary>
+        const int Runs = 3;
+
+        /// <summary>
         /// The thread-pool growth bound: siblings of a frozen root with the default heuristics, each driven by a task of
         /// its own, do all their work on their own task's thread, so <c>N</c> siblings use <c>N</c> threads and fan
         /// nothing out to the thread pool. The root has four threads, on which a sibling that took the root's heuristics
-        /// would fan its work out: each sibling's rule sets are forced onto the parallel executor
-        /// (<see cref="Database.ParallelRuleSetsOverride"/>), and each holds more rows of its own than
-        /// <see cref="ParallelHeuristics.DbLevelThreshold"/>, above which a database with threads goes parallel unforced,
-        /// so the work is as large as work the root's heuristics fan out. The siblings meet at a barrier and then run side
-        /// by side, each saturating the same rules over 11,000 edges of its own: a rule that calls the probe primitive on
-        /// every match, and a lattice that the probe's minimum merges, in the merges after the rules and in the rebuild
-        /// after a union (<see cref="ChildThreadProbe"/>). While they run, the pool's minimum is raised above what they
-        /// could queue, so a work item a sibling queued would start on a pool thread at once and show as a stray. The
-        /// control, a sibling given four threads through <see cref="ContextOptions.Parallelism"/>, shows that the probe
-        /// sees fan-out: its two rules meet at a barrier, so one of them runs on another thread.
+        /// would fan its work out. Six of the eight siblings have their rule sets forced onto the parallel executor
+        /// (<see cref="Database.ParallelRuleSetsOverride"/>), and the other two run theirs on the serial executor,
+        /// where the default heuristics put them; each holds more rows of its own than
+        /// <see cref="ParallelHeuristics.DbLevelThreshold"/>, above which a database with threads goes parallel
+        /// unforced, so the work is as large as work the root's heuristics fan out. The siblings meet at a barrier and
+        /// then run side by side, each saturating the same rules over 11,000 edges of its own: a rule that calls the
+        /// probe primitive on every match, and a lattice that the probe's minimum merges, in the merges after the rules
+        /// and in the rebuild after a union (<see cref="ChildThreadProbe"/>). While they run, the pool's minimum is
+        /// raised above what they could queue, so that a work item a sibling queued can start on a pool thread without
+        /// the pool's injection delay and show as a stray, and the work items the pool completes are counted: the
+        /// siblings' own tasks, and nothing more. The control, a sibling given four threads through
+        /// <see cref="ContextOptions.Parallelism"/>, shows that the probe sees fan-out: its two rules meet at a
+        /// barrier, so one of them runs on another thread.
         /// </summary>
         /// <remarks>
-        /// What it proves: every call the engine makes into user code for a default sibling, its rules' actions and
-        /// primitives on the serial and the parallel executor alike, arrives on the sibling's task thread while the
-        /// siblings run at the same time, so a sibling whose run queued work on the pool fails the test on a machine of
-        /// few processors as of many. That takes free pool threads: a queued worker that starts after the sibling waiting
-        /// for it has run every item itself runs nothing, and without the raised minimum the siblings would hold every
-        /// thread a small machine's pool has, which grows too slowly to start a worker in time. A child's merges, the
-        /// rebuild's included, are serial whatever its heuristics, so the merge function's calls cannot stray today; the
-        /// probe counts them so that a merge given a parallel arm would show. What it does not prove: that work which
-        /// calls no user code (index builds, compaction, a rebuild's table operations, which leave the merge function to
-        /// the merge after them) stays on the task's thread, for which the serial heuristics the test asserts the siblings
-        /// have are the only evidence; anything about siblings given threads of their own, which have no global bound; or
-        /// how many siblings a host should run at once, which is the host's choice. It counts no thread-pool work items:
-        /// while it runs, the test process's own background work runs as many of them as the siblings would queue if they
-        /// fanned out.
+        /// What it proves: while the siblings run at the same time, every call the engine makes into user code for a
+        /// default sibling (its rules' actions and primitives, on the serial and the parallel executor alike, and its
+        /// merges) arrives on the sibling's task thread, and the siblings queue no work item on the thread pool: the
+        /// pool completes no work item but their eight tasks (a task that <see cref="Task.WaitAll(Task[])"/> runs
+        /// inline on the waiting thread counts as one too). The two checks see fan-out differently. A stray names the
+        /// sibling whose call left its thread, but only when a queued worker starts before the sibling waiting for it
+        /// has run every item itself, which takes free pool threads: without the raised minimum the siblings would hold
+        /// every thread a small machine's pool has, which grows too slowly to start a worker in time, and on a busy
+        /// machine a worker can still start too late. The count sees the work items a sibling queued, whichever thread
+        /// ran them, and so also fan-out of work that calls no user code (index builds, compaction, a rebuild's table
+        /// operations). A work item a pool thread ran counts only once that thread is back in the pool, which can be
+        /// after the task waiting for it has resumed, so the count is read once it covers the siblings' tasks and the
+        /// pool has then been idle for <see cref="Settle"/>; on a busy machine an item whose thread is kept from the
+        /// pool for longer than that can still be missed. It counts the whole process's pool, so the siblings start
+        /// only once the pool has completed and queued nothing for <see cref="IdlePool"/>, by when the work a test host
+        /// gave the pool around the test's start has run. A host's timers can still complete work items while the
+        /// siblings run (a dotnet test session's telemetry completes one every ten seconds, and about ten at once when
+        /// it uploads), so a count over the bound is taken again with fresh siblings, up to <see cref="Runs"/> runs in
+        /// all: siblings that queue work queue it in every run, while a host's timer fires in few of them. A child's
+        /// merges, the rebuild's included, are serial whatever its heuristics, so the merge function's calls cannot
+        /// stray today; the probe counts them so that a merge given a parallel arm would show. What it does not prove:
+        /// that work which calls no user code (index builds, compaction, a rebuild's table operations) stays off a
+        /// thread of its own (a long-running task, a dedicated thread), which is no pool work item; anything about
+        /// siblings given threads of their own, which have no global bound; or how many siblings a host should run at
+        /// once, which is the host's choice.
         /// </remarks>
         [Fact]
         public void SiblingsWithTheDefaultHeuristicsRunOnTheirOwnThreadsOnly()
@@ -274,60 +316,30 @@ namespace Eggnog.Relations.Tests
             var targets = Enumerable.Range(0, Targets).Select(_ => g.Root.FreshId()).ToArray();
             g.Root.Freeze();
 
-            var siblings = Enumerable.Range(0, Siblings).Select(_ => g.Root.CreateChild()).ToArray();
-            Assert.All(siblings, s => Assert.Same(ParallelHeuristics.Serial, s.Parallelism));
-            foreach (var sibling in siblings)
-                sibling.Context.Database.ParallelRuleSetsOverride = true;
-
             // Room for every worker the siblings could queue at the root's four threads, started without the pool's
-            // injection delay; restored before the asserts.
+            // injection delay; restored before the control.
             ThreadPool.GetMinThreads(out var minWorkers, out var minIo);
-            Assert.True(ThreadPool.SetMinThreads(Math.Max(minWorkers, MinPoolThreads), minIo));
-            using var start = new Barrier(Siblings);
-            var met = new bool[Siblings];
-            var sizes = new long[Siblings];
+            Assert.SkipUnless(ThreadPool.SetMinThreads(Math.Max(minWorkers, MinPoolThreads), minIo), $"The thread pool refuses a minimum of {MinPoolThreads} worker threads (a forced minimum or maximum, or the Windows thread pool).");
+            EGraphContext[] siblings;
+            long workItems;
             try
             {
-                Task.WaitAll(siblings.Select((sibling, i) => Task.Run(() =>
+                (siblings, workItems) = RunSiblings();
+                for (var run = 1; workItems > Siblings && run < Runs; run++)
                 {
-                    probe.Enter(sibling);
-                    met[i] = start.SignalAndWait(Patience);
-                    foreach (var s in sources)
-                        foreach (var t in targets)
-                            g.Assert(sibling, g.Edge, s, t);
+                    foreach (var sibling in siblings)
+                        sibling.Dispose();
 
-                    // A short chain among the targets, different per sibling, so the transitive rule has a few iterations
-                    // of work.
-                    for (var j = 0; j < 8; j++)
-                        g.Assert(sibling, g.Edge, targets[(j * (i + 3)) % Targets], targets[(j * (i + 3) + i + 1) % Targets]);
-
-                    sibling.FlushUpdates();
-                    sizes[i] = sibling.Context.Database.TotalSizeEstimate;
-                    Assert.False(sibling.Saturate(rules, 64).HitLimit);
-
-                    // A union of two sources, whose rebuild merges their rows of the lattice.
-                    var merges = probe.MergesOf(sibling);
-                    sibling.StageUnion(sources[0], sources[1 + i]);
-                    sibling.FlushUpdates();
-                    Assert.True(probe.MergesOf(sibling) > merges, $"sibling {i}'s rebuild merged nothing through the probe");
-                    Assert.False(sibling.Saturate(rules, 64).HitLimit);
-                })).ToArray());
+                    (siblings, workItems) = RunSiblings();
+                }
             }
             finally
             {
                 ThreadPool.SetMinThreads(minWorkers, minIo);
             }
 
-            Assert.All(met, Assert.True);
-            for (var i = 0; i < Siblings; i++)
-            {
-                var sibling = siblings[i];
-                Assert.True(sizes[i] > ParallelHeuristics.DbLevelThreshold, $"sibling {i} holds {sizes[i]} rows of its own");
-                Assert.True(probe.CallsOf(sibling) - probe.MergesOf(sibling) >= Sources * Targets, $"sibling {i}: {probe.CallsOf(sibling)} calls, {probe.MergesOf(sibling)} merges");
-                Assert.True(probe.MergesOf(sibling) > 0, $"sibling {i} merged nothing through the probe");
-                Assert.Equal(0, probe.StraysOf(sibling));
-                sibling.CheckInvariants();
-            }
+            // Each sibling's task is one work item, whether a pool thread ran it or Task.WaitAll ran it inline.
+            Assert.True(workItems <= Siblings, $"the thread pool completed more than {Siblings} work items in each of {Runs} runs of the siblings, {workItems} in the last");
 
             // The control: a sibling given four threads runs two rules on two threads at once, which the probe sees.
             using var meet = new Barrier(2);
@@ -362,6 +374,94 @@ namespace Eggnog.Relations.Tests
             Assert.InRange(probe.StraysOf(control), 1, 2);
             foreach (var sibling in siblings)
                 sibling.Dispose();
+
+            // Runs the siblings once the pool is idle and checks each; returns them and the work items the pool
+            // completed while they ran.
+            (EGraphContext[] Children, long WorkItems) RunSiblings()
+            {
+                var children = Enumerable.Range(0, Siblings).Select(_ => g.Root.CreateChild()).ToArray();
+                Assert.All(children, c => Assert.Same(ParallelHeuristics.Serial, c.Parallelism));
+                for (var i = 0; i < Forced; i++)
+                    children[i].Context.Database.ParallelRuleSetsOverride = true;
+
+                using var start = new Barrier(Siblings);
+                var met = new bool[Siblings];
+                var sizes = new long[Siblings];
+                Assert.True(WaitForIdlePool(IdlePool, Patience), $"the thread pool was not idle for {IdlePool} within {Patience}");
+                var completed = ThreadPool.CompletedWorkItemCount;
+                Task.WaitAll(children.Select((sibling, i) => Task.Run(() =>
+                {
+                    probe.Enter(sibling);
+                    met[i] = start.SignalAndWait(Patience);
+                    foreach (var s in sources)
+                        foreach (var t in targets)
+                            g.Assert(sibling, g.Edge, s, t);
+
+                    // A short chain among the targets, different per sibling, so the transitive rule has a few
+                    // iterations of work.
+                    for (var j = 0; j < 8; j++)
+                        g.Assert(sibling, g.Edge, targets[(j * (i + 3)) % Targets], targets[(j * (i + 3) + i + 1) % Targets]);
+
+                    sibling.FlushUpdates();
+                    sizes[i] = sibling.Context.Database.TotalSizeEstimate;
+                    Assert.False(sibling.Saturate(rules, 64).HitLimit);
+
+                    // A union of two sources, whose rebuild merges their rows of the lattice.
+                    var merges = probe.MergesOf(sibling);
+                    sibling.StageUnion(sources[0], sources[1 + i]);
+                    sibling.FlushUpdates();
+                    Assert.True(probe.MergesOf(sibling) > merges, $"sibling {i}'s rebuild merged nothing through the probe");
+                    Assert.False(sibling.Saturate(rules, 64).HitLimit);
+                })).ToArray());
+
+                // A work item a pool thread ran counts only once that thread is back in the pool, which can be after
+                // the task waiting for it has resumed, so the count is read once it covers the siblings' own tasks and
+                // the pool has then been idle for Settle.
+                Assert.True(SpinWait.SpinUntil(() => ThreadPool.CompletedWorkItemCount - completed >= Siblings && ThreadPool.PendingWorkItemCount == 0, Patience), $"the thread pool did not count the siblings' {Siblings} tasks with nothing queued within {Patience}");
+                Assert.True(WaitForIdlePool(Settle, Patience), $"the thread pool was not idle for {Settle} within {Patience} after the siblings ran");
+                completed = ThreadPool.CompletedWorkItemCount - completed;
+
+                Assert.All(met, Assert.True);
+                for (var i = 0; i < Siblings; i++)
+                {
+                    var sibling = children[i];
+                    Assert.True(sizes[i] > ParallelHeuristics.DbLevelThreshold, $"sibling {i} holds {sizes[i]} rows of its own");
+                    Assert.True(probe.CallsOf(sibling) - probe.MergesOf(sibling) >= Sources * Targets, $"sibling {i}: {probe.CallsOf(sibling)} calls, {probe.MergesOf(sibling)} merges");
+                    Assert.True(probe.MergesOf(sibling) > 0, $"sibling {i} merged nothing through the probe");
+                    Assert.True(probe.StraysOf(sibling) == 0, $"sibling {i} made {probe.StraysOf(sibling)} calls into user code off its task's thread");
+                    sibling.CheckInvariants();
+                }
+
+                return (children, completed);
+            }
+        }
+
+        /// <summary>
+        /// Waits until the thread pool has completed no work item and held none queued for <paramref name="span"/>.
+        /// </summary>
+        /// <param name="span">How long the pool must stay idle.</param>
+        /// <param name="limit">How long to wait at most.</param>
+        /// <returns><c>false</c> when <paramref name="limit"/> passed first.</returns>
+        static bool WaitForIdlePool(TimeSpan span, TimeSpan limit)
+        {
+            var waited = Stopwatch.StartNew();
+            var idle = Stopwatch.StartNew();
+            var completed = ThreadPool.CompletedWorkItemCount;
+            while (idle.Elapsed < span)
+            {
+                if (waited.Elapsed > limit)
+                    return false;
+
+                Thread.Sleep(1);
+                var now = ThreadPool.CompletedWorkItemCount;
+                if (now != completed || ThreadPool.PendingWorkItemCount != 0)
+                {
+                    completed = now;
+                    idle.Restart();
+                }
+            }
+
+            return true;
         }
 
     }

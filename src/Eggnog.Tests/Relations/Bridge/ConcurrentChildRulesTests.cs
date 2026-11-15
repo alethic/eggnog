@@ -22,9 +22,14 @@ namespace Eggnog.Relations.Tests
     /// the same root; its <see cref="EGraphContext.CheckInvariants"/> must pass; and the frozen root must be unchanged
     /// bit for bit: every row of every table in physical order with its timestamp, the union-find's rows and parent
     /// array, and the root's version. Children with the default heuristics must also make every call into user code on
-    /// their own task's thread (<see cref="ChildThreadProbe"/>): the growth bound of
+    /// their own task's thread (<see cref="ChildThreadProbe"/>): the probe's check of the growth bound of
     /// <see cref="ConcurrentChildrenTests.SiblingsWithTheDefaultHeuristicsRunOnTheirOwnThreadsOnly"/>, over more
-    /// children, programs and shapes.
+    /// children, programs and shapes. The check sees the parallel executor run the probe rule's task on another thread,
+    /// in the two rows of the theory that force the children's rule sets onto it. On the serial executor it cannot see
+    /// a join run off the child's thread: the probe rule here makes fewer matches in an iteration than one action batch
+    /// holds (<see cref="Bindings.DefaultBatchSize"/>), so its actions, and with them the probe's primitive calls, run
+    /// when the batch is flushed, on the child's thread. The growth bound's own test checks that executor with two
+    /// serial siblings whose rules fill batches.
     /// </summary>
     /// <remarks>
     /// Renaming. A child's ids come from its id blocks, so the same program mints different ids in different children.
@@ -52,19 +57,23 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// Eight at a time: serial children (the default under a frozen parent), which must make every call into user
-        /// code on their own task's thread; and children given two threads through
-        /// <see cref="ContextOptions.Parallelism"/>, which together may use sixteen.
+        /// code on their own task's thread, with their rule sets on the serial executor or, in the last two rows,
+        /// forced onto the parallel executor, where the check would see the probe rule's task run on another thread;
+        /// and children given two threads through <see cref="ContextOptions.Parallelism"/>, which together may use
+        /// sixteen.
         /// </summary>
         [Theory]
-        [InlineData(1, 1)]
-        [InlineData(2, 1)]
-        [InlineData(3, 1)]
-        [InlineData(4, 1)]
-        [InlineData(5, 2)]
-        [InlineData(6, 2)]
-        public void SixteenChildrenEightAtATimeEqualSerialReplays(int seed, int childThreads)
+        [InlineData(1, 1, false)]
+        [InlineData(2, 1, false)]
+        [InlineData(3, 1, false)]
+        [InlineData(4, 1, false)]
+        [InlineData(5, 2, false)]
+        [InlineData(6, 2, false)]
+        [InlineData(7, 1, true)]
+        [InlineData(8, 1, true)]
+        public void SixteenChildrenEightAtATimeEqualSerialReplays(int seed, int childThreads, bool forceParallel)
         {
-            Run(seed, Children, Threads, childThreads, forceParallel: false, rounds: 2, freezeRaces: 0);
+            Run(seed, Children, Threads, childThreads, forceParallel, rounds: 2, freezeRaces: 0);
         }
 
         /// <summary>
@@ -73,8 +82,9 @@ namespace Eggnog.Relations.Tests
         /// iterations children of two or four threads. In half, the children's rule sets are forced onto the parallel
         /// executor; when the children also have two or four threads, about a quarter of the iterations, the tasks of one
         /// child's run create its layers concurrently, while at one thread the executor runs every task on the calling
-        /// thread, and the growth bound checks that it does. In half, a relation is defined on another thread while the
-        /// root freezes, and the children write it, after the same race has run on up to 400 fresh graphs.
+        /// thread, which the probe's check of the growth bound tests for the probe rule's task. In half, a relation is
+        /// defined on another thread while the root freezes, and the children write it, after the same race has run on
+        /// up to 400 fresh graphs.
         /// </summary>
         [Fact]
         public void Soak()
@@ -165,8 +175,9 @@ namespace Eggnog.Relations.Tests
             if (errors.Length > 0)
                 throw new AggregateException(errors);
 
-            // The growth bound: a serial child made every call into user code (its rules' probe calls, and the merges of
-            // the probe's lattice in its writes and rebuilds) on its own task's thread, whichever executor ran its rules.
+            // The probe's check of the growth bound: a serial child made every call into user code (its rules' probe
+            // calls, and the merges of the probe's lattice in its writes and rebuilds) on its own task's thread,
+            // whichever executor ran its rules.
             if (childThreads == 1)
             {
                 Assert.True(contexts.Sum(probe.CallsOf) > 0, "The probe saw no call.");
@@ -253,9 +264,9 @@ namespace Eggnog.Relations.Tests
         /// collapse, <c>low</c> flows along edges, and <c>low(x) = v → mark(num(v))</c>; six rules that write the
         /// relation <c>seen</c> from <c>edge</c>, <c>path</c>, <c>low</c> and <c>add</c>, so that on the parallel executor
         /// the tasks of a child's first iteration create its layer of <c>seen</c> concurrently; and two rules for the
-        /// growth bound, one that calls the probe's primitive on every <c>edge</c> and writes nothing, one that writes
-        /// <c>least(x) = 0</c> for every <c>edge(x, y)</c> into a lattice the probe's minimum merges. The transcripts
-        /// leave <c>least</c> out.
+        /// probe's check of the growth bound, one that calls the probe's primitive on every <c>edge</c> and writes
+        /// nothing, one that writes <c>least(x) = 0</c> for every <c>edge(x, y)</c> into a lattice the probe's minimum
+        /// merges. The transcripts leave <c>least</c> out.
         /// </summary>
         /// <returns>The rules, and the relation <c>seen</c>.</returns>
         static (EGraphRuleId[] Rules, FunctionId Seen) Rules(ContextGraph g, ChildThreadProbe probe)

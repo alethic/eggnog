@@ -777,7 +777,11 @@ they have no model.
   after the case is dropped (section 2.12): the values they intern, containers of values included, keep their cells, by
   which `ordering-min`, `ordering-max`, `set-get` and `multiset-pick` order values, and extraction breaks ties, in every
   scope afterwards (section 2.2), and the ids they reserve count in `EGraph.Usage` and raise every id reserved after
-  them.
+  them. Join indexes list their keys in hash-slot order (the join-index key order item of
+  [`egglog-3.0.0-todo.md`](egglog-3.0.0-todo.md)), so the raised ids can hand a later run, in any scope, its matches in
+  another order, and change what that order decides: the value a function with a merge that is not a lattice
+  (`FunctionMerge<T>`) keeps, the order of fresh ids, and with it which class a union keeps, and which of a class's
+  equal-cost rows extraction takes.
 
 ### 2.10 Extraction
 
@@ -1305,18 +1309,18 @@ entry's id in the parent.
 plan indexes, seals staging, compresses or flattens the union-find, builds every view, and publishes. A context that is
 not frozen shares one thread domain (`ThreadAffinityGuard`) with the descendants created under it; each child of a
 frozen context gets its own. A second thread entering a domain is refused rather than made to wait. Children of frozen
-contexts run side by side, each on the thread its caller drives it from (section 3.10). A chain may
-be any depth, as egglog's stack of pushes may: a `LayeredSubset` keeps a 64-bit mask of its nonempty layers below 64
-and finds deeper ones by their per-layer entries, and a frame's dense refinement of a layer past 255, which its entry's
-layer byte does not hold, is a node the frame owns. Every walk over the levels of a chain (a rebuild, a clean test, a
-catch-up, a view build, a freeze's new domain, a release) is a loop rather than a recursion, so depth costs no stack.
-A child keeps a cursor into each unsettled ancestor, and a clean test that reads them goes by the store's
-`ChangeClock`, which every change of a level with live descendants moves (its change stamp, an entry of its container
-log): while the clock has not moved since a level last found itself current, the level needs no ancestor read. A
-catch-up walks the chain root first and rebuilds each level once. So testing or catching up a chain that nothing
-changed costs O(d) at depth d, and after a change each level reads its d cursors once; a level's view is built in
-O(d) plus the levels that hide rows of the table. Building a chain of n levels costs O(n²) in all, the per-ancestor
-cursors and gates of each new child, where egglog's push copies the e-graph.
+contexts run side by side, each on the thread its caller drives it from (section 3.10). A chain may be any depth, as
+egglog's stack of pushes may: a `LayeredSubset` keeps a 64-bit mask of its nonempty layers below 64 and finds deeper
+ones by their per-layer entries, and a frame's dense refinement of a layer past 255, which its entry's layer byte does
+not hold, is a node the frame owns. Every walk over the levels of a chain (a rebuild, a clean test, a catch-up, a view
+build, a freeze's new domain, a release) is a loop rather than a recursion, so depth costs no stack. A child keeps a
+cursor into each unsettled ancestor, and a clean test that reads them goes by the store's `ChangeClock`, which every
+change of a level with live descendants moves (its change stamp, an entry of its container log): while the clock has not
+moved since a level last found itself current, the level needs no ancestor read. A catch-up walks the chain root first
+and rebuilds each level once. So testing or catching up a chain that nothing changed costs O(d) at depth d, and after a
+change each level reads its d cursors once; a level's view is built in O(d) plus the levels that hide rows of the table.
+Building a chain of n levels costs O(n²) in all, the per-ancestor cursors and gates of each new child, where egglog's
+push copies the e-graph.
 
 **Compaction under live descendants.** A table compacts on egglog's trigger (more tombstones than half its physical
 rows, and more than 16), and at freeze whenever it has a tombstone. Compaction renumbers rows and starts a new
@@ -1498,8 +1502,9 @@ Inheritance and parallelism have their own equivalence tests: watermark inherita
 with no more matches, and serial and parallel runs must give the same facts. Concurrent children of a frozen context
 (rule runs, storage programs, library queries), each driven from a task or thread of its own as a host drives them,
 must each equal a serial replay, and serial children running rules must make every call into user code on their own
-task's thread (the thread-pool growth bound); the default tests use fixed seeds, and an opt-in soak
-(`EGGNOG_CONCURRENT_SOAK`) draws fresh seeds, child counts and thread counts.
+task's thread, and siblings with the default heuristics must queue no work item on the thread pool (the thread-pool
+growth bound); the default tests use fixed seeds, and an opt-in soak (`EGGNOG_CONCURRENT_SOAK`) draws fresh seeds, child
+counts and thread counts.
 
 ### 5.3 Conformance programs
 

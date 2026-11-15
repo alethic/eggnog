@@ -100,8 +100,8 @@ shift and the `BigRat` `pow` past `int.MaxValue` bits, which no .NET `BigInteger
   to find which of the nine advances a case needs.
 - **Parallelism soaks.** One-hour `EGGNOG_CONCURRENT_SOAK` runs on x64 (net8.0, net10.0) and on an arm64 CI runner,
   which the owner runs by hand; the item closes when they come back clean. They widen the concurrent-children check
-  (children of a frozen root driven by host threads, each equal to a serial replay, with the thread-pool growth bound)
-  to fresh seeds; the targeted tests pin the known races, and nothing waits on the soaks.
+  (children of a frozen root driven by host threads, each equal to a serial replay, with the probe's check of the
+  thread-pool growth bound) to fresh seeds; the targeted tests pin the known races, and nothing waits on the soaks.
 - **Cancelling split-step lifts.** A cancellation token checked between lift rounds, so a run overshoots `TimeLimit` by
   at most one iteration or one lift round. Worth doing if one lift's p99, from the library-path timings, exceeds 10% of
   a typical `TimeLimit`.
