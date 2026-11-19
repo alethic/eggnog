@@ -1169,29 +1169,6 @@ namespace Eggnog.Tests.Values
         }
 
         [Fact]
-        public void ARuleCannotReadAFunctionWithAMergeInAnotherScopeButAHostReadCan()
-        {
-            var graph = new EGraph();
-            var outer = graph.DefineScopeTag("outer");
-            var sum = graph.DefineFunction<string, long>("sum", Sum);
-            var copy = graph.DefineFunction<string, long>("copy", ValueLattice.Max<long>());
-            var rules = graph.DefineRuleset("rules");
-
-            var e = Assert.Throws<RuleDefinitionException>(() => rules.DefineRule("copy", r =>
-            {
-                var (k, v) = r.Vars<string, long>("k", "v");
-                r.When(v.Is(sum.In(outer).Of(k)));
-                r.Then(copy.Of(k).Is(v));
-            }));
-
-            Assert.Contains("'sum' has the merge 'sum', which is not a lattice", e.Message);
-
-            // A host read reads the scope itself, with no mirror.
-            graph.Root.Assume(sum.Of("k").Is(4L));
-            Assert.Equal(4L, graph.Root.CreateChild().Get(sum.In(graph.RootTag).Of("k")));
-        }
-
-        [Fact]
         public void TheMergeMustNotBeADefaultValue()
         {
             var graph = new EGraph();

@@ -336,15 +336,6 @@ namespace Eggnog.Tests.Definitions
             Assert.Contains("'f' is a function, which a head does not read", e.Message, StringComparison.Ordinal);
         }
 
-        [Fact]
-        public void AFunctionOfASortIsNotReadInAnotherScope()
-        {
-            var t = new NodeTheory();
-            var f = t.Graph.DefineFunction<long, Node>("f");
-
-            Assert.Throws<ArgumentException>(() => f.In(t.Graph.RootTag));
-        }
-
     }
 
 }

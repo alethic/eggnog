@@ -13,18 +13,6 @@ namespace Eggnog
     {
 
         /// <summary>
-        /// Reads a ground term's cell: a value constant's existing cell, a class's canonical member, or an application's
-        /// row output (canonical for a class).
-        /// </summary>
-        /// <param name="scope">The scope read.</param>
-        /// <param name="term">The term.</param>
-        /// <param name="cell">The cell, when the result is <c>true</c>.</param>
-        /// <returns>Whether the term has a value in the scope.</returns>
-        /// <exception cref="ArgumentException">The term is not ground, belongs to another graph, or holds a class value this
-        /// scope cannot use.</exception>
-        public static bool TryRead(Scope scope, Term term, out uint cell) => TryReadIn(scope, term, null, out cell);
-
-        /// <summary>
         /// Reads a ground term's value: its cell, when it has one, or else, for a value no write interned (a constant or
         /// a computation's result), the value itself.
         /// </summary>
@@ -35,13 +23,7 @@ namespace Eggnog
         /// <returns>Whether the term has a value in the scope.</returns>
         /// <exception cref="ArgumentException">The term is not ground, belongs to another graph, or holds a class value this
         /// scope cannot use.</exception>
-        public static bool TryReadValue(Scope scope, Term term, out uint cell, out object? unencoded) =>
-            TryReadValueIn(scope, term, null, out cell, out unencoded);
-
-        /// <summary>
-        /// <see cref="TryReadValue"/> inside <see cref="Fact.In"/> when <paramref name="enclosing"/> is set.
-        /// </summary>
-        static bool TryReadValueIn(Scope scope, Term term, ScopeTag? enclosing, out uint cell, out object? unencoded)
+        public static bool TryReadValue(Scope scope, Term term, out uint cell, out object? unencoded)
         {
             ArgumentNullException.ThrowIfNull(term);
             unencoded = null;
@@ -50,7 +32,7 @@ namespace Eggnog
             {
                 var type = TypeOf(scope, shape);
                 if (type.Kind == ColumnKind.Sort)
-                    return TryReadIn(scope, term, enclosing, out cell);
+                    return TryRead(scope, term, out cell);
 
                 // A container of classes no write interned compares as egglog's interned one would: by its canonical
                 // classes.
@@ -71,7 +53,7 @@ namespace Eggnog
             if (shape.Kind == TermShapeKind.Computation)
             {
                 cell = 0;
-                if (TryEvaluate(scope, shape, enclosing, out var value, out var result) == false)
+                if (TryEvaluate(scope, shape, out var value, out var result) == false)
                     return false;
 
                 if (result.Kind == ColumnKind.Sort)
@@ -91,19 +73,20 @@ namespace Eggnog
                 return true;
             }
 
-            return TryReadIn(scope, term, enclosing, out cell);
+            return TryRead(scope, term, out cell);
         }
 
         /// <summary>
-        /// Reads a ground term inside <see cref="Fact.In"/>: its table applications read the scope
-        /// <paramref name="enclosing"/> resolves to, directly.
+        /// Reads a ground term's cell: a value constant's existing cell, a class's canonical member, or an application's
+        /// row output (canonical for a class).
         /// </summary>
         /// <param name="scope">The scope read.</param>
         /// <param name="term">The term.</param>
-        /// <param name="enclosing">The tag of an enclosing <see cref="Fact.In"/>; <c>null</c> for none.</param>
         /// <param name="cell">The cell, when the result is <c>true</c>.</param>
-        /// <returns>Whether the term reads.</returns>
-        static bool TryReadIn(Scope scope, Term term, ScopeTag? enclosing, out uint cell)
+        /// <returns>Whether the term has a value in the scope.</returns>
+        /// <exception cref="ArgumentException">The term is not ground, belongs to another graph, or holds a class value this
+        /// scope cannot use.</exception>
+        public static bool TryRead(Scope scope, Term term, out uint cell)
         {
             ArgumentNullException.ThrowIfNull(term);
             var shape = term.Shape;
@@ -127,30 +110,22 @@ namespace Eggnog
                 {
                     var table = shape.Table!;
                     CheckTable(scope, table);
-                    var read = ReadScopeOf(scope, table, enclosing);
                     var keys = new uint[shape.Arguments.Length];
                     for (var i = 0; i < keys.Length; i++)
                     {
-                        if (TryReadIn(scope, shape.Arguments[i], enclosing, out keys[i]) == false)
+                        if (TryRead(scope, shape.Arguments[i], out keys[i]) == false)
                         {
                             cell = 0;
                             return false;
                         }
                     }
 
-                    if (read.Engine.TryLookup(table.Function, keys, out cell) == false)
-                        return false;
-
-                    // An id canonical in an ancestor names a class of this scope, so a class output reads canonical here.
-                    if (ReferenceEquals(read, scope) == false && table.Columns[^1].InvolvesClasses)
-                        cell = scope.Engine.Find(cell);
-
-                    return true;
+                    return scope.Engine.TryLookup(table.Function, keys, out cell);
                 }
                 case TermShapeKind.Variable:
                     throw new ArgumentException($"host reads are ground; '{shape.Name}' is a variable", nameof(term));
                 default:
-                    return TryCompute(scope, shape, enclosing, out cell);
+                    return TryCompute(scope, shape, out cell);
             }
         }
 
@@ -162,10 +137,10 @@ namespace Eggnog
         /// </summary>
         /// <exception cref="ArgumentException">A class argument or result is not usable in this scope.</exception>
         /// <exception cref="RuleEvaluationException">The primitive threw; the scope is not faulted.</exception>
-        static bool TryCompute(Scope scope, TermShape shape, ScopeTag? enclosing, out uint cell)
+        static bool TryCompute(Scope scope, TermShape shape, out uint cell)
         {
             cell = 0;
-            if (TryEvaluate(scope, shape, enclosing, out var value, out var result) == false)
+            if (TryEvaluate(scope, shape, out var value, out var result) == false)
                 return false;
 
             if (result.Kind == ColumnKind.Sort)
@@ -193,7 +168,7 @@ namespace Eggnog
         /// <exception cref="ArgumentException">The primitive writes tables, which a read does not, as egglog's read context
         /// of a <c>check</c> does not.</exception>
         /// <exception cref="RuleEvaluationException">The primitive threw; the scope is not faulted.</exception>
-        static bool TryEvaluate(Scope scope, TermShape shape, ScopeTag? enclosing, out object? value, out ColumnType result)
+        static bool TryEvaluate(Scope scope, TermShape shape, out object? value, out ColumnType result)
         {
             value = null;
             var primitive = shape.Primitive!;
@@ -215,14 +190,14 @@ namespace Eggnog
                 }
                 else if (argument.Kind == TermShapeKind.Computation)
                 {
-                    if (TryEvaluate(scope, argument, enclosing, out var inner, out _) == false)
+                    if (TryEvaluate(scope, argument, out var inner, out _) == false)
                         return false;
 
                     arguments[i] = inner!;
                 }
                 else
                 {
-                    if (TryReadIn(scope, shape.Arguments[i], enclosing, out var argumentCell) == false)
+                    if (TryRead(scope, shape.Arguments[i], out var argumentCell) == false)
                         return false;
 
                     arguments[i] = parameters[i].DecodeObject(argumentCell, scope);
@@ -282,12 +257,7 @@ namespace Eggnog
         /// <param name="fact">The fact.</param>
         /// <returns>Whether the fact holds.</returns>
         /// <exception cref="ArgumentException">The fact is a filter, or a term in it is not a valid read.</exception>
-        public static bool Check(Scope scope, Fact fact) => CheckIn(scope, fact, null);
-
-        /// <summary>
-        /// Checks a ground fact, inside <see cref="Fact.In"/> when <paramref name="enclosing"/> is set.
-        /// </summary>
-        static bool CheckIn(Scope scope, Fact fact, ScopeTag? enclosing)
+        public static bool Check(Scope scope, Fact fact)
         {
             ArgumentNullException.ThrowIfNull(fact);
             switch (fact)
@@ -295,18 +265,17 @@ namespace Eggnog
                 case RelationFact relation:
                 {
                     CheckTable(scope, relation.Table);
-                    var read = ReadScopeOf(scope, relation.Table, enclosing);
                     var keys = new uint[relation.Arguments.Length];
                     for (var i = 0; i < keys.Length; i++)
-                        if (TryReadIn(scope, relation.Arguments[i], enclosing, out keys[i]) == false)
+                        if (TryRead(scope, relation.Arguments[i], out keys[i]) == false)
                             return false;
 
-                    return read.Engine.TryLookup(relation.Table.Function, keys, out _);
+                    return scope.Engine.TryLookup(relation.Table.Function, keys, out _);
                 }
                 case EqualityFact equality:
                 {
-                    var left = TryReadValueIn(scope, equality.Left, enclosing, out var x, out var looseX);
-                    var right = TryReadValueIn(scope, equality.Right, enclosing, out var y, out var looseY);
+                    var left = TryReadValue(scope, equality.Left, out var x, out var looseX);
+                    var right = TryReadValue(scope, equality.Right, out var y, out var looseY);
                     if (left == false || right == false)
                         return false;
 
@@ -323,19 +292,7 @@ namespace Eggnog
                 }
                 case ExistsFact exists:
                     // A primitive's result no write interned still is one, which egglog's check interns.
-                    return TryReadValueIn(scope, exists.Application, enclosing, out _, out _);
-                case ScopedFact scoped:
-                {
-                    if (enclosing is not null)
-                        throw new ArgumentException("Fact.In cannot be nested.", nameof(fact));
-
-                    scope.Graph.CheckTag(scoped.Scope, nameof(fact));
-                    foreach (var inner in scoped.Facts)
-                        if (CheckIn(scope, inner, scoped.Scope) == false)
-                            return false;
-
-                    return true;
-                }
+                    return TryReadValue(scope, exists.Application, out _, out _);
                 case NotEqualFact:
                     throw new ArgumentException("host checks are ground facts, not filters; 'IsNot' is a filter", nameof(fact));
                 case FilterFact:
@@ -355,12 +312,7 @@ namespace Eggnog
         /// <param name="scope">The scope the fact will be checked in; <c>null</c> to check the shape only.</param>
         /// <param name="fact">The fact.</param>
         /// <returns>Why the fact cannot be checked, or <c>null</c> when it can.</returns>
-        public static string? Validate(Scope? scope, Fact fact) => ValidateIn(scope, fact, null);
-
-        /// <summary>
-        /// Validates a fact, inside <see cref="Fact.In"/> when <paramref name="enclosing"/> is set.
-        /// </summary>
-        static string? ValidateIn(Scope? scope, Fact fact, ScopeTag? enclosing)
+        public static string? Validate(Scope? scope, Fact fact)
         {
             ArgumentNullException.ThrowIfNull(fact);
             switch (fact)
@@ -370,33 +322,16 @@ namespace Eggnog
                     if (scope is not null && ReferenceEquals(relation.Table.Graph, scope.Graph) == false)
                         return $"table '{relation.Table.Name}' belongs to another graph";
 
-                    if (ValidateReadScope(scope, relation.Table, enclosing) is { } scoped)
-                        return scoped;
-
                     foreach (var argument in relation.Arguments)
-                        if (ValidateTerm(scope, argument, enclosing) is { } error)
+                        if (ValidateTerm(scope, argument) is { } error)
                             return error;
 
                     return null;
                 }
                 case EqualityFact equality:
-                    return ValidateTerm(scope, equality.Left, enclosing) ?? ValidateTerm(scope, equality.Right, enclosing);
+                    return ValidateTerm(scope, equality.Left) ?? ValidateTerm(scope, equality.Right);
                 case ExistsFact exists:
-                    return ValidateTerm(scope, exists.Application, enclosing);
-                case ScopedFact scoped:
-                {
-                    if (enclosing is not null)
-                        return "Fact.In cannot be nested";
-
-                    if (scope is not null && ReferenceEquals(scoped.Scope.Graph, scope.Graph) == false)
-                        return $"scope tag '{scoped.Scope.Name}' belongs to another graph";
-
-                    foreach (var inner in scoped.Facts)
-                        if (ValidateIn(scope, inner, scoped.Scope) is { } error)
-                            return error;
-
-                    return null;
-                }
+                    return ValidateTerm(scope, exists.Application);
                 case NotEqualFact:
                     return "host checks are ground facts, not filters; 'IsNot' is a filter";
                 case FilterFact:
@@ -429,7 +364,7 @@ namespace Eggnog
         /// <summary>
         /// <see cref="Validate"/> for one term.
         /// </summary>
-        static string? ValidateTerm(Scope? scope, Term term, ScopeTag? enclosing)
+        static string? ValidateTerm(Scope? scope, Term term)
         {
             ArgumentNullException.ThrowIfNull(term);
             var shape = term.Shape;
@@ -461,11 +396,8 @@ namespace Eggnog
                     if (scope is not null && ReferenceEquals(table.Graph, scope.Graph) == false)
                         return $"table '{table.Name}' belongs to another graph";
 
-                    if (ValidateReadScope(scope, table, enclosing) is { } scoped)
-                        return scoped;
-
                     foreach (var argument in shape.Arguments)
-                        if (ValidateTerm(scope, argument, enclosing) is { } error)
+                        if (ValidateTerm(scope, argument) is { } error)
                             return error;
 
                     return null;
@@ -478,7 +410,7 @@ namespace Eggnog
                         return Primitive.Refusal(shape.Primitive, "a host read", PrimitiveAccess.Read);
 
                     foreach (var argument in shape.Arguments)
-                        if (ValidateTerm(scope, argument, enclosing) is { } error)
+                        if (ValidateTerm(scope, argument) is { } error)
                             return error;
 
                     return null;
@@ -496,52 +428,6 @@ namespace Eggnog
                 throw new ArgumentException($"Column type {type.Name} belongs to another graph.");
 
             return type;
-        }
-
-        /// <summary>
-        /// Gets the scope an application of <paramref name="table"/> reads: <paramref name="scope"/> itself, or for a
-        /// scoped handle or an enclosing <see cref="Fact.In"/>, the nearest ancestor-or-self tagged so, read directly
-        /// rather than through a mirror. A scoped table must be value-only.
-        /// </summary>
-        /// <exception cref="ArgumentException">The handle is scoped to another tag than the enclosing one, or a scoped
-        /// table has a sort column.</exception>
-        /// <exception cref="InvalidOperationException">The tag does not resolve.</exception>
-        static Scope ReadScopeOf(Scope scope, TableHandle table, ScopeTag? enclosing)
-        {
-            var own = table.ReadScope;
-            if (own is not null && enclosing is not null && ReferenceEquals(own, enclosing) == false)
-                throw new ArgumentException($"'{table.Name} @{own.Name}' is inside Fact.In('{enclosing.Name}').");
-
-            var tag = own ?? enclosing;
-            if (tag is null)
-                return scope;
-
-            if (table.IsValueOnly == false)
-                throw new ArgumentException($"Scoped reads are limited to tables whose columns are all values; '{table.Name}' has a sort column.");
-
-            return ScopeResolver.Resolve(scope, tag, "A host read");
-        }
-
-        /// <summary>
-        /// Gets why an application's read scope cannot be read from <paramref name="scope"/>, or <c>null</c>.
-        /// </summary>
-        static string? ValidateReadScope(Scope? scope, TableHandle table, ScopeTag? enclosing)
-        {
-            var own = table.ReadScope;
-            if (own is not null && enclosing is not null && ReferenceEquals(own, enclosing) == false)
-                return $"'{table.Name} @{own.Name}' is inside Fact.In('{enclosing.Name}')";
-
-            var tag = own ?? enclosing;
-            if (tag is null)
-                return null;
-
-            if (table.IsValueOnly == false)
-                return $"scoped reads are limited to tables whose columns are all values; '{table.Name}' has a sort column";
-
-            if (scope is not null && ScopeResolver.TryResolve(scope, tag) is null)
-                return $"'{scope.Path}' has no ancestor tagged '{tag.Name}'";
-
-            return null;
         }
 
         /// <summary>

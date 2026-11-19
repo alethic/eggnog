@@ -41,15 +41,6 @@ namespace Eggnog
             return new UntypedApplicationTerm(this, (Term[])arguments.Clone());
         }
 
-        /// <summary>
-        /// The untyped scoped view: what the typed <c>In(tag)</c> returns, as an untyped function.
-        /// </summary>
-        /// <param name="tag">The tag of the scope to read.</param>
-        /// <returns>The view.</returns>
-        /// <exception cref="System.ArgumentException">The tag belongs to another graph, or the table has a sort
-        /// column.</exception>
-        internal FunctionHandle InScope(ScopeTag tag) => ViewIn<FunctionHandle>(new UntypedFunction(), tag);
-
     }
 
 }

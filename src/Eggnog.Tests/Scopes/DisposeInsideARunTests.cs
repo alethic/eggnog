@@ -29,8 +29,8 @@ namespace Eggnog.Tests.Scopes
                 });
                 r.Then(t.Seen.Of(x));
             });
-            var running = t.Root.CreateChild(t.Outer);
-            sibling = t.Root.CreateChild(t.Outer);
+            var running = t.Root.CreateChild();
+            sibling = t.Root.CreateChild();
             Assert.Same(running.Guard, sibling.Guard);
             running.Assume(t.Fact.Of("a"));
 

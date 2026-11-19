@@ -1,5 +1,3 @@
-using System.Linq;
-
 using Eggnog.Tests.Support;
 
 using Xunit;
@@ -9,9 +7,9 @@ namespace Eggnog.Tests.Scopes
 
     /// <summary>
     /// The plans a freeze makes (a rule is planned once, and every later run reuses the plan): the default variants of
-    /// every rule a descendant can run, planned on the frozen scope's statistics: every global rule, the scope's local
-    /// rules, every query and every mirror copy rule; a sibling scope's local rules are left to be planned on their own
-    /// statistics.
+    /// every rule a descendant can run, planned on the frozen scope's statistics: every global rule, the local rules of
+    /// the scope and its ancestors (the root's among them, which the root's own freeze does not plan) and every query;
+    /// a sibling scope's local rules are left to be planned on their own statistics.
     /// </summary>
     public sealed class FreezePlanTests
     {
@@ -20,19 +18,23 @@ namespace Eggnog.Tests.Scopes
         public void AFreezePlansEveryRuleADescendantCanRunAndNoSiblingsLocalRules()
         {
             var t = new ScopeTheory();
-            var copies = new OuterCopies(t);
             var global = t.DefinePaths();
-            var innerReader = t.Rules.DefineRule("inner reader", r =>
+            var reader = t.Rules.DefineRule("reader", r =>
             {
                 var x = r.Var<string>("x");
-                r.When(t.Fact.In(t.Inner).Of(x));
+                r.When(t.Fact.Of(x));
                 r.Then(t.Seen.Of(x));
             });
             var query = t.Graph.DefineQuery("seen", q => q.When(t.Seen.Of(q.Var<string>("x"))));
+            var rootOwn = t.Root.DefineRule(t.Rules, "root own", r =>
+            {
+                var x = r.Var<string>("x");
+                r.When(t.Seen.Of(x));
+                r.Then(t.Fact.Of("root own"));
+            });
             t.Root.Freeze();
 
-            // An untagged scope, so that its freeze syncs no mirror and runs nothing: whatever is planned, the freeze
-            // planned.
+            // The scope's freeze runs nothing: whatever is planned, the freeze planned.
             var schema = t.Root.CreateChild();
             var sibling = t.Root.CreateChild();
             var own = schema.DefineRule(t.Rules, "own", r =>
@@ -47,17 +49,11 @@ namespace Eggnog.Tests.Scopes
                 r.When(t.Seen.Of(x));
                 r.Then(t.Fact.Of("other"));
             });
-            // The mirrors of fact @outer, fact @inner and the function best @outer: the relations' copy their subsumed rows
-            // too, as every relation is subsumable.
-            var copyRules = t.Graph.Mirrors.AllCopyRules();
-            Assert.Equal(5, copyRules.Length);
-
             var planned = new[]
             {
-                global.Compiled.Variants.Default!, copies.FactRule.Compiled.Variants.Default!, innerReader.Compiled.Variants.Default!,
+                global.Compiled.Variants.Default!, reader.Compiled.Variants.Default!, rootOwn.Compiled.Variants.Default!,
                 own.Compiled.Variants.Default!, query.Compiled.Variants.Default!,
             };
-            planned = planned.Concat(copyRules.Select(rule => rule.Variants.Default!)).ToArray();
             var unplanned = other.Compiled.Variants.Default!;
             foreach (var variant in planned)
                 Assert.Null(t.Graph.Engine.GetRuleInfo(variant.Id).CachedPlan);

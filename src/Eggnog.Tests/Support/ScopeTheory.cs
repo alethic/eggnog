@@ -5,8 +5,8 @@ namespace Eggnog.Tests.Support
 {
 
     /// <summary>
-    /// A small value-only theory for scope tests: two tags, a fact relation, a derived relation, a lattice function,
-    /// and a ruleset, in a serial graph.
+    /// A small value-only theory for scope tests: a fact relation, a derived relation, a lattice function, and a
+    /// ruleset, in a serial graph.
     /// </summary>
     public sealed class ScopeTheory
     {
@@ -18,8 +18,6 @@ namespace Eggnog.Tests.Support
         public ScopeTheory(EGraphOptions? options = null)
         {
             Graph = new EGraph(options);
-            Outer = Graph.DefineScopeTag("outer");
-            Inner = Graph.DefineScopeTag("inner");
             Fact = Graph.DefineRelation<string>("fact");
             Seen = Graph.DefineRelation<string>("seen");
             Best = Graph.DefineFunction<string, long>("best", ValueLattice.Max<long>());
@@ -33,12 +31,6 @@ namespace Eggnog.Tests.Support
 
         /// <summary>Gets the root.</summary>
         public Scope Root => Graph.Root;
-
-        /// <summary>Gets a tag for outer scopes.</summary>
-        public ScopeTag Outer { get; }
-
-        /// <summary>Gets a tag for inner scopes.</summary>
-        public ScopeTag Inner { get; }
 
         /// <summary>Gets a fact relation over strings.</summary>
         public Relation<string> Fact { get; }

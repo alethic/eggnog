@@ -7,10 +7,10 @@ namespace Eggnog
 
     /// <summary>
     /// <see cref="Scope.Serialize"/>: a port of egglog's <c>EGraph::serialize</c> (<c>src/serialize.rs</c>, as at 3.0.0,
-    /// whose class ids allow a dash in a sort's name) over a scope's view. Every table but the mirrors, in definition
-    /// order, gives a node per row, in the table's storage order, as egglog walks it; each argument is an edge to one
-    /// node of its class, the class's nodes taken in turn, as egglog spreads its edges; a value is a node of its own
-    /// class; and a class whose every node was left out gets a placeholder. Called under the scope's guard; never interns.
+    /// whose class ids allow a dash in a sort's name) over a scope's view. Every table, in definition order, gives a
+    /// node per row, in the table's storage order, as egglog walks it; each argument is an edge to one node of its class,
+    /// the class's nodes taken in turn, as egglog spreads its edges; a value is a node of its own class; and a class whose
+    /// every node was left out gets a placeholder. Called under the scope's guard; never interns.
     /// </summary>
     /// <remarks>
     /// egglog makes a relation a constructor over a sort of its own that cannot be unioned (<c>desugar_relation</c>,
@@ -65,10 +65,6 @@ namespace Eggnog
             var kept = 0;
             foreach (var table in scope.Graph.Tables)
             {
-                // The mirrors are hidden.
-                if (table.IsMirror)
-                    continue;
-
                 // egglog's symbol generator names the relations' sorts in definition order.
                 if (table.IsRelation)
                     relationSorts[table] = RelationSort(table.Name);

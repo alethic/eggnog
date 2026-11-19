@@ -7,17 +7,16 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// A theory and its database: column types, tables, rulesets, scope tags, queries, and the root of a tree of scopes.
+    /// A theory and its database: column types, tables, rulesets, queries, and the root of a tree of scopes.
     /// Holds only managed memory; not disposable.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Threads: rule, ruleset, query and tag definitions may be made from any thread at any time and take part
-    /// from the next iteration of every run. A table definition may be made from any thread once the root is frozen;
-    /// while it is not, it throws <see cref="InvalidOperationException"/> if another thread is using the root at that
-    /// moment. A rule definition whose first scoped read of a table creates a mirror table counts as a table definition.
-    /// Sorts and value types may be registered from any thread. User delegates the engine invokes (primitives, lattices,
-    /// filters, cost functions) must not call into a graph.
+    /// Threads: rule, ruleset and query definitions may be made from any thread at any time and take part from the next
+    /// iteration of every run, in the iterations where they may run. A table definition may be made from any thread
+    /// once the root is frozen; while it is not, it throws <see cref="InvalidOperationException"/> if another thread is
+    /// using the root at that moment. Sorts and value types may be registered from any thread. User delegates the
+    /// engine invokes (primitives, lattices, filters, cost functions) must not call into a graph.
     /// </para>
     /// <para>
     /// Every scope is a context of one e-graph, the <see cref="Root"/> included, and a child costs in proportion to
@@ -56,7 +55,7 @@ namespace Eggnog
         internal long Number { get; }
 
         /// <summary>
-        /// Initializes an empty graph: its value types and its root (tagged <see cref="RootTag"/>).
+        /// Initializes an empty graph: its value types and its root.
         /// </summary>
         /// <param name="options">The graph's options; <c>null</c> for <see cref="EGraphOptions.Default"/>.</param>
         /// <exception cref="ArgumentOutOfRangeException"><see cref="EGraphOptions.DegreeOfParallelism"/> is
@@ -82,11 +81,6 @@ namespace Eggnog
             Equal = Engine.RegisterExternalFunction(new EqualFunction(Unit.Unit));
             Extraction = new ExtractionCatalog(this);
             RuntimeSlot = Engine.NewLocalSlot(static _ => new ScopeRuntime());
-            Mirrors = new MirrorRegistry(this);
-            RootTag = new ScopeTag(this, RootTagName, 0);
-            scopeTags = new[] { RootTag };
-            scopeTagsView = Array.AsReadOnly(scopeTags);
-            scopeTagsByName.Add(RootTagName, RootTag);
             RootOrigin = new ScopeOrigin(this, null, "root", false);
             Root = new Scope(this);
             Values.RegisterBuiltInSets();
@@ -103,8 +97,8 @@ namespace Eggnog
         public Scope Root { get; }
 
         /// <summary>
-        /// Gets the user's tables, in declaration order (a snapshot); the tables the library makes for itself (mirrors
-        /// and worklists) are not listed.
+        /// Gets the user's tables, in declaration order (a snapshot); the tables the library makes for itself (the
+        /// schedulers' worklists) are not listed.
         /// </summary>
         public IReadOnlyList<TableHandle> Tables => Volatile.Read(ref tablesView);
 
@@ -135,8 +129,10 @@ namespace Eggnog
         internal Relations.EGraph Engine { get; }
 
         /// <summary>
-        /// Gets the lock of definitions: table, sort, ruleset, tag, query and rule definitions take it, and so does a
-        /// freeze while it syncs a tag's mirrors and counts the frozen scope. Nothing blocks while holding it except
+        /// Gets the lock of definitions: table, sort, ruleset, query and rule definitions and container type registrations
+        /// take it; so do the schedulers' additions and removals, the building of a rule's scheduled form at its first
+        /// step and its freeing when the scope of a local rule is released; and so does a scope's freeze around the
+        /// engine freeze, which lists the schedulers' rules it plans under it. Nothing blocks while holding it except
         /// engine definitions and a freeze's engine work; guards never block.
         /// </summary>
         internal object DefinitionLock { get; } = new();
@@ -153,11 +149,6 @@ namespace Eggnog
         /// holds its own, built on first use.
         /// </summary>
         internal Relations.ContextLocalSlot<ScopeRuntime> RuntimeSlot { get; }
-
-        /// <summary>
-        /// Gets the mirror tables and copy rules of scoped reads, and the counts of live frozen scopes per tag.
-        /// </summary>
-        internal MirrorRegistry Mirrors { get; }
 
         /// <summary>
         /// Gets or sets whether children and transient children are created with watermark inheritance
@@ -184,7 +175,7 @@ namespace Eggnog
         internal void ExitEngineCall() => Interlocked.Decrement(ref engineCalls);
 
         /// <summary>
-        /// Gets the next graph-unique serial number of a scope, for paths: <c>root/schema#2/query#7</c>.
+        /// Gets the next graph-unique serial number of a scope, for paths: <c>root/scope#2/scope#7</c>.
         /// </summary>
         /// <returns>The serial number.</returns>
         internal int NextScopeSerial() => Interlocked.Increment(ref scopeSerial);

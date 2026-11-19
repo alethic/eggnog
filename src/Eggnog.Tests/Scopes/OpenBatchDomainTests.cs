@@ -159,40 +159,70 @@ namespace Eggnog.Tests.Scopes
             Assert.Equal(2, inner.CountRows(t.Num));
         }
 
-        [Fact]
-        public void AnAncestorsQueryInsideTheBatchLeavesTheBatchUsableAndItsVersionAsWithoutTheQuery()
+        /// <summary>
+        /// An ancestor's query that leaves the descendant behind it, made inside the descendant's batch, before one of
+        /// its calls or after the last, leaves the batch usable and its Version moved as by the same query made before
+        /// the batch: the batch catches up before its next call, or as it commits, outside Version.
+        /// </summary>
+        /// <param name="callsBefore">How many of the batch's two calls come before the query.</param>
+        [Theory]
+        [InlineData(0)]
+        [InlineData(1)]
+        [InlineData(2)]
+        public void AnAncestorsQueryInsideTheBatchLeavesTheBatchUsableAndItsVersionAsWithoutTheQuery(int callsBefore)
         {
-            Assert.Equal(BatchVersionDelta(false), BatchVersionDelta(true));
+            Assert.Equal(BatchVersionDelta(null), BatchVersionDelta(callsBefore));
         }
 
         /// <summary>
-        /// How far a batch of two new rows moves a descendant's Version, with the tagged ancestor's query (which syncs
-        /// its mirrors after a write into it) made before the batch, or between the batch's calls.
+        /// How far a batch of two new rows moves a descendant's Version, with an ancestor's query made before the batch
+        /// (<paramref name="callsBefore"/> <c>null</c>) or inside it, after that many of its calls. The query builds a
+        /// vector of each class it matches, which interns the vectors in the ancestor; the descendant merged the two
+        /// classes, so the new vectors leave it behind the ancestor until it catches up with them.
         /// </summary>
-        static long BatchVersionDelta(bool inside)
+        static long BatchVersionDelta(int? callsBefore)
         {
-            var t = new ScopeTheory();
-            var facts = t.Graph.DefineQuery("outer facts", q => q.When(t.Fact.In(t.Outer).Of(q.Var<string>("x"))));
-            var outer = t.Root.CreateChild(t.Outer);
+            var t = new NodeTheory();
+            t.Graph.Values.RegisterVec<Node>();
+            var vectors = t.Graph.DefineQuery("vectors", q =>
+            {
+                var (x, v) = q.Vars<Node, Vec<Node>>("x", "v");
+                q.When(t.Tag.Of(x), v.Is(Primitives.VecOf<Node>().Of(x)));
+            });
+            var a = t.Root.Make(t.A.Of());
+            var b = t.Root.Make(t.B.Of());
+            var outer = t.Root.CreateChild();
             var inner = outer.CreateChild();
-            outer.Assume(t.Fact.Of("a"));
-            Assert.Equal(1, outer.Count(facts));
-            outer.Assume(t.Fact.Of("b"));
-            if (inside == false)
-                Assert.Equal(2, outer.Count(facts));
+            outer.Assume(t.Tag.Of(a), t.Tag.Of(b));
+            inner.Union(a, b);
+
+            // Asks the ancestor's query, and checks that the vectors it interned left the descendant behind it.
+            void AskTheAncestor()
+            {
+                Assert.Equal(2, outer.Count(vectors));
+                Assert.True(inner.Engine.Context.Context.Tables!.NeedsCatchUp);
+            }
+
+            if (callsBefore is null)
+                AskTheAncestor();
 
             var version = inner.Version;
             inner.Write(w =>
             {
-                w.Assume(t.Fact.Of("x"));
-                if (inside)
-                    Assert.Equal(2, outer.Count(facts));
+                if (callsBefore == 0)
+                    AskTheAncestor();
 
-                w.Assume(t.Fact.Of("y"));
+                w.Assume(t.Num.Of(1L));
+                if (callsBefore == 1)
+                    AskTheAncestor();
+
+                w.Assume(t.Num.Of(2L));
+                if (callsBefore == 2)
+                    AskTheAncestor();
             });
 
-            Assert.Equal(4, inner.CountRows(t.Fact));
-            Assert.Equal(2, outer.Count(facts));
+            Assert.Equal(2, inner.CountRows(t.Num));
+            Assert.Equal(2, outer.Count(vectors));
             return inner.Version - version;
         }
 

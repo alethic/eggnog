@@ -37,8 +37,7 @@ namespace Eggnog
         /// Defines a nullary relation: a fact that holds or not.
         /// </summary>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
-        /// <param name="options">Whether it is an analysis, and its subsumability; <c>null</c> for a subsumable
-        /// fact.</param>
+        /// <param name="options">Its subsumability; <c>null</c> for a subsumable relation.</param>
         /// <returns>The relation.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
@@ -50,8 +49,7 @@ namespace Eggnog
         /// </summary>
         /// <typeparam name="T1">The column's type: a registered value type or a defined sort.</typeparam>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
-        /// <param name="options">Whether it is an analysis, and its subsumability; <c>null</c> for a subsumable
-        /// fact.</param>
+        /// <param name="options">Its subsumability; <c>null</c> for a subsumable relation.</param>
         /// <returns>The relation.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
@@ -64,8 +62,7 @@ namespace Eggnog
         /// <typeparam name="T1">The first column's type.</typeparam>
         /// <typeparam name="T2">The second column's type.</typeparam>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
-        /// <param name="options">Whether it is an analysis, and its subsumability; <c>null</c> for a subsumable
-        /// fact.</param>
+        /// <param name="options">Its subsumability; <c>null</c> for a subsumable relation.</param>
         /// <returns>The relation.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
@@ -79,8 +76,7 @@ namespace Eggnog
         /// <typeparam name="T2">The second column's type.</typeparam>
         /// <typeparam name="T3">The third column's type.</typeparam>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
-        /// <param name="options">Whether it is an analysis, and its subsumability; <c>null</c> for a subsumable
-        /// fact.</param>
+        /// <param name="options">Its subsumability; <c>null</c> for a subsumable relation.</param>
         /// <returns>The relation.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
@@ -96,8 +92,7 @@ namespace Eggnog
         /// <typeparam name="T3">The third column's type.</typeparam>
         /// <typeparam name="T4">The fourth column's type.</typeparam>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
-        /// <param name="options">Whether it is an analysis, and its subsumability; <c>null</c> for a subsumable
-        /// fact.</param>
+        /// <param name="options">Its subsumability; <c>null</c> for a subsumable relation.</param>
         /// <returns>The relation.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
@@ -114,7 +109,7 @@ namespace Eggnog
         /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="lattice">The merge of two values, not of classes; <c>null</c> for none.</param>
-        /// <param name="options">Whether it is an analysis; <c>null</c> for a fact.</param>
+        /// <param name="options">The function's options; <c>null</c> for the defaults.</param>
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, or a lattice is given
         /// for a sort output or for a container of classes.</exception>
@@ -132,7 +127,7 @@ namespace Eggnog
         /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="lattice">The merge of two values, not of classes; <c>null</c> for none.</param>
-        /// <param name="options">Whether it is an analysis; <c>null</c> for a fact.</param>
+        /// <param name="options">The function's options; <c>null</c> for the defaults.</param>
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, or a lattice is given
         /// for a sort output or for a container of classes.</exception>
@@ -151,7 +146,7 @@ namespace Eggnog
         /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="lattice">The merge of two values, not of classes; <c>null</c> for none.</param>
-        /// <param name="options">Whether it is an analysis; <c>null</c> for a fact.</param>
+        /// <param name="options">The function's options; <c>null</c> for the defaults.</param>
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, or a lattice is given
         /// for a sort output or for a container of classes.</exception>
@@ -172,7 +167,7 @@ namespace Eggnog
         /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="lattice">The merge of two values, not of classes; <c>null</c> for none.</param>
-        /// <param name="options">Whether it is an analysis; <c>null</c> for a fact.</param>
+        /// <param name="options">The function's options; <c>null</c> for the defaults.</param>
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, or a lattice is given
         /// for a sort output or for a container of classes.</exception>
@@ -194,7 +189,7 @@ namespace Eggnog
         /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="lattice">The merge of two values, not of classes; <c>null</c> for none.</param>
-        /// <param name="options">Whether it is an analysis; <c>null</c> for a fact.</param>
+        /// <param name="options">The function's options; <c>null</c> for the defaults.</param>
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, or a lattice is given
         /// for a sort output or for a container of classes.</exception>
@@ -212,7 +207,7 @@ namespace Eggnog
         /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="merge">The merge of the old and the new value.</param>
-        /// <param name="options">Whether it is an analysis; <c>null</c> for a fact.</param>
+        /// <param name="options">The function's options; <c>null</c> for the defaults.</param>
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the merge is a
         /// default value, or the output is a sort and the merge is a function of values (<see
@@ -232,7 +227,7 @@ namespace Eggnog
         /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="merge">The merge of the old and the new value.</param>
-        /// <param name="options">Whether it is an analysis; <c>null</c> for a fact.</param>
+        /// <param name="options">The function's options; <c>null</c> for the defaults.</param>
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the merge is a
         /// default value, or the output is a sort and the merge is a function of values (<see
@@ -253,7 +248,7 @@ namespace Eggnog
         /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="merge">The merge of the old and the new value.</param>
-        /// <param name="options">Whether it is an analysis; <c>null</c> for a fact.</param>
+        /// <param name="options">The function's options; <c>null</c> for the defaults.</param>
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the merge is a
         /// default value, or the output is a sort and the merge is a function of values (<see
@@ -275,7 +270,7 @@ namespace Eggnog
         /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="merge">The merge of the old and the new value.</param>
-        /// <param name="options">Whether it is an analysis; <c>null</c> for a fact.</param>
+        /// <param name="options">The function's options; <c>null</c> for the defaults.</param>
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the merge is a
         /// default value, or the output is a sort and the merge is a function of values (<see
@@ -298,7 +293,7 @@ namespace Eggnog
         /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="merge">The merge of the old and the new value.</param>
-        /// <param name="options">Whether it is an analysis; <c>null</c> for a fact.</param>
+        /// <param name="options">The function's options; <c>null</c> for the defaults.</param>
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the merge is a
         /// default value, or the output is a sort and the merge is a function of values (<see
@@ -315,7 +310,7 @@ namespace Eggnog
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="cost">The cost of a node with this head.</param>
         /// <param name="options">Whether extraction skips it and whether it is subsumable; <c>null</c> for the
-        /// defaults. The role is always a term.</param>
+        /// defaults.</param>
         /// <returns>The constructor.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
@@ -330,7 +325,7 @@ namespace Eggnog
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="cost">The cost of a node with this head.</param>
         /// <param name="options">Whether extraction skips it and whether it is subsumable; <c>null</c> for the
-        /// defaults. The role is always a term.</param>
+        /// defaults.</param>
         /// <returns>The constructor.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
@@ -346,7 +341,7 @@ namespace Eggnog
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="cost">The cost of a node with this head.</param>
         /// <param name="options">Whether extraction skips it and whether it is subsumable; <c>null</c> for the
-        /// defaults. The role is always a term.</param>
+        /// defaults.</param>
         /// <returns>The constructor.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
@@ -364,7 +359,7 @@ namespace Eggnog
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="cost">The cost of a node with this head.</param>
         /// <param name="options">Whether extraction skips it and whether it is subsumable; <c>null</c> for the
-        /// defaults. The role is always a term.</param>
+        /// defaults.</param>
         /// <returns>The constructor.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
@@ -383,7 +378,7 @@ namespace Eggnog
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="cost">The cost of a node with this head.</param>
         /// <param name="options">Whether extraction skips it and whether it is subsumable; <c>null</c> for the
-        /// defaults. The role is always a term.</param>
+        /// defaults.</param>
         /// <returns>The constructor.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
@@ -397,12 +392,7 @@ namespace Eggnog
         /// <param name="name">The name, unique among the graph's rulesets.</param>
         /// <returns>The ruleset.</returns>
         /// <exception cref="ArgumentException">The name is empty or taken.</exception>
-        public Ruleset DefineRuleset(string name) => DefineRulesetCore(name, null);
-
-        /// <summary>
-        /// Defines a named ruleset with an optional licence.
-        /// </summary>
-        Ruleset DefineRulesetCore(string name, ScopeTag? licence)
+        public Ruleset DefineRuleset(string name)
         {
             EngineCallMarker.ThrowIfActive();
             NameRules.ValidateName(name, nameof(name));
@@ -411,7 +401,7 @@ namespace Eggnog
                 if (rulesetsByName.ContainsKey(name))
                     throw new ArgumentException($"A ruleset named '{name}' is already defined.", nameof(name));
 
-                var ruleset = new Ruleset(this, name, licence);
+                var ruleset = new Ruleset(this, name);
                 rulesetsByName.Add(name, ruleset);
                 var next = new Ruleset[rulesets.Length + 1];
                 rulesets.CopyTo(next, 0);
@@ -427,8 +417,7 @@ namespace Eggnog
         /// </summary>
         /// <param name="name">The name.</param>
         /// <param name="keys">The column types, of this graph.</param>
-        /// <param name="options">Whether it is an analysis, and its subsumability; <c>null</c> for a subsumable
-        /// fact.</param>
+        /// <param name="options">Its subsumability; <c>null</c> for a subsumable relation.</param>
         /// <returns>The relation.</returns>
         internal RelationHandle DefineRelation(string name, IReadOnlyList<ColumnType> keys, RelationOptions? options = null) =>
             DefineTable(static () => new UntypedRelation(), name, TableKind.Relation, Copy(keys), null, TableSettings.Of(options), null, 0);
@@ -440,8 +429,7 @@ namespace Eggnog
         /// </summary>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="keys">The key columns' types: value types or sorts, each registered with this graph.</param>
-        /// <param name="options">Whether it is an analysis, and its subsumability; <c>null</c> for a subsumable
-        /// fact.</param>
+        /// <param name="options">Its subsumability; <c>null</c> for a subsumable relation.</param>
         /// <returns>The relation.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
@@ -457,7 +445,7 @@ namespace Eggnog
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="keys">The key columns' types: value types or sorts, each registered with this graph.</param>
         /// <param name="lattice">The merge of two values, not of classes; <c>null</c> for none.</param>
-        /// <param name="options">Whether it is an analysis; <c>null</c> for a fact.</param>
+        /// <param name="options">The function's options; <c>null</c> for the defaults.</param>
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, or a lattice is given
         /// for a sort output or for a container of classes.</exception>
@@ -473,7 +461,7 @@ namespace Eggnog
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="keys">The key columns' types: value types or sorts, each registered with this graph.</param>
         /// <param name="merge">The merge of the old and the new value.</param>
-        /// <param name="options">Whether it is an analysis; <c>null</c> for a fact.</param>
+        /// <param name="options">The function's options; <c>null</c> for the defaults.</param>
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">As the typed overloads with a merge.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
@@ -491,7 +479,7 @@ namespace Eggnog
         /// <param name="keys">The key columns' types: value types or sorts, each registered with this graph.</param>
         /// <param name="cost">The cost of a node with this head.</param>
         /// <param name="options">Whether extraction skips it and whether it is subsumable; <c>null</c> for the
-        /// defaults. The role is always a term.</param>
+        /// defaults.</param>
         /// <returns>The constructor.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
@@ -518,7 +506,7 @@ namespace Eggnog
         /// <param name="keys">The key types, of this graph.</param>
         /// <param name="output">The output type, of this graph: a value type or a sort.</param>
         /// <param name="lattice">The merge, of values of the output type; <c>null</c> for none.</param>
-        /// <param name="options">Whether it is an analysis; <c>null</c> for a fact.</param>
+        /// <param name="options">The function's options; <c>null</c> for the defaults.</param>
         /// <returns>The function.</returns>
         internal FunctionHandle DefineFunction(string name, IReadOnlyList<ColumnType> keys, ColumnType output, ValueLattice? lattice = null, FunctionOptions? options = null) =>
             DefineTable(static () => new UntypedFunction(), name, TableKind.Function, Copy(keys), output ?? throw new ArgumentNullException(nameof(output)), TableSettings.Of(options), lattice, 0);
@@ -601,7 +589,6 @@ namespace Eggnog
                 handle.Name = name;
                 handle.Index = tables.Length;
                 handle.Kind = kind;
-                handle.Role = settings.Role;
                 handle.KeyArray = keys;
                 handle.Output = output;
                 handle.Subsumable = subsumable;

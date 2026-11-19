@@ -164,6 +164,23 @@ namespace Eggnog.Tests.Host
         }
 
         [Fact]
+        public void ACallABodyTestsForARowInternsItsLiteralsInItsPlace()
+        {
+            // (rule ((F "a") (q "b")) ((q "c"))): a0 b1 c2, the call a body fact tests for a row in its place.
+            var graph = new EGraph();
+            graph.DefineSort<Node>("T");
+            var f = graph.DefineConstructor<string, Node>("F");
+            var q = graph.DefineRelation<string>("q");
+            graph.DefineRuleset("rules").DefineRule("r", r =>
+            {
+                r.When(Fact.Exists(f.Of("a")), q.Of("b"));
+                r.Then(q.Of("c"));
+            });
+
+            AssertCells(graph, "a", "b", "c");
+        }
+
+        [Fact]
         public void ABiRewriteInternsItsLeftSideThenItsConditions()
         {
             // (birewrite (F "a") (G "b") :when ((has (C "c")))): a0 c1 b2, its left side before its conditions, and the

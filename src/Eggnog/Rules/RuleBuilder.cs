@@ -94,15 +94,11 @@ namespace Eggnog
         /// filters.
         /// </summary>
         /// <param name="facts">The facts.</param>
-        /// <exception cref="ArgumentException">The tag of a <see cref="Fact.In"/> belongs to another graph.</exception>
         public void When(params ReadOnlySpan<Fact> facts)
         {
             ThrowIfClosed();
             foreach (var fact in facts)
-            {
-                graph.CheckFactTags(fact ?? throw new ArgumentNullException(nameof(facts), "A fact is null."), nameof(facts));
-                draft.Body.Add(fact);
-            }
+                draft.Body.Add(fact ?? throw new ArgumentNullException(nameof(facts), "A fact is null."));
         }
 
         /// <summary>
@@ -167,15 +163,11 @@ namespace Eggnog
         /// alone (<see cref="Fact.Exists"/>), such as <c>(vec-union a b)</c>.
         /// </summary>
         /// <param name="facts">The facts.</param>
-        /// <exception cref="ArgumentException">The tag of a <see cref="Fact.In"/> belongs to another graph.</exception>
         public void Then(params ReadOnlySpan<Fact> facts)
         {
             ThrowIfClosed();
             foreach (var fact in facts)
-            {
-                graph.CheckFactTags(fact ?? throw new ArgumentNullException(nameof(facts), "A fact is null."), nameof(facts));
-                draft.Head.Add(new HeadItem(HeadItemKind.Then, fact, null, null, null));
-            }
+                draft.Head.Add(new HeadItem(HeadItemKind.Then, fact ?? throw new ArgumentNullException(nameof(facts), "A fact is null."), null, null, null));
         }
 
         /// <summary>
@@ -268,19 +260,14 @@ namespace Eggnog
         /// checks and host reads still find it, but from the next iteration rule bodies and queries no longer match it.
         /// A row that does not exist yet is inserted, subsumed, and the rule's later head items still run for the
         /// match. Subsumption is sticky. Each relation must be subsumable (<see cref="RelationOptions.Subsumable"/>),
-        /// and each fact must be a relation row of the running scope, not a scoped view (a
-        /// <see cref="RuleDefinitionException"/> otherwise).
+        /// and each fact must be a relation row (a <see cref="RuleDefinitionException"/> otherwise).
         /// </summary>
         /// <param name="rows">The relation rows.</param>
-        /// <exception cref="ArgumentException">The tag of a <see cref="Fact.In"/> belongs to another graph.</exception>
         public void Subsume(params ReadOnlySpan<Fact> rows)
         {
             ThrowIfClosed();
             foreach (var row in rows)
-            {
-                graph.CheckFactTags(row ?? throw new ArgumentNullException(nameof(rows), "A fact is null."), nameof(rows));
-                draft.Head.Add(new HeadItem(HeadItemKind.Subsume, row, null, null, null));
-            }
+                draft.Head.Add(new HeadItem(HeadItemKind.Subsume, row ?? throw new ArgumentNullException(nameof(rows), "A fact is null."), null, null, null));
         }
 
         /// <summary>
@@ -291,8 +278,7 @@ namespace Eggnog
         /// egglog: a key the table lacked, or a function's output. A relation's fact or a constructor's term the table
         /// already holds stages nothing, so a deletion of it in the same iteration wins. A deletion is no change for
         /// saturation. A rule that deletes runs only where the scope may delete: not in a scope with live descendants,
-        /// or a child of a writable parent (<see cref="Scope.Run"/> refuses it before any work). The application must
-        /// be of the running scope, not a scoped view (a <see cref="RuleDefinitionException"/> otherwise).
+        /// or a child of a writable parent (<see cref="Scope.Run"/> refuses it before any work).
         /// </summary>
         /// <typeparam name="T">The application's type.</typeparam>
         /// <param name="term">The application: <c>f.Of(k)</c> of a function or a constructor.</param>
@@ -305,19 +291,15 @@ namespace Eggnog
 
         /// <summary>
         /// Deletes relation rows (<c>r.Of(a, b)</c>): egglog's <c>(delete (r a b))</c>. A row that does not exist deletes
-        /// nothing. Otherwise as <see cref="Delete{T}(Term{T})"/>: each fact must be a relation row of the running scope,
-        /// not a scoped view (a <see cref="RuleDefinitionException"/> otherwise).
+        /// nothing. Otherwise as <see cref="Delete{T}(Term{T})"/>: each fact must be a relation row (a
+        /// <see cref="RuleDefinitionException"/> otherwise).
         /// </summary>
         /// <param name="rows">The relation rows.</param>
-        /// <exception cref="ArgumentException">The tag of a <see cref="Fact.In"/> belongs to another graph.</exception>
         public void Delete(params ReadOnlySpan<Fact> rows)
         {
             ThrowIfClosed();
             foreach (var row in rows)
-            {
-                graph.CheckFactTags(row ?? throw new ArgumentNullException(nameof(rows), "A fact is null."), nameof(rows));
-                draft.Head.Add(new HeadItem(HeadItemKind.Delete, row, null, null, null));
-            }
+                draft.Head.Add(new HeadItem(HeadItemKind.Delete, row ?? throw new ArgumentNullException(nameof(rows), "A fact is null."), null, null, null));
         }
 
         /// <summary>
@@ -341,8 +323,7 @@ namespace Eggnog
         /// Adds a callback that reads tables too (<see cref="FullRuleCallbackContext"/>): egglog's <c>rust_rule_full</c>.
         /// As egglog marks such a rule, the rule becomes naive (<see cref="Naive"/>): matched in full every run, so that a
         /// match is found again when a row the callback read changes; under <see cref="Schedule.RunWith"/> its query is
-        /// semi-naive, as egglog builds every scheduler's. A rule under a licence reads outside it here, so it must call
-        /// <see cref="ReadsOwnFacts"/>. Otherwise as <see cref="ThenCall"/>.
+        /// semi-naive, as egglog builds every scheduler's. Otherwise as <see cref="ThenCall"/>.
         /// </summary>
         /// <param name="callback">The callback.</param>
         public void ThenCallFull(Action<FullRuleCallbackContext> callback)
@@ -361,32 +342,6 @@ namespace Eggnog
         {
             ThrowIfClosed();
             draft.Naive = true;
-        }
-
-        /// <summary>
-        /// Makes this rule erasing under <paramref name="licence"/>, whatever its ruleset says: every atom over a fact
-        /// table must read the licence scope (<c>In(licence)</c>), unless the rule calls <see cref="ReadsOwnFacts"/>.
-        /// </summary>
-        /// <param name="licence">The licence tag.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="licence"/> is <c>null</c>.</exception>
-        /// <exception cref="ArgumentException">The tag belongs to another graph.</exception>
-        public void Erasing(ScopeTag licence)
-        {
-            ThrowIfClosed();
-            graph.CheckTag(licence, nameof(licence));
-            draft.Erasing = licence;
-        }
-
-        /// <summary>
-        /// Exempts this rule from its licence: it may read fact tables in the running scope. <paramref name="reason"/>
-        /// says why that is sound, and <see cref="Rule.ToString"/> renders it. The rule must have a licence, its
-        /// ruleset's or its own (a <see cref="RuleDefinitionException"/> otherwise), and the reason must not be empty.
-        /// </summary>
-        /// <param name="reason">Why reading the running scope's facts is sound for this rule.</param>
-        public void ReadsOwnFacts(string reason)
-        {
-            ThrowIfClosed();
-            draft.OwnFactsReason = reason ?? string.Empty;
         }
 
         /// <summary>

@@ -44,7 +44,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets the number of engine iterations the run made; mirror syncs do not count.
+        /// Gets the number of iterations the run made, a step of <see cref="Schedule.RunWith"/> counting as one.
         /// </summary>
         public int Iterations { get; }
 

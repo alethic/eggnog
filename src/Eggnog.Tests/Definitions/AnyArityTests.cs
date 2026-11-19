@@ -55,18 +55,18 @@ namespace Eggnog.Tests.Definitions
         }
 
         /// <summary>
-        /// A function of five keys outputs a class, as egglog's functions of a sort do; the any-arity views read a scope's
-        /// rows, and refuse a table with a sort column, as the typed views do.
+        /// A function of five keys outputs a class, as egglog's functions of a sort do; queries read the any-arity
+        /// tables' rows.
         /// </summary>
         [Fact]
-        public void AFunctionOfFiveKeysOutputsAClassAndTheViewsReadAScope()
+        public void AFunctionOfFiveKeysOutputsAClassAndQueriesReadTheTables()
         {
             var t = new NodeTheory();
             var r = t.Graph.DefineRelationN("r", Five);
             var f = t.Graph.DefineFunctionN<Node>("f", Five);
             var n = t.Graph.DefineFunctionN<long>("n", Five);
-            var seen = t.Graph.DefineQuery("seen", q => q.When(r.In(t.Graph.RootTag).Of(q.Var<long>("x"), 2L, 3L, 4L, "x")));
-            var valued = t.Graph.DefineQuery("valued", q => q.When(n.In(t.Graph.RootTag).Of(1L, 2L, 3L, 4L, "x").Is(q.Var<long>("v"))));
+            var seen = t.Graph.DefineQuery("seen", q => q.When(r.Of(q.Var<long>("x"), 2L, 3L, 4L, "x")));
+            var valued = t.Graph.DefineQuery("valued", q => q.When(n.Of(1L, 2L, 3L, 4L, "x").Is(q.Var<long>("v"))));
             var a = t.Root.Make(t.A.Of());
 
             t.Root.Assume(r.Of(1L, 2L, 3L, 4L, "x"), r.Of(5L, 2L, 3L, 4L, "x"), f.Of(1L, 2L, 3L, 4L, "x").Is(a), n.Of(1L, 2L, 3L, 4L, "x").Is(6L));
@@ -74,7 +74,6 @@ namespace Eggnog.Tests.Definitions
             Assert.True(t.Root.AreEqual(t.Root.Get(f.Of(1L, 2L, 3L, 4L, "x")), a));
             Assert.Equal(2, t.Root.Count(seen));
             Assert.Equal(1, t.Root.Count(valued));
-            Assert.Throws<ArgumentException>(() => f.In(t.Graph.RootTag));
         }
 
         /// <summary>

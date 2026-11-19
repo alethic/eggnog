@@ -28,8 +28,8 @@ namespace Eggnog.Tests.Scopes
             });
             t.Root.Assume(t.Fact.Of("good"));
             t.Root.Freeze();
-            var bad = t.Root.CreateChild(t.Outer);
-            var sibling = t.Root.CreateChild(t.Outer);
+            var bad = t.Root.CreateChild();
+            var sibling = t.Root.CreateChild();
             bad.Assume(t.Fact.Of("bad"));
 
             var failure = Assert.Throws<RuleEvaluationException>(() => bad.Run(Schedule.Saturate(t.Rules)));

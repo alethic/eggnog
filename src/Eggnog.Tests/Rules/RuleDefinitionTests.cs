@@ -8,8 +8,8 @@ namespace Eggnog.Tests.Rules
 {
 
     /// <summary>
-    /// One test per definition error of a rule, with the exact message. A failed definition registers nothing: no rule,
-    /// no variant, and no mirror.
+    /// One test per definition error of a rule, with the exact message. A failed definition registers nothing: no rule
+    /// and no variant.
     /// </summary>
     public sealed class RuleDefinitionTests
     {
@@ -137,26 +137,6 @@ namespace Eggnog.Tests.Rules
         }
 
         [Fact]
-        public void AnAnalysisWriterReadingAFactTableIsRefused()
-        {
-            var t = new NodeTheory();
-            var present = t.Graph.DefineRelation<string>("present");
-            var inset = t.Graph.DefineRelation<Node>("inset", new RelationOptions { Analysis = true });
-            AssertRefused(t, "writer", r =>
-            {
-                var (n, p) = r.Vars<Node, string>("n", "p");
-                r.When(t.Wrap.Of(n).Is(n), present.Of(p));
-                r.Then(inset.Of(n));
-            }, "rule writes analysis table 'inset' and may read only term and analysis tables; it reads 'present'");
-            t.Rules.DefineRule("a writer reading terms", r =>
-            {
-                var n = r.Var<Node>("n");
-                r.When(Fact.Exists(t.Wrap.Of(n)));
-                r.Then(inset.Of(n));
-            });
-        }
-
-        [Fact]
         public void AFunctionReadInAHeadIsRefused()
         {
             var t = new NodeTheory();
@@ -230,6 +210,10 @@ namespace Eggnog.Tests.Rules
             t.Rules.DefineRule("a root class", r => r.Then(t.Tag.Of(mine)));
         }
 
+        /// <summary>
+        /// A body may not read another graph's table, in a relation row or in an application, whether the application
+        /// is tested for a row or bound to a variable: it would read this graph's table of the same engine id.
+        /// </summary>
         [Fact]
         public void ATableOfAnotherGraphIsRefused()
         {
@@ -240,6 +224,29 @@ namespace Eggnog.Tests.Rules
                 var x = r.Var<long>("x");
                 r.When(other.Num.Of(x));
             }, "table 'num' belongs to another graph");
+            AssertRefused(t, "foreign term", r =>
+            {
+                var x = r.Var<long>("x");
+                r.When(t.Num.Of(x), Fact.Exists(other.Lit.Of(x)));
+            }, "table 'Lit' belongs to another graph");
+            AssertRefused(t, "foreign class", r =>
+            {
+                var (n, x) = r.Vars<Node, long>("n", "x");
+                r.When(t.Num.Of(x), n.Is(other.Lit.Of(x)));
+            }, "table 'Lit' belongs to another graph");
+        }
+
+        /// <summary>
+        /// A null fact is refused when it is given, and nothing is registered.
+        /// </summary>
+        [Fact]
+        public void ANullFactIsRefused()
+        {
+            var t = new NodeTheory();
+            var e = Assert.Throws<ArgumentNullException>(() => t.Rules.DefineRule("null", r => r.When(t.Num.Of(1L), null!)));
+            Assert.Equal("facts", e.ParamName);
+            Assert.StartsWith("A fact is null.", e.Message, StringComparison.Ordinal);
+            Assert.Empty(t.Rules.Rules);
         }
 
         [Fact]
@@ -253,119 +260,6 @@ namespace Eggnog.Tests.Rules
             Assert.Null(first.Owner);
             Assert.False(first.IsNaive);
             Assert.Equal("first", first.Name);
-        }
-
-        [Fact]
-        public void NestedFactInIsRefused()
-        {
-            var t = new ScopeTheory();
-            AssertScopedRefused(t, "nested", r => r.When(Fact.In(t.Outer, Fact.In(t.Inner, t.Fact.Of("a")))), "Fact.In cannot be nested");
-        }
-
-        [Fact]
-        public void AHandleScopedToAnotherTagInsideFactInIsRefused()
-        {
-            var t = new ScopeTheory();
-            AssertScopedRefused(t, "mismatched", r => r.When(Fact.In(t.Inner, t.Fact.In(t.Outer).Of("a"))), "'fact @outer' is inside Fact.In('inner')");
-        }
-
-        [Fact]
-        public void AScopedReadOfATableWithASortColumnIsRefused()
-        {
-            var t = new ScopeTheory();
-            t.Graph.DefineSort<Node>("Node");
-            var and = t.Graph.DefineConstructor<Node, Node, Node>("And");
-            var tag = t.Graph.DefineRelation<Node>("tagged");
-            AssertScopedRefused(t, "sort column", r =>
-            {
-                var (a, b) = r.Vars<Node, Node>("a", "b");
-                r.When(Fact.In(t.Outer, Fact.Exists(and.Of(a, b))));
-            }, "scoped reads are limited to tables whose columns are all values; 'And' has a sort column");
-            AssertScopedRefused(t, "sort relation", r => r.When(Fact.In(t.Outer, tag.Of(r.Var<Node>("x")))),
-                "scoped reads are limited to tables whose columns are all values; 'tagged' has a sort column");
-            Assert.Throws<ArgumentException>(() => ((RelationHandle)tag).InScope(t.Outer));
-        }
-
-        [Fact]
-        public void AScopedWriteIsRefused()
-        {
-            var t = new ScopeTheory();
-            AssertScopedRefused(t, "scoped insert", r => r.Then(t.Fact.In(t.Outer).Of("a")), "'fact @outer' is read-only");
-            AssertScopedRefused(t, "scoped write", r => r.Then(t.Best.In(t.Outer).Of("k").Is(1L)), "'best @outer' is read-only");
-            AssertScopedRefused(t, "scoped head", r => r.Then(Fact.In(t.Outer, t.Fact.Of("a"))), "head facts are writes; Fact.In('outer') is read-only");
-            AssertScopedRefused(t, "scoped row deletion", r => r.Delete(t.Fact.In(t.Outer).Of("a")), "'fact @outer' is read-only");
-            AssertScopedRefused(t, "scoped deletion", r => r.Delete(t.Best.In(t.Outer).Of("k")), "'best @outer' is read-only");
-        }
-
-        [Fact]
-        public void AnErasingViolationIsRefused()
-        {
-            var t = new ScopeTheory();
-            var licensed = t.Graph.DefineRuleset("licensed", new RulesetOptions { Licence = t.Outer });
-            var e = Assert.Throws<RuleDefinitionException>(() => licensed.DefineRule("own facts", r =>
-            {
-                var x = r.Var<string>("x");
-                r.When(t.Fact.Of(x));
-                r.Then(t.Seen.Of(x));
-            }));
-            Assert.Equal("rule reads fact table 'fact' outside scope 'outer'; read it through In(outer), or call ReadsOwnFacts with the reason that is sound", e.Message);
-            e = Assert.Throws<RuleDefinitionException>(() => licensed.DefineRule("other scope", r =>
-            {
-                var x = r.Var<string>("x");
-                r.When(t.Fact.In(t.Inner).Of(x));
-                r.Then(t.Seen.Of(x));
-            }));
-            Assert.Equal("rule reads fact table 'fact' outside scope 'outer'; read it through In(outer), or call ReadsOwnFacts with the reason that is sound", e.Message);
-            Assert.Empty(licensed.Rules);
-        }
-
-        [Fact]
-        public void ReadsOwnFactsNeedsALicenceAndAReason()
-        {
-            var t = new ScopeTheory();
-            AssertScopedRefused(t, "no licence", r =>
-            {
-                r.ReadsOwnFacts("because");
-                r.When(t.Fact.Of("a"));
-            }, "rule calls ReadsOwnFacts but has no licence");
-            var licensed = t.Graph.DefineRuleset("licensed", new RulesetOptions { Licence = t.Outer });
-            var e = Assert.Throws<RuleDefinitionException>(() => licensed.DefineRule("no reason", r =>
-            {
-                r.ReadsOwnFacts(" ");
-                r.When(t.Fact.Of("a"));
-            }));
-            Assert.Equal("ReadsOwnFacts needs a reason", e.Message);
-        }
-
-        [Fact]
-        public void AFirstScopedReadAfterATaggedScopeFrozeIsRefused()
-        {
-            var t = new ScopeTheory();
-            t.Rules.DefineRule("early", r => r.When(t.Fact.In(t.Outer).Of(r.Var<string>("x"))));
-            t.Root.Freeze();
-            var outer = t.Root.CreateChild(t.Outer);
-            outer.Freeze();
-
-            // fact @outer exists already, so a second reader of it is fine; best @outer would be new.
-            t.Rules.DefineRule("second reader", r => r.When(t.Fact.In(t.Outer).Of(r.Var<string>("x"))));
-            AssertScopedRefused(t, "late", r =>
-            {
-                var (k, v) = r.Vars<string, long>("k", "v");
-                r.When(v.Is(t.Best.In(t.Outer).Of(k)));
-            }, "'best' is first read in scope 'outer' after a scope tagged 'outer' was frozen; define rules that read it before freezing such scopes");
-
-            // Once the frozen scope is released, the read is allowed again; another tag was never affected.
-            outer.Dispose();
-            t.Rules.DefineRule("after release", r =>
-            {
-                var (k, v) = r.Vars<string, long>("k", "v");
-                r.When(v.Is(t.Best.In(t.Outer).Of(k)));
-            });
-            t.Rules.DefineRule("inner", r =>
-            {
-                var (k, v) = r.Vars<string, long>("k", "v");
-                r.When(v.Is(t.Best.In(t.Inner).Of(k)));
-            });
         }
 
         [Fact]
@@ -418,18 +312,6 @@ namespace Eggnog.Tests.Rules
         }
 
         /// <summary>
-        /// Asserts that a definition in the theory's ruleset fails with <paramref name="message"/> and adds no rule.
-        /// </summary>
-        static void AssertScopedRefused(ScopeTheory t, string name, Action<RuleBuilder> define, string message)
-        {
-            var before = t.Rules.Rules.Count;
-            var e = Assert.Throws<RuleDefinitionException>(() => t.Rules.DefineRule(name, define));
-            Assert.Equal(name, e.RuleName);
-            Assert.Equal(message, e.Message);
-            Assert.Equal(before, t.Rules.Rules.Count);
-        }
-
-        /// <summary>
         /// Asserts that a definition fails with <paramref name="message"/> and registers nothing.
         /// </summary>
         static RuleDefinitionException AssertRefused(NodeTheory t, string name, Action<RuleBuilder> define, string message)
@@ -442,79 +324,6 @@ namespace Eggnog.Tests.Rules
             Assert.Equal(before, t.Rules.Rules.Count);
             Assert.Equal(variants, t.Graph.VariantsByDescription.Count);
             return e;
-        }
-
-        /// <summary>
-        /// A rule that writes an analysis table may read no scoped atom.
-        /// </summary>
-        [Fact]
-        public void AnAnalysisWriterReadingAScopedAtomIsRefused()
-        {
-            var t = new ScopeTheory();
-            var source = t.Graph.DefineRelation<string>("source", new RelationOptions { Analysis = true });
-            var analysis = t.Graph.DefineRelation<string>("analysis", new RelationOptions { Analysis = true });
-            var e = Assert.Throws<RuleDefinitionException>(() => t.Rules.DefineRule("analysis from scoped", r =>
-            {
-                var x = r.Var<string>("x");
-                r.When(source.In(t.Outer).Of(x));
-                r.Then(analysis.Of(x));
-            }));
-            Assert.Equal("analysis from scoped", e.RuleName);
-            Assert.Equal("rule writes analysis table 'analysis' and may not read scoped atoms; it reads 'source @outer'", e.Message);
-            Assert.Empty(t.Rules.Rules);
-        }
-
-        /// <summary>
-        /// A definition that fails registers nothing: a rule whose body reads a scoped atom and whose head uses an
-        /// unbound variable, and a query with an unbound variable over a scoped atom, leave no mirror and no variant.
-        /// </summary>
-        [Fact]
-        public void AFailedDefinitionWithAScopedReadRegistersNoMirror()
-        {
-            var t = new ScopeTheory();
-            var variants = t.Graph.VariantsByDescription.Count;
-            Assert.Throws<RuleDefinitionException>(() => t.Rules.DefineRule("unbound head", r =>
-            {
-                var (x, y) = r.Vars<string, string>("x", "y");
-                r.When(t.Fact.In(t.Outer).Of(x));
-                r.Then(t.Seen.Of(y));
-            }));
-            Assert.Throws<RuleDefinitionException>(() => t.Graph.DefineQuery("unbound query", q =>
-            {
-                var k = q.Var<string>("k");
-                q.When(t.Best.In(t.Inner).Of("k").Is(5L));
-                q.Where(k, _ => true);
-            }));
-
-            Assert.Empty(t.Graph.Mirrors.AllCopyRules());
-            Assert.Equal(variants, t.Graph.VariantsByDescription.Count);
-        }
-
-        /// <summary>
-        /// A failed definition does not count as the first scoped read of a table: after only a failed definition read
-        /// <c>fact @outer</c>, freezing a scope tagged outer still refuses the first real reader.
-        /// </summary>
-        [Fact]
-        public void AFailedDefinitionDoesNotCountAsTheFirstScopedRead()
-        {
-            var t = new ScopeTheory();
-            Assert.Throws<RuleDefinitionException>(() => t.Rules.DefineRule("unbound head", r =>
-            {
-                var (x, y) = r.Vars<string, string>("x", "y");
-                r.When(t.Fact.In(t.Outer).Of(x));
-                r.Then(t.Seen.Of(y));
-            }));
-            t.Root.Freeze();
-            var outer = t.Root.CreateChild(t.Outer);
-            outer.Freeze();
-
-            var e = Assert.Throws<RuleDefinitionException>(() => t.Rules.DefineRule("late reader", r =>
-            {
-                var x = r.Var<string>("x");
-                r.When(t.Fact.In(t.Outer).Of(x));
-                r.Then(t.Seen.Of(x));
-            }));
-            Assert.Contains("first read in scope 'outer'", e.Message);
         }
 
     }

@@ -25,12 +25,9 @@ namespace Eggnog
         /// indexing.</param>
         /// <param name="namedRegisters">The registers of the declared body variables, then of the <c>Make</c> variables;
         /// -1 for a variable bound to a constant or unused.</param>
-        /// <param name="writesAnalysis">Whether the head writes an analysis table.</param>
-        /// <param name="readScopes">The distinct tags the scoped atoms read, in first-use order.</param>
         public RuleProgram(string name, ProgramRegister[] registers, ProgramAtom[] atoms, ProgramStep[] steps, HeadOp[] head,
-            uint[] writtenIdConstants, ScopeOrigin[] idConstantOrigins, int[] namedRegisters, bool writesAnalysis, ScopeTag[] readScopes)
+            uint[] writtenIdConstants, ScopeOrigin[] idConstantOrigins, int[] namedRegisters)
         {
-            ReadScopes = readScopes;
             Name = name;
             Registers = registers;
             Atoms = atoms;
@@ -39,7 +36,6 @@ namespace Eggnog
             WrittenIdConstants = writtenIdConstants;
             IdConstantOrigins = idConstantOrigins;
             NamedRegisters = namedRegisters;
-            WritesAnalysis = writesAnalysis;
             List<TableHandle>? deletes = null;
             foreach (var op in head)
             {
@@ -96,12 +92,6 @@ namespace Eggnog
         public int[] NamedRegisters { get; }
 
         /// <summary>
-        /// Gets the distinct tags the scoped atoms read, in first-use order: the tags whose mirrors are synced before the
-        /// program runs and that must resolve from the running scope.
-        /// </summary>
-        public ScopeTag[] ReadScopes { get; }
-
-        /// <summary>
         /// Gets the first function the head writes or deletes from whose merge is not a lattice
         /// (<see cref="FunctionMerge"/>), which only the root may write, so that the program runs only there; <c>null</c>
         /// when there is none.
@@ -110,20 +100,14 @@ namespace Eggnog
 
         /// <summary>
         /// Gets the distinct tables the head deletes rows of, in first-use order: the program runs only where the scope
-        /// may delete, and a run reconciles the scope's mirrors of them under its own tag after each iteration.
+        /// may delete.
         /// </summary>
         public TableHandle[] Deletes { get; }
 
         /// <summary>
-        /// Gets whether the head writes an analysis table; such a program reads no fact table and no scoped atom, so
-        /// analyses depend only on terms.
-        /// </summary>
-        public bool WritesAnalysis { get; }
-
-        /// <summary>
         /// Gets whether the atoms match subsumed rows too: a scheduler's query, as egglog at 5e655cae builds it
         /// (<c>src/scheduler.rs</c>, <c>query(&amp;rule.body, true)</c>); every other program matches only rows that are not
-        /// subsumed, or a mirror copy rule's only subsumed ones.
+        /// subsumed.
         /// </summary>
         public bool IncludeSubsumed { get; init; }
 

@@ -72,7 +72,7 @@ ExtractedTerm best = root.Extract(e);                              // (Add (Var 
 
 | Type | What it is |
 |---|---|
-| `EGraph` | A theory and its database: column types, tables, rulesets, queries, scope tags, and the root scope. |
+| `EGraph` | A theory and its database: column types, tables, rulesets, queries, and the root scope. |
 | `ISort<TSort>`, `ClassId` | A sort is a record struct over a `ClassId`, the type of a class of equivalent terms. |
 | `Relation<...>` | A set of tuples (`DefineRelation`). |
 | `Function<..., TOut>`, `ValueLattice<T>`, `FunctionMerge<T>` | One value, or one class of a sort, per key (`DefineFunction`); two values for one key merge by the lattice (`Max`, `Min`, `Intersect`, `Union`, or your own), or by egglog's `:merge new`, `old`, `(f old new)` or any expression over `old` and `new` (`FunctionMerge.New`, `Old`, `Of`, `Expression`), which only the root writes. |
@@ -81,11 +81,10 @@ ExtractedTerm best = root.Extract(e);                              // (Add (Var 
 | `Term<T>`, `Fact` | Expressions and statements, written with `Of`, `Is`, `IsNot`, primitives and lambdas; used in rules, writes, checks and queries. |
 | `Primitive`, `PrimitiveAccess`, `ITables` | Functions of values in terms: egglog's (`Int64Primitives`, `DoublePrimitives`, `StringPrimitives`, ..., and `Primitives` for the containers' and the generic ones) or your own (`Primitive.Create`, `CreatePartial`); and, as egglog's primitives over the database, ones that read or write the tables (`CreateRead`, `CreateWrite`, `CreateFull`), refused where the call site's context does not allow it, as egglog's are. A table's handle carries its output type or sort (`FunctionHandle<TOut>`, `ConstructorHandle<TSort>`), so `tables.Make(lit, 1L)` and `tables.TryLookup(f, [k], out var v)` infer it. |
 | `Ruleset`, `RuleBuilder` | Named groups of rules; a rule has a body (`When`, `Where`) and a head (`Then`, `Rewrite`, `Subsume`, `Delete`: egglog's `delete`, also `Scope.Delete`; `ThenCall` and `ThenCallFull`: egglog's `rust_rule` and `rust_rule_full`, host code). |
-| `RelationOptions`, `FunctionOptions`, `ConstructorOptions` | A table's options, one type per kind: a relation's or function's role (`Analysis`); a constructor's extractability (`Unextractable`, egglog's `:unextractable`); and whether a relation's or constructor's rows may be subsumed (`Subsumable`, by default yes): egglog's `subsume`, through `RuleBuilder.Subsume`, `Rewrite(left, right, subsume: true)` and `Scope.Subsume`. Rules, queries and extraction skip a subsumed row; checks and lookups still see it. |
+| `RelationOptions`, `FunctionOptions`, `ConstructorOptions` | A table's options, one type per kind: a constructor's extractability (`Unextractable`, egglog's `:unextractable`), and whether a relation's or constructor's rows may be subsumed (`Subsumable`, by default yes): egglog's `subsume`, through `RuleBuilder.Subsume`, `Rewrite(left, right, subsume: true)` and `Scope.Subsume`. Rules, queries and extraction skip a subsumed row; checks and lookups still see it. |
 | `Schedule` | What a run does: `Run`, `Repeat`, `Saturate`, `Sequence`, `Until`, and `RunWith`, a step under a scheduler. |
 | `IRuleScheduler`, `RuleScheduler`, `BackOffScheduler` | egglog's schedulers: which of a rule's matches fire in a step (`EGraph.AddScheduler`, `Schedule.RunWith`); egglog-experimental's back-off. |
 | `Scope` | Where facts are written, rules run and reads answered: the root or a child (`CreateChild`), writable or frozen (`Freeze`). |
-| `ScopeTag` | A label on scopes, through which rules read another scope's facts (`In(tag)`) and rulesets restrict what their rules may judge on. |
 | `Query` | A reusable conjunctive query (`DefineQuery`), run with `Any`, `Count` or `ForEachMatch`. |
 | `Extractor`, `CostModel` | The cheapest equivalent term of a class (`Scope.Extract`), or several of its variants cheapest first (`Scope.ExtractVariants`, egglog's `(extract x n)`), under a cost model. |
 | `RunOptions`, `RunReport` | Limits for a run (iterations, time, rows), and what it did (iterations, per-rule statistics, steps). |

@@ -381,8 +381,6 @@ namespace Eggnog
                     break;
                 case FilterFact:
                     throw new ArgumentException("host writes are ground facts; 'True' is a filter", nameof(fact));
-                case ScopedFact scoped:
-                    throw new ArgumentException($"host writes go to the scope written; Fact.In('{scoped.Scope.Name}') is read-only", nameof(fact));
                 default:
                     throw new ArgumentException($"a {fact.GetType().Name} is not a host write", nameof(fact));
             }
@@ -528,11 +526,7 @@ namespace Eggnog
         void PlanSubsumeCore(Fact fact)
         {
             if (fact is not RelationFact relation)
-            {
-                throw fact is ScopedFact scoped
-                    ? new ArgumentException($"host writes go to the scope written; Fact.In('{scoped.Scope.Name}') is read-only", nameof(fact))
-                    : new ArgumentException($"Subsume(rows) takes relation rows, r.Of(...); {fact} is not one (subsume a term with Subsume(term))", nameof(fact));
-            }
+                throw new ArgumentException($"Subsume(rows) takes relation rows, r.Of(...); {fact} is not one (subsume a term with Subsume(term))", nameof(fact));
 
             var table = relation.Table;
             CheckTable(table);
@@ -1022,16 +1016,12 @@ namespace Eggnog
         ColumnType TypeOf(Type clrType) => graph.Values.TypeOf(clrType);
 
         /// <summary>
-        /// Checks that a table belongs to the scope's graph and is not a read-only scoped view.
+        /// Checks that a table belongs to the scope's graph.
         /// </summary>
         void CheckTable(TableHandle table)
         {
             if (ReferenceEquals(table.Graph, graph) == false)
                 throw new ArgumentException($"Table '{table.Name}' belongs to another graph.");
-
-            // Writes are never scoped: a host write goes to the scope written, never through a scoped view.
-            if (table.ReadScope is { } tag)
-                throw new ArgumentException($"'{table.Name} @{tag.Name}' is read-only; write '{table.Name}' in the scope itself.");
         }
 
         /// <summary>

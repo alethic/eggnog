@@ -96,7 +96,7 @@ namespace Eggnog.Tests.Scopes
         {
             var churn = new ScopeChurn();
             var c = churn.Theory;
-            using var query = churn.Schema.CreateChild(c.Query);
+            using var query = churn.Schema.CreateChild();
             var p = query.Make(c.StrEq.Of("kind", "a"));
             query.Assume(c.WhereClause.Of(p));
             query.Run(churn.Plain);
@@ -127,7 +127,7 @@ namespace Eggnog.Tests.Scopes
             var variants = churn.Graph.VariantsByDescription.Count;
 
             // While a query's local rule lives, it holds a rule, a variant and a call site.
-            using (var query = churn.Schema.CreateChild(c.Query))
+            using (var query = churn.Schema.CreateChild())
             {
                 churn.DefineLocalRule(query, "live", "live");
                 Assert.True(churn.Graph.Engine.RuleCount > rules);
@@ -210,7 +210,7 @@ namespace Eggnog.Tests.Scopes
             var c = churn.Theory;
             foreach (var cases in new[] { true, false })
             {
-                using var query = churn.Schema.CreateChild(c.Query);
+                using var query = churn.Schema.CreateChild();
                 query.Assume(c.WhereClause.Of(query.Make(c.Not.Of(c.StrEq.Of("kind", "c")))));
                 query.Run(cases ? churn.Cases : churn.Plain);
                 Assert.Equal(cases, query.Check(c.Form.Of("ref", "uuid-lower")));

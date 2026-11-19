@@ -11,10 +11,8 @@ namespace Eggnog
 
         readonly object childrenLock = new();
         readonly List<Scope> children = new();
-        readonly Dictionary<ScopeTag, (long Stamp, int CopyRules)> mirrorSyncs = new(ReferenceEqualityComparer.Instance);
         int transientChildren;
         bool released;
-        bool frozenWithTag;
         CompiledRule[] localCompiled = Array.Empty<CompiledRule>();
         ReadOnlyCollection<Rule> localRulesView = Array.AsReadOnly(Array.Empty<Rule>());
 
@@ -22,12 +20,6 @@ namespace Eggnog
         /// Gets the parent scope; <c>null</c> for the root.
         /// </summary>
         public Scope? Parent { get; }
-
-        /// <summary>
-        /// Gets the scope's tag: <see cref="EGraph.RootTag"/> for the root, the one given to <see cref="CreateChild"/>
-        /// otherwise (<c>null</c> for none). Scoped atoms resolve a tag to the nearest ancestor-or-self carrying it.
-        /// </summary>
-        public ScopeTag? Tag { get; }
 
         /// <summary>
         /// Gets whether the scope is frozen: it never changes again; reads, queries and extractors on it
@@ -103,10 +95,8 @@ namespace Eggnog
         /// (<see cref="CompactionsBlockedAtFreeze"/>). Freeze a scope before creating children of it, or dispose them
         /// and their descendants before heavy work in it.
         /// </remarks>
-        /// <param name="tag">The child's tag, which scoped atoms resolve; <c>null</c> for none.</param>
         /// <param name="options">The child's options; <c>null</c> for <see cref="ScopeOptions.Default"/>.</param>
         /// <returns>The child.</returns>
-        /// <exception cref="ArgumentException">The tag belongs to another graph, or it is the root's.</exception>
         /// <exception cref="ArgumentOutOfRangeException">The options' degree of parallelism is negative.</exception>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
         /// <exception cref="InvalidOperationException">The scope is faulted or in use on another thread; or the call comes
@@ -115,15 +105,8 @@ namespace Eggnog
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
         /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>): no child is
         /// created, the scope is not faulted, and from then on the graph creates no child at all.</exception>
-        public Scope CreateChild(ScopeTag? tag = null, ScopeOptions? options = null)
+        public Scope CreateChild(ScopeOptions? options = null)
         {
-            if (tag is not null)
-            {
-                Graph.CheckTag(tag, nameof(tag));
-                if (ReferenceEquals(tag, Graph.RootTag))
-                    throw new ArgumentException("The root tag is the root's; tag a child with a tag of its own.", nameof(tag));
-            }
-
             if (options?.DegreeOfParallelism is < 0)
                 throw new ArgumentOutOfRangeException(nameof(options), options.DegreeOfParallelism, "The degree of parallelism must not be negative.");
 
@@ -146,8 +129,8 @@ namespace Eggnog
                         throw new ObjectDisposedException(Path, $"Scope '{Path}' is disposed.");
 
                     var engine = CreateEngineChild(contextOptions);
-                    var path = Path + "/" + (tag?.Name ?? "scope") + "#" + Graph.NextScopeSerial().ToString(System.Globalization.CultureInfo.InvariantCulture);
-                    var child = new Scope(this, tag, engine, IsFrozen ? new ScopeGuard() : Guard, path);
+                    var path = Path + "/scope#" + Graph.NextScopeSerial().ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    var child = new Scope(this, engine, IsFrozen ? new ScopeGuard() : Guard, path);
                     children.Add(child);
                     return child;
                 }
@@ -159,11 +142,10 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Brings this scope's mirrors current, then freezes it: the engine flushes, rebuilds, plans
-        /// the rules this scope's descendants can run on its statistics, and freezes storage. The parent must be
-        /// frozen. Local rules are fixed from here on, and each live child subtree that shared this scope's thread domain
-        /// gets its own; a child another thread created once the scope read as frozen keeps the domain it was given. A
-        /// second call does nothing.
+        /// Freezes the scope: the engine flushes, rebuilds, below the root plans the rules this scope's descendants can
+        /// run on its statistics, and freezes storage. The parent must be frozen. Local rules are fixed from here on,
+        /// and each live child subtree that shared this scope's thread domain gets its own; a child another thread
+        /// created once the scope read as frozen keeps the domain it was given. A second call does nothing.
         /// </summary>
         /// <remarks>
         /// Freezing compacts the scope's tables, except while the scope has live descendants: those tables keep the rows
@@ -217,20 +199,14 @@ namespace Eggnog
                     }
                 }
 
-                // The definition lock keeps a first scoped read of this scope's tag from creating a mirror between the sync
-                // and the count of frozen scopes: such a read is refused from then on.
+                // The engine freezes under the definition lock: every root definition and registration decides between
+                // its writable path and the frozen root's append by reading Root.IsFrozen under that lock, so the root
+                // cannot freeze between that read and the definition. Below the root, the lock also keeps the
+                // schedulers' rules that the freeze lists to plan registered until the engine has planned them: a
+                // scope's release frees the scheduled forms of its local rules, and a scheduler's removal gives up its
+                // rules, under that lock.
                 lock (Graph.DefinitionLock)
-                {
-                    if (Tag is { } tag && Graph.Mirrors.CopyRules(tag).Length > 0)
-                        MirrorSync.Ensure(this, [tag], $"Scope '{Path}'", null);
-
                     FreezeEngine();
-                    if (Tag is { } frozenTag)
-                    {
-                        Graph.Mirrors.AddFrozen(frozenTag);
-                        frozenWithTag = true;
-                    }
-                }
 
                 // Each child subtree that shares this scope's guard gets a guard of its own, as the engine gives each a
                 // domain of its own when the parent freezes. This thread holds the shared guard and no other call of
@@ -251,9 +227,8 @@ namespace Eggnog
 
         /// <summary>
         /// Defines a rule local to this scope: active in it and its descendants, scheduled with
-        /// <paramref name="ruleset"/>, whose licence it takes. The engine rule is global; only the schedule's choice
-        /// of rules makes it local. Its class constants may come from this scope or its ancestors. It is freed when
-        /// the scope is released.
+        /// <paramref name="ruleset"/>. The engine rule is global; only the schedule's choice of rules makes it local.
+        /// Its class constants may come from this scope or its ancestors. It is freed when the scope is released.
         /// </summary>
         /// <remarks>
         /// Its value constants are interned when it is defined, into the graph's pools, which every scope shares: they
@@ -400,33 +375,6 @@ namespace Eggnog
         internal CompiledRule[] LocalCompiled => Volatile.Read(ref localCompiled);
 
         /// <summary>
-        /// Gets whether the mirrors of <paramref name="tag"/> in this scope are current: synced when the rows this
-        /// scope's views show were as they are now, with every copy rule the tag has now. The rows are stamped with the
-        /// view stamp (the change stamps of this scope and its ancestors), not <see cref="Version"/>: a write into a
-        /// writable ancestor changes this scope's view of a table without moving its own version. Called on the scope's
-        /// domain thread.
-        /// </summary>
-        /// <param name="tag">The tag.</param>
-        /// <param name="copyRules">The number of copy rules the tag has now.</param>
-        /// <returns>Whether no sync is needed.</returns>
-        internal bool IsMirrorCurrent(ScopeTag tag, int copyRules)
-        {
-            lock (mirrorSyncs)
-                return mirrorSyncs.TryGetValue(tag, out var synced) && synced.Stamp == Engine.ViewStamp && synced.CopyRules == copyRules;
-        }
-
-        /// <summary>
-        /// Records that the mirrors of <paramref name="tag"/> in this scope were synced at its current view stamp.
-        /// </summary>
-        /// <param name="tag">The tag.</param>
-        /// <param name="copyRules">The number of copy rules the sync ran.</param>
-        internal void MarkMirrorSynced(ScopeTag tag, int copyRules)
-        {
-            lock (mirrorSyncs)
-                mirrorSyncs[tag] = (Engine.ViewStamp, copyRules);
-        }
-
-        /// <summary>
         /// Creates a transient child for one query on this frozen scope: a new engine child, counted in this scope's
         /// transient children so that it defers the release, and not listed in <see cref="Children"/>. Its runtime's
         /// owner is this scope, so that the classes a query returns carry this scope's origin. Thread-safe.
@@ -476,8 +424,8 @@ namespace Eggnog
         /// Releases the scope once nothing defers it: it must be disposed, have no live or transient children and no
         /// call in progress, and its thread domain must not be in use on another thread (then the release is handed to the
         /// domain's guard, whose last exit runs it). The release frees the local rules' variants, disposes the engine
-        /// context, uncounts a frozen tag, leaves the parent, and releases the parent if it is disposed. Runs on whichever
-        /// thread removes the last obstacle; never throws; idempotent.
+        /// context, leaves the parent, and releases the parent if it is disposed. Runs on whichever thread removes the last
+        /// obstacle; never throws; idempotent.
         /// </summary>
         internal void TryRelease()
         {
@@ -559,9 +507,6 @@ namespace Eggnog
                 {
                     // Disposal never throws. The checks above leave nothing that can refuse it.
                 }
-
-                if (frozenWithTag)
-                    Graph.Mirrors.RemoveFrozen(Tag!);
             }
             finally
             {
@@ -613,11 +558,14 @@ namespace Eggnog
         /// <summary>
         /// Freezes the engine context, planning a chosen set of rules: none for the root, whose statistics are empty by
         /// design; otherwise the default variants of every rule a descendant can run: every global rule, the local
-        /// rules of this scope and its ancestors, every live query, and every mirror copy rule. Sibling scopes' local
-        /// rules are left to be planned on their own statistics. The listed queries are held
+        /// rules of this scope and its ancestors, the schedulers' query and action rules, and every live query. Sibling
+        /// scopes' local rules are left to be planned on their own statistics. The listed queries are held
         /// (<see cref="CompiledQuery.Acquire"/>) until the engine has frozen, so a query disposed on another thread
-        /// meanwhile cannot free a listed variant; one disposed before the list is built is left out. Global rules,
-        /// ancestors' local rules and copy rules are never freed while this scope lives.
+        /// meanwhile cannot free a listed variant; one disposed before the list is built is left out. The schedulers'
+        /// rules, the scheduled forms of a sibling's local rules among them, are listed and planned under the
+        /// definition lock the caller holds, under which a scope's release frees the scheduled forms of its local rules
+        /// and a scheduler's removal gives up its rules, so none is freed meanwhile. Global rules and ancestors' local
+        /// rules are never freed while this scope lives.
         /// </summary>
         void FreezeEngine()
         {
@@ -683,9 +631,6 @@ namespace Eggnog
                 held.Add(compiled);
                 Add(compiled.Variants.Default);
             }
-
-            foreach (var rule in Graph.Mirrors.AllCopyRules())
-                Add(rule.Variants.Default);
 
             return plans;
         }

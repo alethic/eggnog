@@ -21,7 +21,8 @@ namespace Eggnog
         /// <exception cref="ArgumentException">The table belongs to another graph.</exception>
         public static long Count(Scope scope, TableHandle table)
         {
-            return Source(scope, table).Engine.TableSize(table.Function);
+            CheckTable(scope, table);
+            return scope.Engine.TableSize(table.Function);
         }
 
         /// <summary>
@@ -60,10 +61,10 @@ namespace Eggnog
         /// <param name="scope">The scope read.</param>
         /// <param name="table">The table.</param>
         /// <returns>The rows: their cells (keys, then the output unless the table is a relation) and subsumption.</returns>
-        /// <exception cref="ArgumentException">The table belongs to another graph, or is a mirror.</exception>
+        /// <exception cref="ArgumentException">The table belongs to another graph.</exception>
         public static List<(uint[] Cells, bool Subsumed)> ReadCells(Scope scope, TableHandle table)
         {
-            var source = Source(scope, table);
+            CheckTable(scope, table);
             var columns = table.Columns;
             var width = columns.Length;
 
@@ -76,7 +77,7 @@ namespace Eggnog
 
             // Copied out during the visit, which must not call the engine; canonicalized afterwards, in place, which can
             // only make rows equal in a scope that is not clean.
-            source.Engine.ForEach(table.Function, visited =>
+            scope.Engine.ForEach(table.Function, visited =>
             {
                 var values = visited.Values;
                 for (var i = 0; i < width; i++)
@@ -138,17 +139,17 @@ namespace Eggnog
         /// <param name="scope">The scope read.</param>
         /// <param name="table">The table.</param>
         /// <returns>The rows: their cells (keys, then the output unless the table is a relation) and subsumption.</returns>
-        /// <exception cref="ArgumentException">The table belongs to another graph, or is a mirror.</exception>
+        /// <exception cref="ArgumentException">The table belongs to another graph.</exception>
         public static List<(uint[] Cells, bool Subsumed)> ReadCellsInTableOrder(Scope scope, TableHandle table)
         {
-            var source = Source(scope, table);
+            CheckTable(scope, table);
             var columns = table.Columns;
             var width = columns.Length;
             var subsumable = table.Subsumable;
             using var cells = new TupleBuffer(width);
             var subsumed = new List<bool>();
             var row = new uint[width];
-            source.Engine.ForEach(table.Function, visited =>
+            scope.Engine.ForEach(table.Function, visited =>
             {
                 var values = visited.Values;
                 for (var i = 0; i < width; i++)
@@ -191,21 +192,14 @@ namespace Eggnog
             type.Kind == ColumnKind.Sort ? new ClassId(cell, scope.Origin) : type.DecodeObject(cell, scope);
 
         /// <summary>
-        /// Gets the scope whose view of a table is read: the scope itself, or for a scoped view the nearest
-        /// ancestor-or-self tagged so, read directly. A table of another graph and a mirror handle are refused.
+        /// Checks that a table read belongs to the scope's graph.
         /// </summary>
-        /// <exception cref="ArgumentException">The table belongs to another graph, or is a mirror.</exception>
-        /// <exception cref="InvalidOperationException">A scoped view's tag does not resolve.</exception>
-        static Scope Source(Scope scope, TableHandle table)
+        /// <exception cref="ArgumentException">The table belongs to another graph.</exception>
+        static void CheckTable(Scope scope, TableHandle table)
         {
             ArgumentNullException.ThrowIfNull(table);
             if (ReferenceEquals(table.Graph, scope.Graph) == false)
                 throw new ArgumentException($"Table '{table.Name}' belongs to another graph.", nameof(table));
-
-            if (table.IsMirror)
-                throw new ArgumentException($"'{table.Name}' is a mirror table, which only the library reads.", nameof(table));
-
-            return table.ReadScope is { } tag ? ScopeResolver.Resolve(scope, tag, $"Reading '{table}'") : scope;
         }
 
     }

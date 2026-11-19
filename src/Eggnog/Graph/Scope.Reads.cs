@@ -11,20 +11,17 @@ namespace Eggnog
         /// <summary>
         /// Gets whether every ground fact holds. Never creates terms and never interns, and holds where egglog's
         /// <c>check</c>, which interns, holds: a value no write interned, a constant or a computation's result,
-        /// equals only itself, and as a key is in no row. A scoped view (<c>T.In(tag)</c>) or a <see cref="Fact.In"/> reads the nearest
-        /// ancestor-or-self tagged <c>tag</c> directly (host reads never use mirrors). A subsumed row holds, as in
-        /// egglog's <c>check</c> (<see cref="RelationOptions.Subsumable"/>,
-        /// <see cref="ConstructorOptions.Subsumable"/>).
+        /// equals only itself, and as a key is in no row. A subsumed row holds, as in egglog's <c>check</c>
+        /// (<see cref="RelationOptions.Subsumable"/>, <see cref="ConstructorOptions.Subsumable"/>).
         /// </summary>
         /// <param name="facts">The facts: relation rows, equalities of classes or values, existences. No facts, a
         /// <c>null</c> array included, check nothing and hold.</param>
         /// <returns>Whether every fact holds.</returns>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
-        /// <exception cref="ArgumentException">A fact is a filter, a term in it is not ground, a <see cref="Fact.In"/> is
-        /// nested, or a handle scoped to one tag is inside a <see cref="Fact.In"/> of another.</exception>
-        /// <exception cref="InvalidOperationException">A tag read does not resolve from this scope: no ancestor-or-self
-        /// carries it; or the scope is faulted; or it is writable and in use on another thread, or has a <c>Write</c>
-        /// batch open; or the call comes from a primitive, lattice, filter or cost function.</exception>
+        /// <exception cref="ArgumentException">A fact is a filter, or a term in it is not ground.</exception>
+        /// <exception cref="InvalidOperationException">The scope is faulted; or it is writable and in use on another
+        /// thread, or has a <c>Write</c> batch open; or the call comes from a primitive, lattice, filter or cost
+        /// function.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
         /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>) and the scope,
@@ -55,11 +52,10 @@ namespace Eggnog
         /// <typeparam name="T">The term's type.</typeparam>
         /// <param name="term">The term.</param>
         /// <returns>The value; a class is canonical here and usable in this scope.</returns>
-        /// <remarks>A scoped view in the term reads the nearest ancestor-or-self carrying its tag directly.</remarks>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
-        /// <exception cref="InvalidOperationException">The term has no value here, or a tag it reads does not resolve
-        /// from this scope; or the scope is faulted; or it is writable and in use on another thread, or has a
-        /// <c>Write</c> batch open; or the call comes from a primitive, lattice, filter or cost function.</exception>
+        /// <exception cref="InvalidOperationException">The term has no value here; or the scope is faulted; or it is
+        /// writable and in use on another thread, or has a <c>Write</c> batch open; or the call comes from a primitive,
+        /// lattice, filter or cost function.</exception>
         /// <exception cref="ArgumentException">The term is not ground, or holds a class this scope cannot
         /// use.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
@@ -83,11 +79,10 @@ namespace Eggnog
         /// <param name="term">The term.</param>
         /// <param name="value">The value, when the result is <c>true</c>.</param>
         /// <returns>Whether the term has a value here.</returns>
-        /// <remarks>A scoped view in the term reads the nearest ancestor-or-self carrying its tag directly.</remarks>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
-        /// <exception cref="InvalidOperationException">A tag the term reads does not resolve from this scope; or the
-        /// scope is faulted; or it is writable and in use on another thread, or has a <c>Write</c> batch open; or the
-        /// call comes from a primitive, lattice, filter or cost function.</exception>
+        /// <exception cref="InvalidOperationException">The scope is faulted; or it is writable and in use on another
+        /// thread, or has a <c>Write</c> batch open; or the call comes from a primitive, lattice, filter or cost
+        /// function.</exception>
         /// <exception cref="ArgumentException">The term is not ground, or holds a class this scope cannot
         /// use.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
@@ -216,15 +211,14 @@ namespace Eggnog
 
         /// <summary>
         /// Gets the number of rows of a table in this scope's view, subsumed rows included: egglog's <c>print-size</c>.
-        /// A scoped view (<c>T.In(tag)</c>) counts the rows of the nearest ancestor-or-self tagged <c>tag</c>.
         /// </summary>
         /// <param name="table">The table.</param>
         /// <returns>The row count.</returns>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
         /// <exception cref="ArgumentException">The table belongs to another graph.</exception>
-        /// <exception cref="InvalidOperationException">The view's tag does not resolve from this scope; or the scope is
-        /// faulted; or it is writable and in use on another thread, or has a <c>Write</c> batch open; or the call comes
-        /// from a primitive, lattice, filter or cost function.</exception>
+        /// <exception cref="InvalidOperationException">The scope is faulted; or it is writable and in use on another
+        /// thread, or has a <c>Write</c> batch open; or the call comes from a primitive, lattice, filter or cost
+        /// function.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
         /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>) and the scope,
@@ -247,17 +241,16 @@ namespace Eggnog
 
         /// <summary>
         /// Gets the rows of a table in this scope's view, decoded and in content order: for debugging and tests. A
-        /// sort cell is a <see cref="ClassId"/>, canonical here and usable in this scope. A scoped view (<c>T.In(tag)</c>)
-        /// lists the rows of the nearest ancestor-or-self tagged <c>tag</c>. Subsumed rows are listed, with
+        /// sort cell is a <see cref="ClassId"/>, canonical here and usable in this scope. Subsumed rows are listed, with
         /// <see cref="TableRow.Subsumed"/> set.
         /// </summary>
         /// <param name="table">The table.</param>
         /// <returns>The rows.</returns>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
         /// <exception cref="ArgumentException">The table belongs to another graph.</exception>
-        /// <exception cref="InvalidOperationException">The view's tag does not resolve from this scope; or the scope is
-        /// faulted; or it is writable and in use on another thread, or has a <c>Write</c> batch open; or the call comes
-        /// from a primitive, lattice, filter or cost function.</exception>
+        /// <exception cref="InvalidOperationException">The scope is faulted; or it is writable and in use on another
+        /// thread, or has a <c>Write</c> batch open; or the call comes from a primitive, lattice, filter or cost
+        /// function.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
         /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>) and the scope,
@@ -281,8 +274,9 @@ namespace Eggnog
         /// <summary>
         /// Serializes this scope's e-graph as egglog's <c>EGraph::serialize</c> does, into the graph of the
         /// egraph-serialize crate that egglog's visualizer reads (<see cref="SerializedGraph.ToJson"/>): for debugging.
-        /// It is the scope's view, as <see cref="Rows"/> lists it, classes canonical here: every table but the hidden
-        /// mirrors, in definition order, its rows in the table's storage order, as egglog numbers them, subsumed ones marked. Reads only: it never interns.
+        /// It is the scope's view, as <see cref="Rows"/> lists it, classes canonical here: every table, in definition
+        /// order, its rows in the table's storage order, as egglog numbers them, subsumed ones marked. Reads only: it
+        /// never interns.
         /// </summary>
         /// <param name="options">What to include; <c>null</c> for everything.</param>
         /// <returns>The serialized graph.</returns>
@@ -322,16 +316,15 @@ namespace Eggnog
 
         /// <summary>
         /// Gets whether a query has a match here. The engine stops at the first match. A query writes nothing: it
-        /// moves neither <see cref="Version"/> nor any extractor; the mirrors of the tags it reads are brought
-        /// current first, which neither does either. Like a rule body, and unlike <see cref="Check"/>, a query does not
-        /// match subsumed rows (<see cref="RelationOptions.Subsumable"/>, <see cref="ConstructorOptions.Subsumable"/>).
+        /// moves neither <see cref="Version"/> nor any extractor. Like a rule body, and unlike <see cref="Check"/>, a
+        /// query does not match subsumed rows (<see cref="RelationOptions.Subsumable"/>,
+        /// <see cref="ConstructorOptions.Subsumable"/>).
         /// </summary>
         /// <param name="query">The query.</param>
         /// <returns>Whether it has a match.</returns>
         /// <exception cref="ArgumentException">The query belongs to another graph, or holds a class this scope cannot
         /// use.</exception>
-        /// <exception cref="InvalidOperationException">A tag the query reads does not resolve from this scope (refused
-        /// before any work); the scope is faulted or in use on another thread.</exception>
+        /// <exception cref="InvalidOperationException">The scope is faulted or in use on another thread.</exception>
         /// <exception cref="ObjectDisposedException">The query is disposed.</exception>
         /// <exception cref="RuleEvaluationException">A primitive or filter of the query failed; the scope stays usable.
         /// Or a lattice merge threw in the catch-up the call makes first, here or in a writable ancestor: that is a
@@ -353,8 +346,7 @@ namespace Eggnog
         /// <returns>The number of matches.</returns>
         /// <exception cref="ArgumentException">The query belongs to another graph, or holds a class this scope cannot
         /// use.</exception>
-        /// <exception cref="InvalidOperationException">A tag the query reads does not resolve from this scope (refused
-        /// before any work); the scope is faulted or in use on another thread.</exception>
+        /// <exception cref="InvalidOperationException">The scope is faulted or in use on another thread.</exception>
         /// <exception cref="ObjectDisposedException">The query is disposed.</exception>
         /// <exception cref="RuleEvaluationException">A primitive or filter of the query failed; the scope stays usable.
         /// Or a lattice merge threw in the catch-up the call makes first, here or in a writable ancestor: that is a
@@ -380,8 +372,7 @@ namespace Eggnog
         /// <param name="callback">Receives each match; returns <c>false</c> to stop.</param>
         /// <exception cref="ArgumentException">The query belongs to another graph, or holds a class this scope cannot
         /// use.</exception>
-        /// <exception cref="InvalidOperationException">A tag the query reads does not resolve from this scope (refused
-        /// before any work); the scope is faulted or in use on another thread.</exception>
+        /// <exception cref="InvalidOperationException">The scope is faulted or in use on another thread.</exception>
         /// <exception cref="ObjectDisposedException">The query is disposed.</exception>
         /// <exception cref="RuleEvaluationException">A primitive or filter of the query failed; the scope stays usable.
         /// Or a lattice merge threw in the catch-up the call makes first, here or in a writable ancestor: that is a

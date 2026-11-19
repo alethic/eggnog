@@ -11,8 +11,8 @@ namespace Eggnog.Tests.Differential
     /// The oracle of <c>ScopeDifferentialTests</c>: a value-only <see cref="ScopedProgram"/> translated into the
     /// literal encoding and run at one root. Every table gains a leading context key and every scope becomes a context
     /// constant; inheritance rules <c>parent(k, c), T(c, x…) → T(k, x…)</c> copy a parent's rows into each child; and
-    /// every rule active in a scope is instantiated for it, its scoped atoms resolved statically to the tagged scope's
-    /// constant. A check saturates, then renders each scope's rows as <see cref="ScopedDriver"/> does.
+    /// every rule active in a scope is instantiated for it. A check saturates, then renders each scope's rows as
+    /// <see cref="ScopedDriver"/> does.
     /// </summary>
     internal sealed class LiteralOracle
     {
@@ -25,7 +25,6 @@ namespace Eggnog.Tests.Differential
         readonly RelationHandle parent;
         readonly Ruleset rules;
         readonly List<int> parents = new() { -1 };
-        readonly List<int> scopeTags = new() { -1 };
         readonly List<ScopedRuleSpec[]> locals = new() { Array.Empty<ScopedRuleSpec>() };
         int instances;
 
@@ -92,7 +91,6 @@ namespace Eggnog.Tests.Differential
             {
                 case ScopedCommandKind.Create:
                     parents.Add(command.Parent);
-                    scopeTags.Add(command.Tag);
                     locals.Add(command.Rules);
                     graph.Root.Assume(parent.Apply(Constant(command.Scope), Constant(command.Parent)));
                     Instantiate(command.Scope);
@@ -115,18 +113,6 @@ namespace Eggnog.Tests.Differential
                 default:
                     return null;
             }
-        }
-
-        /// <summary>
-        /// Gets the nearest ancestor-or-self of a scope tagged <paramref name="tag"/>, or -1.
-        /// </summary>
-        int Resolve(int scope, int tag)
-        {
-            for (var s = scope; s >= 0; s = parents[s])
-                if (scopeTags[s] == tag)
-                    return s;
-
-            return -1;
         }
 
         /// <summary>
@@ -153,7 +139,7 @@ namespace Eggnog.Tests.Differential
                         variables[variable] = b.Var(variable[0] == 's' ? text : integer, variable);
 
                     foreach (var atom in rule.Body)
-                        b.When(Atom(atom, atom.Tag >= 0 ? Resolve(scope, atom.Tag) : scope, variables));
+                        b.When(Atom(atom, scope, variables));
 
                     if (rule.FilterVar is { } filtered)
                         b.When(new FilterFact(Compute.Of(Int64Primitives.Less, variables[filtered], Term.Constant(integer, rule.FilterBelow))));
@@ -165,28 +151,17 @@ namespace Eggnog.Tests.Differential
         }
 
         /// <summary>
-        /// Renders a scope as <see cref="ScopedDriver"/> renders it without names: its value tables, its scoped reads,
-        /// and its queries' answers.
+        /// Renders a scope as <see cref="ScopedDriver"/> renders it without names: its value tables, and its queries'
+        /// answers.
         /// </summary>
         string Render(int scope)
         {
             var builder = new StringBuilder();
             for (var i = 0; i < tables.Length; i++)
-            {
                 builder.Append(Rows(i, scope)).Append('\n');
-                for (var j = 0; j < ScopedProgram.TagCount; j++)
-                {
-                    var tagged = Resolve(scope, j);
-                    if (tagged >= 0)
-                        builder.Append(tables[i].Name).Append("@t").Append(j).Append(' ').Append(Rows(i, tagged)).Append('\n');
-                }
-            }
 
             foreach (var query in program.Queries)
             {
-                if (query.Tags.Any(t => Resolve(scope, t) < 0))
-                    continue;
-
                 var variables = query.Variables;
                 var name = query.Name + " in s" + scope.ToString(CultureInfo.InvariantCulture) + " #" + (instances++).ToString(CultureInfo.InvariantCulture);
                 using var instance = graph.DefineQuery(name, q =>
@@ -196,7 +171,7 @@ namespace Eggnog.Tests.Differential
                         terms[variable] = q.Var(variable[0] == 's' ? text : integer, variable);
 
                     foreach (var atom in query.Body)
-                        q.When(Atom(atom, atom.Tag >= 0 ? Resolve(scope, atom.Tag) : scope, terms));
+                        q.When(Atom(atom, scope, terms));
                 });
                 var answers = new List<string>();
                 graph.Root.ForEachMatch(instance, m =>

@@ -1,3 +1,7 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
 using Xunit;
 
 namespace Eggnog.Tests.Predicates.Scoped
@@ -24,12 +28,29 @@ namespace Eggnog.Tests.Predicates.Scoped
         }
 
         /// <summary>
+        /// Freezes the theory's graph's empty root and compiles a schema of <paramref name="claims"/> alone under it:
+        /// horn and lattice rules, then the copies of its facts (<see cref="PredicateTheory.PlainFacts"/>); then
+        /// freezes it.
+        /// </summary>
+        static Scope SchemaOf(PredicateTheory c, params ReadOnlySpan<Fact> claims)
+        {
+            c.Graph.Root.Freeze();
+            var schema = c.Graph.Root.CreateChild();
+            if (claims.Length > 0)
+                schema.Assume(claims);
+
+            Assert.True(schema.Run(c.PlainFacts).Saturated);
+            schema.Freeze();
+            return schema;
+        }
+
+        /// <summary>
         /// Asks a query with the query's case rules (<see cref="PredicateTheory.Saturation"/>) and checks that the run
         /// saturated and left no child behind.
         /// </summary>
         static (Scope Query, Pred Q) AskWithCases(PredicateTheory c, Scope schema, ConstructorTerm<Pred> term)
         {
-            var query = schema.CreateChild(c.Query);
+            var query = schema.CreateChild();
             var q = query.Make(term);
             query.Assume(c.WhereClause.Of(q));
             var report = query.Run(c.Saturation);
@@ -84,6 +105,166 @@ namespace Eggnog.Tests.Predicates.Scoped
                 var best = query.Extract(q);
                 Assert.Equal("(StrEq \"type\" \"Record\")", best.ToString());
                 Assert.Equal<ulong>(3, best.Cost);
+            }
+        }
+
+        /// <summary>
+        /// No rule of a query's schedule, its case rules included, writes the copies of the schema's facts
+        /// (<see cref="PredicateTheory.SchemaPresent"/>, <see cref="PredicateTheory.SchemaDom"/>) that the rewrites
+        /// deleting a conjunct read: after the query's run they hold exactly the schema's presences and domains.
+        /// <c>StrEq(type, Record)</c> gives the type the domain {Record} in its query; the schema declares the type
+        /// present but no domain of it, so the copies hold none, and the conjunct stays.
+        /// </summary>
+        [Fact]
+        public void AQuerysRunWritesNoCopyOfItsSchemasFacts()
+        {
+            static IEnumerable<string> Rendered(Scope scope, TableHandle table) =>
+                scope.Rows(table).Select(row => string.Join(" ", row.Keys) + " = " + row.Output);
+
+            var (c, schema) = Compiled();
+            var (query, q) = AskWithCases(c, schema, c.StrEq.Of("type", "Record"));
+            using (query)
+            {
+                Assert.True(query.Check(c.Present.Of("type")));
+                Assert.Equal(Set.Of(["Record"]), query.Get(c.Dom.Of("type")));
+                Assert.False(query.TryGet(c.SchemaDom.Of("type"), out _));
+                Assert.Equal(Rendered(schema, c.Present), Rendered(query, c.SchemaPresent));
+                Assert.Equal(Rendered(schema, c.Dom), Rendered(query, c.SchemaDom));
+                Assert.Equal("(StrEq \"type\" \"Record\")", query.Extract(q).ToString());
+            }
+        }
+
+        /// <summary>
+        /// A definedness test is deleted on the schema's presence claims alone (declared presence): the query's own
+        /// bound makes <c>n</c> present in the query either way, and the test goes only where the schema declares
+        /// <c>n</c> present.
+        /// </summary>
+        /// <param name="declared">Whether the schema declares <c>n</c> present.</param>
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void ADefinednessTestIsDeletedOnlyWhereTheSchemaDeclaresThePathPresent(bool declared)
+        {
+            var c = new PredicateTheory(new EGraph());
+            var schema = declared ? SchemaOf(c, c.Present.Of("n")) : SchemaOf(c);
+            var (query, q) = DiscriminatedSchema.Ask(c, schema, c.And.Of(c.IsDefined.Of("n"), c.NumGt.Of("n", 5L)));
+            using (query)
+            {
+                Assert.True(query.Check(c.Present.Of("n")));
+                Assert.Equal(declared, query.Check(c.SchemaPresent.Of("n")));
+                var best = query.Extract(q);
+                Assert.Equal(declared ? "(NumGt \"n\" 5)" : "(And (IsDefined \"n\") (NumGt \"n\" 5))", best.ToString());
+                Assert.Equal(declared ? 3UL : 6UL, best.Cost);
+            }
+        }
+
+        /// <summary>
+        /// A comparison its path's domain implies is deleted only where the schema also declares the path present
+        /// (declared tautology): the query's own comparison makes <c>kind</c> present in the query either way.
+        /// </summary>
+        /// <param name="declared">Whether the schema declares <c>kind</c> present.</param>
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void AComparisonIsDeletedOnlyWhereTheSchemaDeclaresThePathPresent(bool declared)
+        {
+            var c = new PredicateTheory(new EGraph());
+            var domain = c.Dom.Of("kind").Is(Set.Of(["A"]));
+            var schema = declared ? SchemaOf(c, domain, c.Present.Of("kind")) : SchemaOf(c, domain);
+            var (query, q) = DiscriminatedSchema.Ask(c, schema, c.And.Of(c.StrEq.Of("kind", "A"), c.StrEq.Of("id", "x")));
+            using (query)
+            {
+                Assert.True(query.Check(c.Present.Of("kind")));
+                Assert.Equal(declared, query.Check(c.SchemaPresent.Of("kind")));
+                Assert.Equal(Set.Of(["A"]), query.Get(c.SchemaDom.Of("kind")));
+                var best = query.Extract(q);
+                Assert.Equal(declared ? "(StrEq \"id\" \"x\")" : "(And (StrEq \"kind\" \"A\") (StrEq \"id\" \"x\"))", best.ToString());
+                Assert.Equal(declared ? 3UL : 7UL, best.Cost);
+            }
+        }
+
+        /// <summary>
+        /// A comparison is deleted only where the schema's own domain of its path implies it (declared tautology): the
+        /// query's own comparison gives <c>ref</c> the domain {r1} in the query either way.
+        /// </summary>
+        /// <param name="declared">Whether the schema declares the domain {r1} of <c>ref</c>.</param>
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void AComparisonIsDeletedOnlyWhereTheSchemasDomainImpliesIt(bool declared)
+        {
+            var c = new PredicateTheory(new EGraph());
+            var present = c.Present.Of("ref");
+            var schema = declared ? SchemaOf(c, present, c.Dom.Of("ref").Is(Set.Of(["r1"]))) : SchemaOf(c, present);
+            var (query, q) = DiscriminatedSchema.Ask(c, schema, c.And.Of(c.StrEq.Of("ref", "r1"), c.StrEq.Of("id", "x")));
+            using (query)
+            {
+                Assert.Equal(Set.Of(["r1"]), query.Get(c.Dom.Of("ref")));
+                Assert.Equal(declared, query.TryGet(c.SchemaDom.Of("ref"), out _));
+                var best = query.Extract(q);
+                Assert.Equal(declared ? "(StrEq \"id\" \"x\")" : "(And (StrEq \"ref\" \"r1\") (StrEq \"id\" \"x\"))", best.ToString());
+                Assert.Equal(declared ? 3UL : 7UL, best.Cost);
+            }
+        }
+
+        /// <summary>
+        /// A schema's copies hold what its rules derive, not only what it asserts: each of its schedules copies its
+        /// facts once they saturate. A disequality narrows the schema's domain {A, B} of <c>kind</c> to {A}, which
+        /// implies the comparison with A, so the query deletes it.
+        /// </summary>
+        /// <param name="cases">Whether the schema is compiled with its case rules (<see cref="PredicateTheory.Facts"/>)
+        /// rather than without them (<see cref="PredicateTheory.PlainFacts"/>).</param>
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void ASchemasCopiesHoldWhatItsRulesDerive(bool cases)
+        {
+            var c = new PredicateTheory(new EGraph());
+            c.Graph.Root.Freeze();
+            var schema = c.Graph.Root.CreateChild();
+            schema.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of(["A", "B"])), c.Ne.Of("kind", "B"));
+            Assert.True(schema.Run(cases ? c.Facts : c.PlainFacts).Saturated);
+            schema.Freeze();
+            Assert.Equal(Set.Of(["A"]), schema.Get(c.Dom.Of("kind")));
+            var (query, q) = DiscriminatedSchema.Ask(c, schema, c.And.Of(c.StrEq.Of("kind", "A"), c.StrEq.Of("id", "x")));
+            using (query)
+            {
+                Assert.Equal(Set.Of(["A"]), query.Get(c.SchemaDom.Of("kind")));
+                var best = query.Extract(q);
+                Assert.Equal("(StrEq \"id\" \"x\")", best.ToString());
+                Assert.Equal(3UL, best.Cost);
+            }
+        }
+
+        /// <summary>
+        /// A schema compiled under a compiled schema narrows the copy of a domain it inherits, as its own domain
+        /// narrows (an intersect lattice): the outer schema's domain {A, B} of <c>kind</c> implies no comparison, and
+        /// the inner schema's {A} implies the comparison with A, so a query of the inner schema deletes it and one of
+        /// the outer schema keeps it.
+        /// </summary>
+        [Fact]
+        public void ANestedSchemasCopyNarrowsTheDomainItInherits()
+        {
+            var c = new PredicateTheory(new EGraph());
+            var outer = SchemaOf(c, c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of(["A", "B"])));
+            var inner = outer.CreateChild();
+            inner.Assume(c.Dom.Of("kind").Is(Set.Of(["A"])));
+            Assert.True(inner.Run(c.PlainFacts).Saturated);
+            inner.Freeze();
+            var predicate = c.And.Of(c.StrEq.Of("kind", "A"), c.StrEq.Of("id", "x"));
+
+            var (query, q) = DiscriminatedSchema.Ask(c, inner, predicate);
+            using (query)
+            {
+                Assert.Equal(Set.Of(["A"]), query.Get(c.SchemaDom.Of("kind")));
+                Assert.Equal("(StrEq \"id\" \"x\")", query.Extract(q).ToString());
+            }
+
+            var (outerQuery, p) = DiscriminatedSchema.Ask(c, outer, predicate);
+            using (outerQuery)
+            {
+                Assert.Equal(Set.Of(["A", "B"]), outerQuery.Get(c.SchemaDom.Of("kind")));
+                Assert.Equal("(And (StrEq \"kind\" \"A\") (StrEq \"id\" \"x\"))", outerQuery.Extract(p).ToString());
             }
         }
 
@@ -199,7 +380,7 @@ namespace Eggnog.Tests.Predicates.Scoped
         {
             var c = new PredicateTheory(new EGraph());
             c.Graph.Root.Freeze();
-            var schema = c.Graph.Root.CreateChild(c.Schema);
+            var schema = c.Graph.Root.CreateChild();
             schema.Assume(c.Present.Of("$anyOf/0"), c.Dom.Of("$anyOf/0").Is(Set.Of(["0", "1"])), c.Discriminator.Of("$anyOf/0"));
             c.DeclareBranch(schema, "$anyOf/0", "0", present: ["legacyId"], domains: [("status", Set.Of(["active", "archived"]))]);
             c.DeclareBranch(schema, "$anyOf/0", "1", present: ["id2"], domains: [("status", Set.Of(["draft", "active"]))]);

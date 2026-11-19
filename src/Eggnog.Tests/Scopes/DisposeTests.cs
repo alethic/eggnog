@@ -22,7 +22,7 @@ namespace Eggnog.Tests.Scopes
         public void DisposeNeverThrowsAndASecondCallDoesNothing()
         {
             var t = new ScopeTheory();
-            var child = t.Root.CreateChild(t.Outer);
+            var child = t.Root.CreateChild();
             var grandchild = child.CreateChild();
             child.Assume(t.Fact.Of("a"));
 
@@ -128,7 +128,7 @@ namespace Eggnog.Tests.Scopes
                 r.Then(t.Seen.Of(x));
             });
             t.Root.Freeze();
-            var schema = t.Root.CreateChild(t.Outer);
+            var schema = t.Root.CreateChild();
             var local = schema.DefineRule(t.Rules, "local", r =>
             {
                 var x = r.Var<string>("x");
@@ -186,7 +186,7 @@ namespace Eggnog.Tests.Scopes
                 });
             });
             t.Root.Freeze();
-            var schema = t.Root.CreateChild(t.Outer);
+            var schema = t.Root.CreateChild();
             schema.Assume(t.Fact.Of("a"));
             schema.Freeze();
 
@@ -209,7 +209,7 @@ namespace Eggnog.Tests.Scopes
             using var release = new ManualResetEventSlim();
             t.DefineBlocking(entered, release);
             t.Root.Assume(t.Fact.Of("a"));
-            var child = t.Root.CreateChild(t.Outer);
+            var child = t.Root.CreateChild();
 
             var run = Task.Factory.StartNew(() => t.Root.Run(t.Rules), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
             Assert.True(entered.Wait(TimeSpan.FromSeconds(30)));
@@ -280,13 +280,12 @@ namespace Eggnog.Tests.Scopes
         public void TheIdentityOfAReleasedScopeStillAnswers()
         {
             var t = new ScopeTheory();
-            var child = t.Root.CreateChild(t.Outer);
+            var child = t.Root.CreateChild();
             child.Dispose();
 
             Assert.True(child.IsDisposed);
             Assert.Same(t.Root, child.Parent);
-            Assert.Same(t.Outer, child.Tag);
-            Assert.Equal("root/outer#1", child.Path);
+            Assert.Equal("root/scope#1", child.Path);
             Assert.False(child.IsFaulted);
             Assert.Null(child.Failure);
             Assert.False(child.IsFrozen);
@@ -311,8 +310,8 @@ namespace Eggnog.Tests.Scopes
                 r.When(t.Fact.Of(x));
                 r.Then(t.Seen.Of(x));
             });
-            var scope = t.Root.CreateChild(t.Outer);
-            var child = scope.CreateChild(t.Inner);
+            var scope = t.Root.CreateChild();
+            var child = scope.CreateChild();
             scope.Assume(t.Fact.Of("a"));
             bool? releasedInObserver = null;
             scope.Run(Schedule.Saturate(t.Rules), new RunOptions
@@ -337,7 +336,7 @@ namespace Eggnog.Tests.Scopes
         public void TheIdentityMembersOfAReleasedScopeAnswer()
         {
             var t = new ScopeTheory();
-            var child = t.Root.CreateChild(t.Outer);
+            var child = t.Root.CreateChild();
             child.Assume(t.Fact.Of("a"));
             child.Dispose();
             Assert.True(child.Engine.IsDisposed);
@@ -347,7 +346,6 @@ namespace Eggnog.Tests.Scopes
                 Record.Exception(() => _ = child.IsFrozen),
                 Record.Exception(() => _ = child.Children),
                 Record.Exception(() => _ = child.LocalRules),
-                Record.Exception(() => _ = child.Tag),
                 Record.Exception(() => _ = child.Parent),
                 Record.Exception(() => _ = child.IsFaulted),
                 Record.Exception(() => _ = child.Failure),
@@ -388,7 +386,7 @@ namespace Eggnog.Tests.Scopes
                 r.Then(t.Seen.Of(x));
             });
             t.Root.Freeze();
-            var schema = t.Root.CreateChild(t.Outer);
+            var schema = t.Root.CreateChild();
             var local = schema.DefineRule(t.Rules, "local", r => r.When(t.Seen.Of(r.Var<string>("x"))));
             schema.Freeze();
             var description = local.Compiled.Variants.Default!.Description;

@@ -10,8 +10,7 @@ namespace Eggnog
     /// for a key by merging it with the first, as egglog's does. Such a merge depends on the order of writes, so only
     /// the root writes the function. Below the root (in a child scope) a host write of it is refused, and so are a host
     /// merge of classes that would rewrite one of its rows and a rule that would write it; a rule's union there that
-    /// would rewrite one of its rows fails the run. No rule reads it through a scoped view, whose mirror would be
-    /// written below the root.
+    /// would rewrite one of its rows fails the run.
     /// </summary>
     /// <typeparam name="T">The value type.</typeparam>
     public readonly struct FunctionMerge<T>

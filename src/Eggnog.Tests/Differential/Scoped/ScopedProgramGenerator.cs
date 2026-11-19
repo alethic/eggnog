@@ -8,8 +8,7 @@ namespace Eggnog.Tests.Differential
 
     /// <summary>
     /// Generates a <see cref="ScopedProgram"/> from a seed. Values come from small domains (<c>i64</c> 0 to 3, strings
-    /// a to c), so programs stay small; every rule is valid: head variables are bound by the body, and a local rule's
-    /// scoped atoms read only tags that resolve from its owner.
+    /// a to c), so programs stay small; every rule is valid: head variables are bound by the body.
     /// </summary>
     internal sealed class ScopedProgramGenerator
     {
@@ -20,7 +19,7 @@ namespace Eggnog.Tests.Differential
         readonly bool constructors;
         readonly Random random;
         readonly List<ScopedTableSpec> tables = new();
-        readonly List<(int Parent, int Depth, int Tag, bool Frozen)> scopes = new();
+        readonly List<(int Parent, int Depth, bool Frozen)> scopes = new();
         int rules;
 
         /// <summary>
@@ -62,14 +61,14 @@ namespace Eggnog.Tests.Differential
             var globals = new List<ScopedRuleSpec>();
             var globalCount = random.Next(2, 5);
             for (var i = 0; i < globalCount; i++)
-                globals.Add(Rule(Array.Empty<int>()));
+                globals.Add(Rule());
 
             var queries = new List<ScopedRuleSpec>();
             var queryCount = random.Next(2, 4);
             for (var i = 0; i < queryCount; i++)
                 queries.Add(Query(i));
 
-            scopes.Add((-1, 0, -1, false));
+            scopes.Add((-1, 0, false));
             var commands = new List<ScopedCommand>();
             var steps = random.Next(10, 17);
             for (var step = 0; step < steps; step++)
@@ -103,7 +102,7 @@ namespace Eggnog.Tests.Differential
                         if (freezable.Length > 0)
                         {
                             var scope = freezable[random.Next(freezable.Length)];
-                            scopes[scope] = (scopes[scope].Parent, scopes[scope].Depth, scopes[scope].Tag, true);
+                            scopes[scope] = (scopes[scope].Parent, scopes[scope].Depth, true);
                             commands.Add(ScopedCommand.Of(ScopedCommandKind.Freeze, scope));
                         }
 
@@ -120,7 +119,7 @@ namespace Eggnog.Tests.Differential
         }
 
         /// <summary>
-        /// A new scope under an existing one less than four deep, with a tag and up to two local rules.
+        /// A new scope under an existing one less than four deep, with up to two local rules.
         /// </summary>
         ScopedCommand? Create()
         {
@@ -129,20 +128,14 @@ namespace Eggnog.Tests.Differential
                 return null;
 
             var parent = parents[random.Next(parents.Length)];
-            var tag = random.Next(3) - 1;
             var index = scopes.Count;
-            scopes.Add((parent, scopes[parent].Depth + 1, tag, false));
-            var resolvable = new HashSet<int>();
-            for (var s = index; s >= 0; s = scopes[s].Parent)
-                if (scopes[s].Tag >= 0)
-                    resolvable.Add(scopes[s].Tag);
-
+            scopes.Add((parent, scopes[parent].Depth + 1, false));
             var locals = new List<ScopedRuleSpec>();
             var count = random.Next(3);
             for (var i = 0; i < count; i++)
-                locals.Add(Rule(resolvable.ToArray()));
+                locals.Add(Rule());
 
-            return new ScopedCommand(ScopedCommandKind.Create, index, parent, tag, Array.Empty<ScopedAtomSpec>(), locals.ToArray());
+            return new ScopedCommand(ScopedCommandKind.Create, index, parent, Array.Empty<ScopedAtomSpec>(), locals.ToArray());
         }
 
         /// <summary>
@@ -158,28 +151,28 @@ namespace Eggnog.Tests.Differential
                 var spec = tables[table];
                 if (spec.Kind == ScopedTableKind.NodeRelation)
                 {
-                    facts.Add(new ScopedAtomSpec(table, [new ScopedTermSpec(null, null, ConstructorIndex(), Constant(false))], null, -1));
+                    facts.Add(new ScopedAtomSpec(table, [new ScopedTermSpec(null, null, ConstructorIndex(), Constant(false))], null));
                     continue;
                 }
 
                 var keys = spec.StringKeys.Select(Constant).ToArray();
-                facts.Add(new ScopedAtomSpec(table, keys, spec.Kind == ScopedTableKind.Function ? Constant(false) : null, -1));
+                facts.Add(new ScopedAtomSpec(table, keys, spec.Kind == ScopedTableKind.Function ? Constant(false) : null));
             }
 
-            return new ScopedCommand(ScopedCommandKind.Assume, scope, -1, -1, facts.ToArray(), Array.Empty<ScopedRuleSpec>());
+            return new ScopedCommand(ScopedCommandKind.Assume, scope, -1, facts.ToArray(), Array.Empty<ScopedRuleSpec>());
         }
 
         /// <summary>
-        /// A rule whose scoped atoms read only <paramref name="tags"/>.
+        /// A rule.
         /// </summary>
-        ScopedRuleSpec Rule(int[] tags)
+        ScopedRuleSpec Rule()
         {
             var name = "r" + (rules++).ToString(CultureInfo.InvariantCulture);
             var bound = new List<string>();
             var body = new List<ScopedAtomSpec>();
             var atoms = random.Next(1, 4);
             for (var i = 0; i < atoms; i++)
-                AddBodyAtom(body, bound, () => BodyAtom(bound, tags));
+                AddBodyAtom(body, bound, () => BodyAtom(bound));
 
             string? filter = null;
             var longs = bound.Where(v => v[0] == 'x').ToArray();
@@ -195,7 +188,7 @@ namespace Eggnog.Tests.Differential
         }
 
         /// <summary>
-        /// A query of one or two atoms, possibly scoped to either tag.
+        /// A query of one or two atoms over value-only tables, whose variables are values.
         /// </summary>
         ScopedRuleSpec Query(int index)
         {
@@ -203,21 +196,21 @@ namespace Eggnog.Tests.Differential
             var body = new List<ScopedAtomSpec>();
             var atoms = random.Next(1, 3);
             for (var i = 0; i < atoms; i++)
-                AddBodyAtom(body, bound, () => BodyAtom(bound, [0, 1], valueOnly: true));
+                AddBodyAtom(body, bound, () => BodyAtom(bound, valueOnly: true));
 
             return new ScopedRuleSpec("q" + index.ToString(CultureInfo.InvariantCulture), body.ToArray(), null, 0, Array.Empty<ScopedAtomSpec>());
         }
 
         /// <summary>
         /// Adds the body atom <paramref name="make"/> makes, unless it applies a function or constructor already
-        /// applied to the same keys in the same scope (the rule compiler gives equal applications one output, so a
-        /// second one would bind nothing new); the variables a refused atom introduced are dropped.
+        /// applied to the same keys (the rule compiler gives equal applications one output, so a second one would bind
+        /// nothing new); the variables a refused atom introduced are dropped.
         /// </summary>
         static void AddBodyAtom(List<ScopedAtomSpec> body, List<string> bound, Func<ScopedAtomSpec> make)
         {
             var before = bound.Count;
             var atom = make();
-            if (atom.Output is not null && body.Any(a => a.Table == atom.Table && a.Tag == atom.Tag && a.Keys.SequenceEqual(atom.Keys)))
+            if (atom.Output is not null && body.Any(a => a.Table == atom.Table && a.Keys.SequenceEqual(atom.Keys)))
             {
                 bound.RemoveRange(before, bound.Count - before);
                 return;
@@ -227,10 +220,10 @@ namespace Eggnog.Tests.Differential
         }
 
         /// <summary>
-        /// A body atom: a value table's row or value, scoped to one of <paramref name="tags"/> at times; in programs
-        /// with constructors, also a constructor's value or a node relation's row.
+        /// A body atom: a value table's row or value; in programs with constructors, also a constructor's value or a node
+        /// relation's row.
         /// </summary>
-        ScopedAtomSpec BodyAtom(List<string> bound, int[] tags, bool valueOnly = false)
+        ScopedAtomSpec BodyAtom(List<string> bound, bool valueOnly = false)
         {
             var candidates = Enumerable.Range(0, tables.Count).Where(t => valueOnly == false || tables[t].IsValueOnly).ToArray();
             var table = candidates[random.Next(candidates.Length)];
@@ -238,12 +231,11 @@ namespace Eggnog.Tests.Differential
             switch (spec.Kind)
             {
                 case ScopedTableKind.Constructor:
-                    return new ScopedAtomSpec(table, [BodyTerm(bound, false)], Var(bound, 'n'), -1);
+                    return new ScopedAtomSpec(table, [BodyTerm(bound, false)], Var(bound, 'n'));
                 case ScopedTableKind.NodeRelation:
-                    return new ScopedAtomSpec(table, [Var(bound, 'n')], null, -1);
+                    return new ScopedAtomSpec(table, [Var(bound, 'n')], null);
             }
 
-            var tag = tags.Length > 0 && random.Next(5) < 2 ? tags[random.Next(tags.Length)] : -1;
             var keys = spec.StringKeys.Select(s => BodyTerm(bound, s)).ToArray();
             // A function's value is read into a fresh variable only (u for a max function, w for a min one), which
             // heads write only into functions merged the same way: a value read before it settled then never matters,
@@ -258,7 +250,7 @@ namespace Eggnog.Tests.Differential
                 output = ScopedTermSpec.Variable(name);
             }
 
-            return new ScopedAtomSpec(table, keys, output, tag);
+            return new ScopedAtomSpec(table, keys, output);
         }
 
         /// <summary>
@@ -295,16 +287,16 @@ namespace Eggnog.Tests.Differential
                 var term = nodes.Length > 0 && random.Next(2) == 0
                     ? ScopedTermSpec.Variable(nodes[random.Next(nodes.Length)])
                     : new ScopedTermSpec(null, null, ConstructorIndex(), HeadTerm(bound, false));
-                return new ScopedAtomSpec(table, [term], null, -1);
+                return new ScopedAtomSpec(table, [term], null);
             }
 
             var keys = spec.StringKeys.Select(s => HeadTerm(bound, s)).ToArray();
             if (spec.Kind != ScopedTableKind.Function)
-                return new ScopedAtomSpec(table, keys, null, -1);
+                return new ScopedAtomSpec(table, keys, null);
 
             var values = bound.Where(v => v[0] == 'x' || v[0] == (spec.Max ? 'u' : 'w')).ToArray();
             var value = values.Length > 0 && random.Next(4) > 0 ? ScopedTermSpec.Variable(values[random.Next(values.Length)]) : Constant(false);
-            return new ScopedAtomSpec(table, keys, value, -1);
+            return new ScopedAtomSpec(table, keys, value);
         }
 
         /// <summary>

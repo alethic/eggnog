@@ -2,8 +2,7 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// How a constructor is defined, beyond its name, columns and cost. A constructor's role is always
-    /// <see cref="TableRole.Term"/>.
+    /// How a constructor is defined, beyond its name, columns and cost.
     /// </summary>
     public sealed class ConstructorOptions
     {

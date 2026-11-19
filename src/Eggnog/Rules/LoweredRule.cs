@@ -16,7 +16,7 @@ namespace Eggnog
         /// <param name="semiNaive">Whether the variant is semi-naive.</param>
         /// <param name="constants">The values the class constants were lowered with.</param>
         /// <param name="owned">The call sites registered for the variant, freed with it.</param>
-        /// <param name="rule">The rule; <c>null</c> for a query or a copy rule.</param>
+        /// <param name="rule">The rule; <c>null</c> for a query.</param>
         /// <param name="collector">The collector of a query; <c>null</c> otherwise.</param>
         public LoweredRule(Relations.EGraphRuleId id, string description, bool semiNaive, uint[] constants, Relations.ExternalFunctionId[] owned, Rule? rule,
             MatchCollector? collector = null)
@@ -56,13 +56,13 @@ namespace Eggnog
         public Relations.ExternalFunctionId[] Owned { get; }
 
         /// <summary>
-        /// Gets the rule; <c>null</c> for a query or a copy rule.
+        /// Gets the rule; <c>null</c> for a query.
         /// </summary>
         public Rule? Rule { get; }
 
         /// <summary>
         /// Gets the collector of a query: the head action that hands each match to the scope's runtime; <c>null</c> for
-        /// a rule or a copy rule.
+        /// a rule.
         /// </summary>
         public MatchCollector? Collector { get; }
 

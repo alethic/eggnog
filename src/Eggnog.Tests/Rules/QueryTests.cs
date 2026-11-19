@@ -480,9 +480,12 @@ namespace Eggnog.Tests.Rules
             Assert.Throws<ArgumentException>(() => t.Graph.DefineQuery("first", q => q.When(t.Num.Of(1L))));
             Assert.Throws<ArgumentException>(() => t.Graph.DefineQuery("", q => q.When(t.Num.Of(1L))));
             Assert.Throws<ArgumentNullException>(() => t.Graph.DefineQuery("null", null!));
+            var nullFact = Assert.Throws<ArgumentNullException>(() => t.Graph.DefineQuery("null fact", q => q.When(t.Num.Of(1L), null!)));
+            Assert.Equal("facts", nullFact.ParamName);
 
             // A failed definition registers nothing: its name is still free.
             t.Graph.DefineQuery("unbound", q => q.When(t.Num.Of(1L)));
+            t.Graph.DefineQuery("null fact", q => q.When(t.Num.Of(1L)));
         }
 
         [Fact]
@@ -727,31 +730,6 @@ namespace Eggnog.Tests.Rules
             Assert.All(sums, s => Assert.Equal(Enumerable.Range(0, 100).Sum(i => 2L * i), s));
             Assert.Equal(version, t.Root.Version);
             Assert.Equal(0, t.Root.Engine.Context.Context.ChildCount);
-        }
-
-        [Fact]
-        public void AQueryWithScopedAtomsSeesAHostWriteIntoAWritableTaggedScope()
-        {
-            var t = new ScopeTheory();
-            var tagged = t.Graph.DefineQuery("tagged", q =>
-            {
-                var x = q.Var<string>("x");
-                q.When(t.Fact.In(t.Outer).Of(x), t.Fact.Of(x));
-            });
-            var outer = t.Root.CreateChild(t.Outer);
-            var inner = outer.CreateChild(t.Inner);
-            Assert.Equal(0, outer.Count(tagged));
-
-            // A host write into the writable tagged scope; the query from that scope and from a descendant.
-            outer.Assume(t.Fact.Of("a"));
-            Assert.Equal(1, outer.Count(tagged));
-            Assert.Equal(1, inner.Count(tagged));
-            inner.Assume(t.Fact.Of("d"));
-            outer.Assume(t.Fact.Of("b"), t.Fact.Of("c"));
-            Assert.Equal(3, inner.Count(tagged));
-            Assert.Equal(3, outer.Count(tagged));
-            Assert.Equal(4, inner.CountRows(t.Fact));
-            Assert.Equal("(query ((fact @outer x) (fact x)) (x))", tagged.ToString());
         }
 
         /// <summary>

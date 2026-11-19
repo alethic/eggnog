@@ -23,7 +23,7 @@ namespace Eggnog.Tests.Predicates.Scoped
         {
             var c = new PredicateTheory(new EGraph());
             c.Graph.Root.Freeze();
-            var schema = c.Graph.Root.CreateChild(c.Schema);
+            var schema = c.Graph.Root.CreateChild();
             declare(c, schema);
             Assert.True(schema.Run(c.Facts).Saturated);
             schema.Freeze();
@@ -35,7 +35,7 @@ namespace Eggnog.Tests.Predicates.Scoped
         /// </summary>
         static (Scope Query, Pred Q) Ask(PredicateTheory c, Scope schema, ConstructorTerm<Pred> term)
         {
-            var query = schema.CreateChild(c.Query);
+            var query = schema.CreateChild();
             var q = query.Make(term);
             query.Assume(c.WhereClause.Of(q));
             Assert.True(query.Run(c.Saturation).Saturated);

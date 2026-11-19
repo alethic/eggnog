@@ -22,7 +22,7 @@ namespace Eggnog.Tests.Scheduling
         {
             var t = new ScopeTheory();
             t.Root.Freeze();
-            var container = t.Root.CreateChild(t.Outer);
+            var container = t.Root.CreateChild();
             var local = container.DefineRule(t.Rules, "fact is seen", r =>
             {
                 var x = r.Var<string>("x");

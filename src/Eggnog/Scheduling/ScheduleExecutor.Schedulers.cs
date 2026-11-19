@@ -40,10 +40,9 @@ namespace Eggnog
 
             // A rule defined during the run that cannot be scheduled takes no part, as a rule the scope may not run
             // takes none; Run refuses one that is defined before it starts.
-            var rules = Schedulable(Permitted(scope, Resolvable(scope, RulesFor([ruleset], scope))));
+            var rules = Schedulable(Permitted(scope, RulesFor([ruleset], scope)));
             var engine = scope.Engine;
             engine.EnsureClean();
-            SyncMirrors(scope, rules);
             var started = Stopwatch.GetTimestamp();
             var state = scope.TakeSchedulerState(scheduler);
             var names = new string[rules.Count];
@@ -70,7 +69,7 @@ namespace Eggnog
                     }
                     catch (Relations.PanicException panic)
                     {
-                        throw FailRun(scope, null, panic);
+                        throw FailRun(scope, panic);
                     }
                 }
 
@@ -97,7 +96,7 @@ namespace Eggnog
                 catch (Relations.PanicException panic)
                 {
                     KeepDecided(scope, state, scheduled);
-                    throw FailRun(scope, null, panic);
+                    throw FailRun(scope, panic);
                 }
             }
 
@@ -119,10 +118,10 @@ namespace Eggnog
             catch (Relations.PanicException panic)
             {
                 KeepDecided(scope, state, scheduled);
-                throw FailRun(scope, rules, panic);
+                throw FailRun(scope, panic);
             }
 
-            var changed = Account(scope, rules, actions, iteration, Stopwatch.GetElapsedTime(started));
+            var changed = Account(scope, actions, iteration, Stopwatch.GetElapsedTime(started));
             if (queried is not null)
                 AccountQueries(rules, queries, queried);
 
@@ -190,7 +189,7 @@ namespace Eggnog
             catch (Relations.PanicException panic)
             {
                 KeepFound(scope, state, scheduled, queries, buffers);
-                throw FailRun(scope, null, panic);
+                throw FailRun(scope, panic);
             }
             finally
             {

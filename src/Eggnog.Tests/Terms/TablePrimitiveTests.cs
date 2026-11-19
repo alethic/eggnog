@@ -174,6 +174,26 @@ namespace Eggnog.Tests.Terms
         }
 
         [Fact]
+        public void AHostReadsPrimitiveReadsOnlyItsGraphsTables()
+        {
+            // A read primitive in a host read that looks up another graph's table fails the read, as a read of another
+            // graph's table does, rather than read this graph's table of the same engine id.
+            var graph = new EGraph();
+            var other = new EGraph();
+            var f = graph.DefineFunction<long, long>("f");
+            var foreign = other.DefineFunction<long, long>("f");
+            var lookup = LookupOf(foreign);
+            graph.Root.Assume(f.Of(7L).Is(42L));
+            other.Root.Assume(foreign.Of(7L).Is(42L));
+
+            var e = Assert.Throws<RuleEvaluationException>(() => graph.Root.Check(lookup.Of(7L).Is(42L)));
+
+            Assert.StartsWith("primitive 'lookup-f' threw ArgumentException: Table 'f' belongs to another graph.", e.Message,
+                StringComparison.Ordinal);
+            Assert.True(other.Root.Check(lookup.Of(7L).Is(42L)));
+        }
+
+        [Fact]
         public void AFullPrimitiveRunsOnlyWhereReadsAndWritesAre()
         {
             // (let $ff (f-echo 7)) is fine; (check (= (f-echo 1) 1)), a semi-naive rule's body and head refuse it; with
@@ -336,16 +356,16 @@ namespace Eggnog.Tests.Terms
         [Fact]
         public void ARefusedWriteFailsTheRuleEvenWhenCaught()
         {
-            // A write primitive that writes a scoped view, which a primitive does not use, and catches the refusal.
+            // A write primitive that writes a table of another graph, which a primitive does not use, and catches the
+            // refusal.
             var graph = new EGraph();
-            var tag = graph.DefineScopeTag("tagged");
-            var seen = graph.DefineRelation<long>("seen");
+            var seen = new EGraph().DefineRelation<long>("seen");
             var g = graph.DefineFunction<long, long>("g");
             var sneaky = Primitive.CreateWrite("sneaky", Long, (ITableWriter tables, ReadOnlySpan<object> args, out long result) =>
             {
                 try
                 {
-                    tables.Insert(seen.In(tag), args[0]);
+                    tables.Insert(seen, args[0]);
                 }
                 catch (ArgumentException)
                 {
@@ -459,47 +479,6 @@ namespace Eggnog.Tests.Terms
             Assert.Equal(0L, graph.Root.CountRows(seen));
             var run = Assert.Throws<RuleEvaluationException>(() => graph.Root.Run(rules));
             Assert.Contains("only reads them", run.Message, StringComparison.Ordinal);
-        }
-
-        [Fact]
-        public void APrimitiveThatReadsTablesNeedsTheRulesLicence()
-        {
-            // A licensed rule reads fact tables only through its licence; a read primitive reads any, as a full callback
-            // does, so it needs ReadsOwnFacts. A rule that writes an analysis table may not read a fact table through one.
-            var graph = new EGraph();
-            var tag = graph.DefineScopeTag("case");
-            var key = graph.DefineRelation<long>("key");
-            var f = graph.DefineFunction<long, long>("f");
-            var o = graph.DefineFunction<long, long>("o");
-            var an = graph.DefineFunction<long, long>("an", (ValueLattice<long>?)null, new FunctionOptions { Analysis = true });
-            var lookup = LookupOf(f);
-            var rules = graph.DefineRuleset("rules");
-
-            var licensed = Assert.Throws<RuleDefinitionException>(() => rules.DefineRule("licensed", r =>
-            {
-                var (k, v) = r.Vars<long, long>("k", "v");
-                r.Erasing(tag);
-                r.Naive();
-                r.When(key.In(tag).Of(k), v.Is(lookup.Of(k)));
-                r.Then(o.Of(k).Is(v));
-            }));
-            Assert.Contains("reads tables through primitive 'lookup-f', outside scope 'case'", licensed.Message, StringComparison.Ordinal);
-            rules.DefineRule("own", r =>
-            {
-                var (k, v) = r.Vars<long, long>("k", "v");
-                r.Erasing(tag);
-                r.ReadsOwnFacts("the test reads f on purpose");
-                r.Naive();
-                r.When(key.In(tag).Of(k), v.Is(lookup.Of(k)));
-                r.Then(o.Of(k).Is(v));
-            });
-
-            var analysis = Assert.Throws<RuleDefinitionException>(() => rules.DefineRule("analysis", r =>
-            {
-                r.Naive();
-                r.Then(an.Of(1L).Is(lookup.Of(1L)));
-            }));
-            Assert.Contains("reads tables through primitive 'lookup-f'", analysis.Message, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -653,6 +632,56 @@ namespace Eggnog.Tests.Terms
             var rules = graph.DefineRuleset("rules");
             rules.DefineRule("s", b => b.Then(o.Of(1L).Is(sub.Of(5L))));
             Assert.Throws<RuleEvaluationException>(() => graph.Root.Run(rules));
+        }
+
+        [Fact]
+        public void AHostWritesPrimitiveMakesNoWriteTheScopeRefuses()
+        {
+            // A primitive of a host write in a child may not write a function whose merge is not a lattice, which only
+            // the root writes, nor delete a row of one, nor subsume a row of a table that is not subsumable: the write
+            // is refused when the primitive makes it, which fails the fact, nothing is written, and the child is not
+            // faulted.
+            var graph = new EGraph();
+            var latest = graph.DefineFunction<long, long>("latest", FunctionMerge.New<long>());
+            var plain = graph.DefineRelation<long>("plain", new RelationOptions { Subsumable = false });
+            var o = graph.DefineFunction<long, long>("o");
+            var put = Primitive.CreateWrite("put", Long, (ITableWriter tables, ReadOnlySpan<object> args, out long result) =>
+            {
+                tables.Set(latest, [args[0]], (long)args[0]);
+                result = 0;
+                return true;
+            });
+            var drop = Primitive.CreateWrite("drop", Long, (ITableWriter tables, ReadOnlySpan<object> args, out long result) =>
+            {
+                tables.Remove(latest, args[0]);
+                result = 0;
+                return true;
+            });
+            var sub = Primitive.CreateWrite("sub", Long, (ITableWriter tables, ReadOnlySpan<object> args, out long result) =>
+            {
+                tables.Subsume(plain, args[0]);
+                result = 0;
+                return true;
+            });
+            var rows = graph.DefineQuery("plain rows", q => q.When(plain.Of(q.Var<long>("x"))));
+            graph.Root.Assume(latest.Of(1L).Is(1L), plain.Of(1L));
+            graph.Root.Freeze();
+            var child = graph.Root.CreateChild();
+
+            var written = Assert.Throws<RuleEvaluationException>(() => child.Assume(o.Of(0L).Is(put.Of(2L))));
+            var deleted = Assert.Throws<RuleEvaluationException>(() => child.Assume(o.Of(1L).Is(drop.Of(1L))));
+            var subsumed = Assert.Throws<RuleEvaluationException>(() => child.Assume(o.Of(2L).Is(sub.Of(1L))));
+
+            const string RootOnly = "'latest' has the merge 'new', which is not a lattice, so only the root may write it";
+            Assert.StartsWith("primitive 'put' threw ArgumentException: " + RootOnly, written.Message, StringComparison.Ordinal);
+            Assert.StartsWith("primitive 'drop' threw InvalidOperationException: " + RootOnly, deleted.Message, StringComparison.Ordinal);
+            Assert.StartsWith("primitive 'sub' threw ArgumentException: 'plain' is not subsumable", subsumed.Message,
+                StringComparison.Ordinal);
+            Assert.False(child.TryGet(latest.Of(2L), out _));
+            Assert.Equal(1L, child.Get(latest.Of(1L)));
+            Assert.Equal(1, child.Count(rows));
+            Assert.Equal(0, child.CountRows(o));
+            Assert.False(child.IsFaulted);
         }
 
         [Fact]

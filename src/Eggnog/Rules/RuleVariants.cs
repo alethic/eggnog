@@ -4,8 +4,8 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The engine variants of one compiled rule, query or mirror copy rule: the semi-naive variant (or the naive one for a
-    /// naive program) and, on demand, the naive twin of a semi-naive program, which differential tests use.
+    /// The engine variants of one compiled rule or query: the semi-naive variant (or the naive one for a naive program)
+    /// and, on demand, the naive twin of a semi-naive program, which differential tests use.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -33,7 +33,7 @@ namespace Eggnog
         /// Initializes a new instance; nothing is lowered yet.
         /// </summary>
         /// <param name="program">The program.</param>
-        /// <param name="rule">The rule; <c>null</c> for a query or a copy rule.</param>
+        /// <param name="rule">The rule; <c>null</c> for a query.</param>
         /// <param name="description">The base description, unique in the graph; the naive twin of a semi-naive program
         /// appends <c>/naive</c>.</param>
         /// <param name="naive">Whether the program is naive: its default variant is the naive one.</param>

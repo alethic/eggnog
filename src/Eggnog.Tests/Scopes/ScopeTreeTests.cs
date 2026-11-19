@@ -10,8 +10,8 @@ namespace Eggnog.Tests.Scopes
 {
 
     /// <summary>
-    /// The scope tree: children, paths, freezing, tag resolution and per-scope parallelism; what a frozen scope
-    /// refuses, and the structural calls a run observer may not make.
+    /// The scope tree: children, paths, freezing and per-scope parallelism; what a frozen scope refuses, and the
+    /// structural calls a run observer may not make.
     /// </summary>
     public sealed class ScopeTreeTests
     {
@@ -21,20 +21,18 @@ namespace Eggnog.Tests.Scopes
         {
             var t = new ScopeTheory();
             Assert.Null(t.Root.Parent);
-            Assert.Same(t.Graph.RootTag, t.Root.Tag);
             Assert.False(t.Root.IsFrozen);
 
-            var outer = t.Root.CreateChild(t.Outer);
+            var outer = t.Root.CreateChild();
             var plain = t.Root.CreateChild();
-            var inner = outer.CreateChild(t.Inner);
+            var inner = outer.CreateChild();
 
             Assert.Same(t.Root, outer.Parent);
-            Assert.Same(t.Outer, outer.Tag);
-            Assert.Null(plain.Tag);
             Assert.False(outer.IsRoot);
-            Assert.Matches(@"^root/outer#\d+$", outer.Path);
+            Assert.Matches(@"^root/scope#\d+$", outer.Path);
             Assert.Matches(@"^root/scope#\d+$", plain.Path);
-            Assert.StartsWith(outer.Path + "/inner#", inner.Path);
+            Assert.NotEqual(outer.Path, plain.Path);
+            Assert.StartsWith(outer.Path + "/scope#", inner.Path);
             Assert.Equal(new[] { outer, plain }, t.Root.Children);
             Assert.Equal(new[] { inner }, outer.Children);
             Assert.Equal(inner.Path, inner.ToString());
@@ -79,7 +77,7 @@ namespace Eggnog.Tests.Scopes
         public void FreezingUnderAWritableParentThrows()
         {
             var t = new ScopeTheory();
-            var child = t.Root.CreateChild(t.Outer);
+            var child = t.Root.CreateChild();
 
             Assert.Equal("A scope can be frozen only once its parent is", Assert.Throws<InvalidOperationException>(child.Freeze).Message);
             Assert.False(child.IsFrozen);
@@ -102,36 +100,6 @@ namespace Eggnog.Tests.Scopes
             Assert.Equal("Scope 'root' is frozen; its local rules are fixed",
                 Assert.Throws<InvalidOperationException>(() => t.Root.DefineRule(t.Rules, "late", r => r.When(t.Fact.Of("a")))).Message);
             Assert.False(t.Root.Check(t.Fact.Of("a")));
-        }
-
-        [Fact]
-        public void TagsResolveToTheNearestAncestorOrSelf()
-        {
-            var t = new ScopeTheory();
-            t.Root.Assume(t.Fact.Of("root"));
-            var a = t.Root.CreateChild(t.Outer);
-            a.Assume(t.Fact.Of("a"));
-            var b = a.CreateChild(t.Inner);
-            b.Assume(t.Fact.Of("b"));
-            var c = b.CreateChild(t.Outer);
-            c.Assume(t.Fact.Of("c"));
-
-            // From c, outer is c itself; from b, it is a; inner is b from both; the root's tag is the root.
-            Assert.True(c.Check(t.Fact.In(t.Outer).Of("c")));
-            Assert.True(c.Check(t.Fact.In(t.Outer).Of("a")));
-            Assert.False(b.Check(t.Fact.In(t.Outer).Of("b")));
-            Assert.True(b.Check(t.Fact.In(t.Outer).Of("a")));
-            Assert.True(c.Check(t.Fact.In(t.Inner).Of("b")));
-            Assert.False(c.Check(t.Fact.In(t.Inner).Of("c")));
-            Assert.True(c.Check(Fact.In(t.Graph.RootTag, t.Fact.Of("root"))));
-            Assert.False(c.Check(Fact.In(t.Graph.RootTag, t.Fact.Of("a"))));
-
-            Assert.Same(c, ScopeResolver.Resolve(c, t.Outer, "test"));
-            Assert.Same(a, ScopeResolver.Resolve(b, t.Outer, "test"));
-            Assert.Same(t.Root, ScopeResolver.Resolve(c, t.Graph.RootTag, "test"));
-            Assert.Null(ScopeResolver.TryResolve(a, t.Inner));
-            Assert.Equal($"Rule 'r' reads scope 'inner', but '{a.Path}' has no ancestor tagged 'inner'.",
-                Assert.Throws<InvalidOperationException>(() => ScopeResolver.Resolve(a, t.Inner, "Rule 'r'")).Message);
         }
 
         [Fact]
@@ -223,13 +191,13 @@ namespace Eggnog.Tests.Scopes
         {
             var t = new ScopeTheory();
             t.Root.Freeze();
-            var outer = t.Root.CreateChild(t.Outer);
+            var outer = t.Root.CreateChild();
             outer.Freeze();
 
             Assert.Throws<InvalidOperationException>(() => outer.Assume(t.Fact.Of("a")));
             Assert.Throws<InvalidOperationException>(() => outer.Write(w => w.Assume(t.Fact.Of("a"))));
             var error = Assert.Throws<InvalidOperationException>(() => outer.DefineRule(t.Rules, "late", r => r.Then(t.Seen.Of("a"))));
-            Assert.Equal("Scope 'root/outer#1' is frozen; its local rules are fixed", error.Message);
+            Assert.Equal("Scope 'root/scope#1' is frozen; its local rules are fixed", error.Message);
         }
 
         /// <summary>

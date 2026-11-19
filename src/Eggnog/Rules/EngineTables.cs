@@ -10,8 +10,8 @@ namespace Eggnog
     /// call's <c>ExecutionState</c>, so that writes are staged with the iteration's other writes. Values are of their
     /// columns' types, a class a sort value usable in the scope the call runs in. A write is checked as a head's is, when
     /// it is made: a function whose merge is not a lattice is written only at the root, a deletion only where the scope may
-    /// delete, a subsumption only of a subsumable table, and no analysis table and no scoped view is written. The first
-    /// refusal is recorded, so that it fails the call's rule even when the host code caught it. Valid only during the call.
+    /// delete, and a subsumption only of a subsumable table. The first refusal is recorded, so that it fails the call's
+    /// rule even when the host code caught it. Valid only during the call.
     /// </summary>
     internal sealed class EngineTables
     {
@@ -149,7 +149,6 @@ namespace Eggnog
                 throw Refuse(new InvalidOperationException($"'{table.Name}' cannot lose a row in '{Scope.Path}': {why}."));
 
             Action(table).Remove(State, key);
-            Scope.Runtime.NoteCallbackDeletion(table);
         }
 
         /// <inheritdoc cref="ITableWriter.Subsume"/>
@@ -202,7 +201,7 @@ namespace Eggnog
         /// <summary>
         /// Reads the output of a function's row at keys' cells, the class canonical through the state (<see cref="Find"/>).
         /// </summary>
-        /// <exception cref="ArgumentException">The function belongs to another graph or is a scoped view.</exception>
+        /// <exception cref="ArgumentException">The function belongs to another graph.</exception>
         public bool TryLookupCell(FunctionHandle table, ReadOnlySpan<uint> keys, out uint value)
         {
             CheckTable(table, writes: false);
@@ -218,8 +217,8 @@ namespace Eggnog
         /// <summary>
         /// Reads the output of a function's row at keys, as a value.
         /// </summary>
-        /// <exception cref="ArgumentException">The function belongs to another graph or is a scoped view, or a key is not
-        /// of its column's type or not usable here.</exception>
+        /// <exception cref="ArgumentException">The function belongs to another graph, or a key is not of its column's type
+        /// or not usable here.</exception>
         public bool TryLookupObject(FunctionHandle table, ReadOnlySpan<object> keys, out object? value)
         {
             value = null;
@@ -258,8 +257,8 @@ namespace Eggnog
         /// Encodes the keys of a row of <paramref name="table"/>, with <paramref name="extra"/> free cells after them,
         /// checking that the call may use the table.
         /// </summary>
-        /// <exception cref="ArgumentException">The table belongs to another graph, is a scoped view, or may not be written
-        /// here, or a value is not of its column's type or not usable here.</exception>
+        /// <exception cref="ArgumentException">The table belongs to another graph or may not be written here, or a value
+        /// is not of its column's type or not usable here.</exception>
         public uint[] Row(TableHandle table, ReadOnlySpan<object> keys, int extra, bool writes)
         {
             if (TryRow(table, keys, extra, writes, out var row) == false)
@@ -324,8 +323,7 @@ namespace Eggnog
         /// <summary>
         /// Checks that the call may read, or with <paramref name="writes"/> write, <paramref name="table"/>.
         /// </summary>
-        /// <exception cref="ArgumentException">The table belongs to another graph, is a scoped view, or may not be written
-        /// here.</exception>
+        /// <exception cref="ArgumentException">The table belongs to another graph, or may not be written here.</exception>
         public void CheckTable(TableHandle table, bool writes)
         {
             ArgumentNullException.ThrowIfNull(table);
@@ -333,22 +331,9 @@ namespace Eggnog
             if (ReferenceEquals(table.Graph, Scope.Graph) == false || table.Index < 0)
                 throw Refuse(new ArgumentException($"Table '{table.Name}' belongs to another graph.", nameof(table)));
 
-            if (table.ReadScope is not null)
+            if (writes && Scope.IsRoot == false && table is FunctionHandle { Merge: not null })
                 throw Refuse(new ArgumentException(
-                    $"'{table.Name} @{table.ReadScope.Name}' is a scoped view, which {Lower(who)} does not use.", nameof(table)));
-
-            if (writes)
-            {
-                if (table.Role == TableRole.Analysis)
-                    throw Refuse(new ArgumentException(
-                        $"{who} does not write analysis table '{table.Name}': analyses depend only on terms, which {Lower(who)} "
-                        + "cannot show.",
-                        nameof(table)));
-
-                if (Scope.IsRoot == false && table is FunctionHandle { Merge: not null })
-                    throw Refuse(new ArgumentException(
-                        $"'{table.Name}' merges with a function, not a lattice, and only the root writes it.", nameof(table)));
-            }
+                    $"'{table.Name}' merges with a function, not a lattice, and only the root writes it.", nameof(table)));
         }
 
         /// <summary>
@@ -391,11 +376,6 @@ namespace Eggnog
                 throw Refuse(refused);
             }
         }
-
-        /// <summary>
-        /// Lowercases the first letter of a subject for the middle of a sentence.
-        /// </summary>
-        static string Lower(string subject) => char.ToLowerInvariant(subject[0]) + subject[1..];
 
     }
 

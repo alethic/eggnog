@@ -32,13 +32,14 @@ namespace Eggnog.Tests.Predicates.Scoped
         /// <summary>
         /// Compiles the schema under the graph's frozen root with the theory's <see cref="PredicateTheory.Facts"/>:
         /// horn and lattice rules, and the schema's case rules over its discriminator <c>kind</c> (a, b, c), by which
-        /// nothing more holds, since no claim is declared by all three branches; then freezes it.
+        /// nothing more holds, since no claim is declared by all three branches, then the copies of its facts; then
+        /// freezes it.
         /// </summary>
         /// <param name="c">The theory, whose graph's root is frozen.</param>
         /// <returns>The frozen schema scope.</returns>
         public static Scope Compile(PredicateTheory c)
         {
-            var schema = c.Graph.Root.CreateChild(c.Schema);
+            var schema = c.Graph.Root.CreateChild();
             Declare(c, schema);
             var compiled = schema.Run(c.Facts);
             Assert.True(compiled.Saturated);
@@ -107,8 +108,8 @@ namespace Eggnog.Tests.Predicates.Scoped
         ];
 
         /// <summary>
-        /// Asks a query in a new child of the schema, tagged as a query, and saturates it with horn, lattice and
-        /// rewrite rules, without the case rules.
+        /// Asks a query in a new child of the schema, and saturates it with horn, lattice and rewrite rules, without the
+        /// case rules.
         /// </summary>
         /// <param name="c">The theory.</param>
         /// <param name="schema">The frozen schema.</param>
@@ -117,7 +118,7 @@ namespace Eggnog.Tests.Predicates.Scoped
         /// <returns>The query scope, which the caller disposes, and the predicate's class.</returns>
         public static (Scope Query, Pred Q) Ask(PredicateTheory c, Scope schema, ConstructorTerm<Pred> term, ScopeOptions? options = null)
         {
-            var query = schema.CreateChild(c.Query, options);
+            var query = schema.CreateChild(options);
             var q = query.Make(term);
             query.Assume(c.WhereClause.Of(q));
             var report = query.Run(Schedule.Saturate(c.Horn, c.Lattice, c.Rewrite));

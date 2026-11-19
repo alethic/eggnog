@@ -35,7 +35,7 @@ namespace Eggnog.Tests.Scopes
                 q.When(c.Ne.Of(p, v));
             });
             Graph.Root.Freeze();
-            Schema = Graph.Root.CreateChild(c.Schema);
+            Schema = Graph.Root.CreateChild();
             var values = new[] { "a", "b", "c" }.Concat(Enumerable.Range(3, domain - 3).Select(i => "v" + i.ToString(CultureInfo.InvariantCulture))).ToArray();
             Schema.Assume(
                 c.Present.Of("kind"), c.Discriminator.Of("kind"), c.Dom.Of("kind").Is(Set.From(values)),
@@ -91,7 +91,7 @@ namespace Eggnog.Tests.Scopes
         public RunReport Derive(ConstructorTerm<Pred> predicate, Schedule? schedule = null, string? localConstant = null)
         {
             var c = Theory;
-            using var query = Schema.CreateChild(c.Query);
+            using var query = Schema.CreateChild();
             var p = query.Make(predicate);
             query.Assume(c.WhereClause.Of(p));
             if (localConstant is not null)
@@ -145,7 +145,7 @@ namespace Eggnog.Tests.Scopes
         {
             var c = Theory;
             WeakReference context;
-            using (var query = Schema.CreateChild(c.Query))
+            using (var query = Schema.CreateChild())
             {
                 context = new WeakReference(query.Engine.Context);
                 var p = query.Make(predicate);
@@ -159,11 +159,12 @@ namespace Eggnog.Tests.Scopes
 
         /// <summary>
         /// Runs a pass of sibling schemas: <paramref name="siblings"/> schema scopes beside <see cref="Schema"/>, each
-        /// declaring <c>kind</c> and defining <paramref name="rules"/> local rules (<see cref="DefineLocalRule"/>, the
-        /// constant of rule <c>j</c> being <c>x{j}</c>, so a second pass interns nothing new), frozen, queried once, and
-        /// disposed while its query is live, so that its release waits for the query's disposal. Returns weak
-        /// references to every sibling scope and every compiled variant of its local rules, taken while they were live.
-        /// Not inlined, so no local of the caller keeps them reachable.
+        /// declaring <c>kind</c>, defining <paramref name="rules"/> local rules (<see cref="DefineLocalRule"/>, the
+        /// constant of rule <c>j</c> being <c>x{j}</c>, so a second pass interns nothing new) and copying its facts
+        /// (<see cref="PredicateTheory.Copies"/>), frozen, queried once, and disposed while its query is live, so that
+        /// its release waits for the query's disposal. Returns weak references to every sibling scope and every
+        /// compiled variant of its local rules, taken while they were live. Not inlined, so no local of the caller
+        /// keeps them reachable.
         /// </summary>
         /// <param name="siblings">The number of siblings.</param>
         /// <param name="rules">The number of local rules of each.</param>
@@ -175,7 +176,7 @@ namespace Eggnog.Tests.Scopes
             var tracked = new List<WeakReference>(siblings * (rules + 1));
             for (var s = 0; s < siblings; s++)
             {
-                var sibling = Graph.Root.CreateChild(c.Schema);
+                var sibling = Graph.Root.CreateChild();
                 tracked.Add(new WeakReference(sibling));
                 sibling.Assume(c.Present.Of("kind"), c.Discriminator.Of("kind"), c.Dom.Of("kind").Is(Set.Of(["a", "b", "c"])));
                 for (var j = 0; j < rules; j++)
@@ -184,8 +185,9 @@ namespace Eggnog.Tests.Scopes
                     tracked.Add(new WeakReference(rule.Compiled.Variants.Default));
                 }
 
+                sibling.Run(Schedule.Saturate(c.Copies));
                 sibling.Freeze();
-                var query = sibling.CreateChild(c.Query);
+                var query = sibling.CreateChild();
                 var p = query.Make(c.StrEq.Of("kind", "a"));
                 query.Assume(c.WhereClause.Of(p));
                 query.Run(Plain);

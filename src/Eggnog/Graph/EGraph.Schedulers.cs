@@ -120,6 +120,40 @@ namespace Eggnog
         }
 
         /// <summary>
+        /// Defines a scheduler's worklist (<see cref="ScheduledRule"/>): a context-private relation over the columns of the
+        /// matches it holds, which descendants never read, so a child's is its own, and whose rows are not subsumable.
+        /// egglog's <c>decided</c> table (<c>src/scheduler.rs</c>). A table definition: while the root is writable it enters
+        /// the root's guard. Called under the definition lock.
+        /// </summary>
+        /// <param name="name">The table's engine name, unique.</param>
+        /// <param name="keys">The column types of the matches.</param>
+        /// <param name="index">The handle's index: negative and unique among worklists, so it never equals a
+        /// table's.</param>
+        /// <returns>The worklist's handle.</returns>
+        /// <exception cref="InvalidOperationException">Another thread is using the writable root.</exception>
+        TableHandle DefineWorklistTable(string name, ColumnType[] keys, int index)
+        {
+            var columns = new ColumnType[keys.Length + 1];
+            keys.CopyTo(columns, 0);
+            columns[^1] = Unit;
+            var function = AddEngineTable(name, TableKind.Relation, columns, null, null, false, contextPrivate: true);
+            var handle = new UntypedRelation
+            {
+                Graph = this,
+                Name = name,
+                Index = index,
+                Kind = TableKind.Relation,
+                KeyArray = keys,
+                Subsumable = false,
+                Function = function,
+                Columns = columns,
+                IsWorklist = true,
+            };
+            PublishFunction(handle);
+            return handle;
+        }
+
+        /// <summary>
         /// Gets a new slot for a scheduled rule's query buffer, unique in the graph.
         /// </summary>
         internal int NextSchedulerSlot() => Interlocked.Increment(ref schedulerSlots) - 1;

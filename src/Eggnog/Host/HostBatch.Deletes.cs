@@ -10,9 +10,7 @@ namespace Eggnog
         // egglog's delete: a top-level delete (Scope.Delete), and a primitive's remove in a host write. A key's terms are
         // evaluated as egglog's top-level action evaluates them (a missing constructor term is made, a function read must
         // find a value), and a row that does not exist plans nothing. A scope deletes only when the engine's retraction
-        // guard lets it (no live descendant, no writable parent), which the batch checks before it plans anything. A
-        // deleted row of a table that the scope reads under its own tag is deleted from that mirror too, so the mirror
-        // stays equal to the table, as a scoped read of the scope's own tag must be.
+        // guard lets it (no live descendant, no writable parent), which the batch checks before it plans anything.
         //
         // egglog's flush applies a command's removals before its inserts, and its lookups see no staged removal. The
         // batch flushes once, its removals before its inserts too, so it plans a deletion at the write point of its
@@ -83,11 +81,7 @@ namespace Eggnog
             ArgumentNullException.ThrowIfNull(fact);
             PlanFactUnions();
             if (fact is not RelationFact relation)
-            {
-                throw fact is ScopedFact scoped
-                    ? new ArgumentException($"host writes go to the scope written; Fact.In('{scoped.Scope.Name}') is read-only", nameof(fact))
-                    : new ArgumentException($"Delete(rows) takes relation rows, r.Of(...); {fact} is not one (delete an application with Delete(term))", nameof(fact));
-            }
+                throw new ArgumentException($"Delete(rows) takes relation rows, r.Of(...); {fact} is not one (delete an application with Delete(term))", nameof(fact));
 
             try
             {
@@ -106,9 +100,9 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Plans the deletion of the row of <paramref name="arguments"/> from <paramref name="table"/>, and from the
-        /// mirror of the table under the scope's own tag: with its primitives' deletions, before their writes, as
-        /// egglog's flush applies all of a command's removals, its own included, before its inserts.
+        /// Plans the deletion of the row of <paramref name="arguments"/> from <paramref name="table"/>: with its
+        /// primitives' deletions, before their writes, as egglog's flush applies all of a command's removals, its own
+        /// included, before its inserts.
         /// </summary>
         void PlanDelete(TableHandle table, Term[] arguments, string parameter)
         {
@@ -181,7 +175,7 @@ namespace Eggnog
 
         /// <summary>
         /// Plans the deletion of a row at the write point of a fact: what the batch's earlier facts wrote at the key is
-        /// cancelled, and the stored row, if there is one, removed, from the scope's mirror of the table too.
+        /// cancelled, and the stored row, if there is one, removed.
         /// </summary>
         /// <param name="table">The table.</param>
         /// <param name="keys">The key's cells.</param>
@@ -202,8 +196,6 @@ namespace Eggnog
                 return;
 
             AddRemove(table, keys);
-            if (scope.Tag is { } tag && graph.Mirrors.TryGet(table, tag, out var mirror) && engine.TryLookup(mirror.Handle.Function, keys, out _))
-                AddRemove(mirror.Handle, keys);
         }
 
         /// <summary>
