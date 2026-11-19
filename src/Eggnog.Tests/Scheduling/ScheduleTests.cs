@@ -171,8 +171,9 @@ namespace Eggnog.Tests.Scheduling
 
         /// <summary>
         /// A contradiction is a relation of the theory's own: a rule derives a nullary relation where the scope has no
-        /// model, <c>Check</c> reads it, and <c>Until</c> stops a schedule on it. The run that meets it completes, the
-        /// scope stays usable, and a schedule whose condition holds already runs nothing.
+        /// model, <c>Check</c> reads it, and <c>Until</c> wrapped around each step (<c>Saturate(Until(rules, c))</c>)
+        /// stops a schedule on it. The run that meets it completes, the scope stays usable, and a schedule whose
+        /// condition holds already runs nothing.
         /// </summary>
         [Fact]
         public void UntilStopsARunOnANullaryRelationARuleDerives()
@@ -537,6 +538,32 @@ namespace Eggnog.Tests.Scheduling
             using var cts = new System.Threading.CancellationTokenSource();
             cts.Cancel();
             Assert.ThrowsAny<OperationCanceledException>(() => t.Root.Run(t.Rules, new RunOptions { IterationLimit = 0 }, cts.Token));
+        }
+
+        /// <summary>
+        /// A run a limit stopped cannot tell whether another run would have work, though it changed nothing and no
+        /// scheduler held work back: only a run that completed can stop (<see cref="RunReport.CanStop"/>).
+        /// </summary>
+        [Fact]
+        public void ARunALimitStoppedCannotStopThoughItChangedNothing()
+        {
+            var t = Counter(3);
+            Assert.True(t.Root.Run(Schedule.Saturate(t.Rules)).Saturated);
+            Assert.True(t.Root.Run(t.Rules).CanStop);
+
+            (RunOptions Options, RunStopReason Reason)[] limits =
+            [
+                (new RunOptions { IterationLimit = 0 }, RunStopReason.IterationLimit),
+                (new RunOptions { TimeLimit = TimeSpan.Zero }, RunStopReason.TimeLimit),
+                (new RunOptions { RowLimit = 0 }, RunStopReason.RowLimit),
+            ];
+            foreach (var (options, reason) in limits)
+            {
+                var report = t.Root.Run(t.Rules, options);
+                Assert.Equal(reason, report.StopReason);
+                Assert.False(report.Changed);
+                Assert.False(report.CanStop);
+            }
         }
 
         /// <summary>

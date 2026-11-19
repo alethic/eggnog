@@ -727,6 +727,37 @@ namespace Eggnog.Tests.Host
             Assert.Equal(1, s.CountRows(t.H));
         }
 
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void AUnionThatConflictsAfterAnEarlierUnionOfItsBatchStands(bool inChild)
+        {
+            // (Lit 1) (Num 2) (Num 3) (Num 4) (set (h (Lit 1)) 1) (set (h (Num 2)) 2) (union (Num 3) (Num 4))
+            // (union (Lit 1) (Num 2)): "Illegal merge attempted for function h", the union stands, and h keeps 1. The
+            // batch drops the second union, flushes the first and plans the second again, which then conflicts on its
+            // own.
+            var t = new Theory();
+            var s = t.Open(inChild);
+            var one = s.Make(t.Lit.Of(1L));
+            var two = s.Make(t.Num.Of(2L));
+            var three = s.Make(t.Num.Of(3L));
+            var four = s.Make(t.Num.Of(4L));
+            s.Assume(t.H.Of(one).Is(1L), t.H.Of(two).Is(2L));
+            s.Write(w =>
+            {
+                w.Union(three, four);
+                var e = Assert.Throws<FactConflictException>(() => w.Union(one, two));
+                Assert.Same(t.H, e.Table);
+                Assert.Equal(1L, e.StoredValue);
+                Assert.Equal(2L, e.NewValue);
+            });
+            Assert.False(s.IsFaulted);
+            Assert.True(s.AreEqual(three, four));
+            Assert.True(s.AreEqual(one, two));
+            Assert.Equal(1L, s.Get(t.H.Of(two)));
+            Assert.Equal(1, s.CountRows(t.H));
+        }
+
         [Fact]
         public void AHeldWriteFoldsBeforeTheFactsOwnWrite()
         {

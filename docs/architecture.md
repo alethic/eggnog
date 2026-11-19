@@ -406,8 +406,10 @@ default 1). `RelationOptions` and `ConstructorOptions` also set whether the rows
 2.5); `FunctionOptions` has no such setting, since no function can be.
 
 A theory that needs a contradiction, a fact that says a scope has no model, defines a nullary relation of its own, as an
-egglog program would: a rule derives it, `Check` reads it, and `Schedule.Until` stops a schedule on it (section 2.6).
-It is an ordinary fact, and the scope that holds it stays usable.
+egglog program would: a rule derives it, `Check` reads it, and `Schedule.Until` wrapped around each step stops a
+schedule on it (section 2.6): `Saturate(Until(rules, c))`, egglog's `(saturate (run :until (c)))`, or
+`Repeat(n, Until(rules, c))`, egglog's `(run n :until (c))`. `Until(Saturate(rules), c)` checks the fact only once,
+before the whole body. It is an ordinary fact, and the scope that holds it stays usable.
 
 A table's name is any non-empty string unique among the user's tables, `@` and a leading `$` included, as in egglog. The
 tables the library makes for itself take no name of the user's: a mirror table (section 2.8) is named `T @tag` and a

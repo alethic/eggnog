@@ -291,9 +291,10 @@ namespace Eggnog.Tests.Scopes
         }
 
         /// <summary>
-        /// The structural entry points <c>CreateChild</c>, <c>DefineRule</c>, <c>DefineBiRewrite</c> and <c>Freeze</c>
-        /// each report a catch-up failure as <see cref="RuleEvaluationException"/>, fault the scope, and leave nothing
-        /// behind: no child, no rule, and no freeze.
+        /// Under a writable parent, the structural entry points <c>CreateChild</c>, <c>DefineRule</c>,
+        /// <c>DefineBiRewrite</c> and <c>Freeze</c> each report a catch-up failure as
+        /// <see cref="RuleEvaluationException"/>, fault the scope, and leave nothing behind: no child, no rule, and no
+        /// freeze.
         /// </summary>
         [Fact]
         public void StructuralCallsReportACatchUpFailureAndLeaveNothingBehind()
@@ -325,6 +326,34 @@ namespace Eggnog.Tests.Scopes
                 Assert.Empty(child.LocalRules);
                 Assert.False(child.IsFrozen);
             }
+        }
+
+        /// <summary>
+        /// A failure the flush of a catch-up records, of a row staged in a writable parent's engine and never flushed
+        /// (no call of the library leaves one), fails a structural call with <see cref="RuleEvaluationException"/>, not
+        /// the engine's panic, and faults the scope called; nothing is registered.
+        /// </summary>
+        [Fact]
+        public void AFailureTheCatchUpsFlushRecordsFaultsTheScopeCalled()
+        {
+            var w = new ThrowingLatticeWorld();
+            var rules = w.Graph.DefineRuleset("rules");
+            var child = w.Parent.CreateChild();
+            w.Parent.Assume(w.F.Of("x").Is(1L));
+            var values = w.Graph.Values;
+            w.Parent.Engine.StageRow(w.F.Function, [values.TypeOf<string>().Encode("x"), values.TypeOf<long>().Encode(2L)]);
+            w.Arm();
+
+            var failure = Assert.Throws<RuleEvaluationException>(() => child.DefineRule(rules, "late", r =>
+            {
+                var n = r.Var<Node>("n");
+                r.When(w.Tag.Of(n));
+                r.Then(w.Tag.Of(n));
+            }));
+
+            Assert.Contains("throwing max", failure.Message);
+            Assert.Same(failure, child.Failure);
+            Assert.Empty(child.LocalRules);
         }
 
         /// <summary>

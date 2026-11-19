@@ -307,6 +307,27 @@ namespace Eggnog.Tests.Graph
         }
 
         /// <summary>
+        /// A union at the root whose rebuild runs out of epochs before its first pass leaves the root behind its own
+        /// write: its reads, whose catch-up is that rebuild, throw <see cref="OverflowException"/>, and the root is not
+        /// faulted.
+        /// </summary>
+        [Fact]
+        public void ARootReadAfterItsRebuildRanOutThrowsOverflowUnfaulted()
+        {
+            var t = new NodeTheory();
+            var a = t.Root.Make(t.A.Of());
+            var b = t.Root.Make(t.B.Of());
+            t.Root.Assume(t.Tag.Of(t.A.Of()));
+            LeaveEpochs(t.Graph, 1);
+
+            Assert.Throws<OverflowException>(() => t.Root.Union(a, b));
+            Assert.Throws<OverflowException>(() => t.Root.Check(t.Tag.Of(t.B.Of())));
+            Assert.Throws<OverflowException>(() => t.Root.AreEqual(a, b));
+            Assert.Throws<OverflowException>(() => t.Root.CountRows(t.Tag));
+            Assert.False(t.Root.IsFaulted);
+        }
+
+        /// <summary>
         /// A child of a writable root reads what the root wrote only after catching up, which takes an epoch: once the
         /// epochs are out, the child's reads throw <see cref="OverflowException"/>, unfaulted, while the root, clean,
         /// still reads.

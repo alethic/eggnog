@@ -10,9 +10,9 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// Tests for the catch-up of ancestor rows, one per branch: (a) a row naming an id not canonical in the child, (b)
-    /// a row whose key the child holds, (c′) a row stamped below the child's semi-naive floor, (c) a row visible as it
-    /// is; plus the generation check, the cursors, a grandchild under two unsettled ancestors, a table added after the
-    /// child, and a parent that wrote and froze.
+    /// a row whose key the child holds, the empty key of a nullary relation included, (c′) a row stamped below the
+    /// child's semi-naive floor, (c) a row visible as it is; plus the generation check, the cursors, a grandchild under
+    /// two unsettled ancestors, a table added after the child, and a parent that wrote and froze.
     /// </summary>
     public class CatchUpTests
     {
@@ -76,6 +76,37 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(2, statistics.RowsCopied);
             Assert.Equal(2, child.GetView(f).VisibleCount);
             Assert.Equal(3u, Row(root, f, a)![1]);
+            child.CheckInvariants();
+            LookupPaths.Check(child);
+        }
+
+        /// <summary>
+        /// (b) under the empty key of a nullary relation: a child that holds the relation's one row when its ancestor
+        /// writes it sees the row once. So does a child that writes the row after its ancestor did, as its write first
+        /// catches up and sees the ancestor's row.
+        /// </summary>
+        /// <param name="childFirst">Whether the child writes the row before the ancestor does.</param>
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void ANullaryRowTheChildAndItsAncestorBothWriteIsSeenOnce(bool childFirst)
+        {
+            var store = new Store(ParallelHeuristics.Serial);
+            var flag = store.AddTable(Relation(0), name: "flag");
+            var root = store.Root;
+            var child = root.CreateChild();
+            if (childFirst)
+                Insert(child, flag, 0);
+
+            Insert(root, flag, 0);
+            if (childFirst == false)
+                Insert(child, flag, 0);
+
+            child.Rebuild();
+
+            Assert.NotNull(Row(child, flag));
+            Assert.Equal(1, child.GetView(flag).VisibleCount);
+            Assert.NotNull(Row(root, flag));
             child.CheckInvariants();
             LookupPaths.Check(child);
         }

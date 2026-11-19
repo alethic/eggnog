@@ -103,7 +103,8 @@ namespace Eggnog
         public Scope Root { get; }
 
         /// <summary>
-        /// Gets every table, in declaration order (a snapshot).
+        /// Gets the user's tables, in declaration order (a snapshot); the tables the library makes for itself (mirrors
+        /// and worklists) are not listed.
         /// </summary>
         public IReadOnlyList<TableHandle> Tables => Volatile.Read(ref tablesView);
 

@@ -293,7 +293,9 @@ namespace Eggnog
                 if (Guard.InObserver)
                     throw new InvalidOperationException("Not allowed inside a run observer");
 
-                // Brought up to date first, as a call into a scope is (see the remarks on Scope).
+                // A scope whose parent is writable is brought up to date first, so that a failure of its catch-up fails
+                // the definition; a child of a frozen scope is caught up at its next read, write, run, CreateChild or
+                // Freeze (see the remarks on Scope).
                 CatchUpUnderWritableParent();
                 var builder = new RuleBuilder(Graph, name);
                 try

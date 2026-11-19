@@ -253,6 +253,40 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
+        /// A child whose rebuild runs out of the clock after a pass that left work for the next one (its union of a and
+        /// b makes add(a, a) and add(b, b) equal in the first pass, and so the adds of each with itself in the second)
+        /// is left unfaulted and not clean, with the first pass ended as the loop ends it: its cursors committed and
+        /// its hidden sets sealed. A later rebuild, which needs the clock, throws the same way.
+        /// </summary>
+        [Fact]
+        public void AChildWhoseRebuildRunsOutWithWorkLeftIsLeftNotClean()
+        {
+            var g = new ContextGraph();
+            var a = g.Root.FreshId();
+            var b = g.Root.FreshId();
+            var a1 = g.Root.AddTerm(g.Add, [a, a]);
+            var b1 = g.Root.AddTerm(g.Add, [b, b]);
+            var a2 = g.Root.AddTerm(g.Add, [a1, a1]);
+            var b2 = g.Root.AddTerm(g.Add, [b1, b1]);
+            g.Root.Freeze();
+
+            using var child = g.Root.CreateChild();
+            LeaveEpochs(g.EGraph.Store, 2);
+            child.StageUnion(a, b);
+            Assert.Throws<OverflowException>(() => child.FlushUpdates());
+
+            Assert.Equal(1, child.Context.LastRebuildPasses);
+            Assert.False(child.IsFaulted);
+            Assert.Equal(0, child.Context.Tables!.UnsealedCount);
+            Assert.False(child.Context.IsClean);
+            var find = child.Context.UnionFind;
+            Assert.Equal(find.Find(a1.Rep), find.Find(b1.Rep));
+            Assert.NotEqual(find.Find(a2.Rep), find.Find(b2.Rep));
+            Assert.Throws<OverflowException>(() => child.Context.Rebuild());
+            Assert.False(child.IsFaulted);
+        }
+
+        /// <summary>
         /// A parallel child search that runs out of ids after many action batches flushed leaves the child unfaulted,
         /// with nothing it staged left behind, in a layer the search created and in one the child had before: a later
         /// flush merges nothing of the failed search.

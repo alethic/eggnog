@@ -227,14 +227,16 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// A failure a merge records in a child's run is thrown as <see cref="PanicException"/> once the run's writes
-        /// merged: a rule writes an assert-eq conflict and, in the same run, the row of a nullary relation, which
-        /// stands; the child is not faulted.
+        /// merged: a rule writes an assert-eq conflict and, in the same run, the rows of two nullary relations, one
+        /// declared before the conflicting table and one declared after it, which merges after the table whose merge
+        /// records the failure. Both rows stand, and the child is not faulted.
         /// </summary>
         [Fact]
         public void AConflictTheMergeOfAChildsRunRecordsIsThrownOnceItsWritesMerged()
         {
             var g = new ContextGraph();
             var keyed = AssertEqFunction(g);
+            var late = g.Relation("late");
             var a = g.Root.FreshId();
             g.Root.AddValues([(keyed, [a, g.Int(1)])]);
 
@@ -243,6 +245,7 @@ namespace Eggnog.Relations.Tests
             rb.QueryTable(g.Mark, [x, rb.NewVar(g.UnitType)], false);
             rb.Set(keyed, [x, RuleEntry.Const(g.Int(2), g.I64)]);
             rb.Set(g.Bottom, [RuleEntry.Const(g.Unit, g.UnitType)]);
+            rb.Set(late, [RuleEntry.Const(g.Unit, g.UnitType)]);
             var rule = rb.Build();
             g.Root.Freeze();
 
@@ -252,6 +255,7 @@ namespace Eggnog.Relations.Tests
             Assert.Throws<PanicException>(() => child.RunRules(rule));
             Assert.False(child.IsFaulted);
             Assert.Equal(1, child.TableSize(g.Bottom));
+            Assert.Equal(1, child.TableSize(late));
             child.CheckInvariants();
         }
 

@@ -32,9 +32,13 @@ namespace Eggnog
     /// scope first catches it up: it brings the rows the scope holds itself (its own rows, as against those it reads
     /// from its ancestors) in line with what a writable ancestor wrote since. The catch-up merges into the scope, so a
     /// lattice merge can run in it, and an exception it throws faults the scope and the ancestor: this is the
-    /// "catch-up the call makes first" of the members' exception clauses. A scoped read (<c>T.In(tag)</c>) in a rule
-    /// or query reads a mirror: an internal copy of the table that copy rules keep equal to the view of the nearest
-    /// ancestor-or-self carrying the tag, synced just before a rule, query or freeze reads it.
+    /// "catch-up the call makes first" of the members' exception clauses. <see cref="DefineRule"/>,
+    /// <see cref="DefineBiRewrite{TSort}"/> and the queries of an <see cref="Extractor"/> make it only while the
+    /// scope's parent is writable: a child of a frozen scope that still owes the catch-up for what its ancestors wrote
+    /// before they froze makes it at its next read, write, run, <see cref="CreateChild"/> or <see cref="Freeze"/>. A
+    /// scoped read (<c>T.In(tag)</c>) in a rule or query reads a mirror: an internal copy of the table that copy rules
+    /// keep equal to the view of the nearest ancestor-or-self carrying the tag, synced just before a rule, query or
+    /// freeze reads it.
     /// </para>
     /// <para>
     /// Every member that enters the scope (its reads, writes, runs, extraction and tree operations) throws
@@ -261,10 +265,13 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Brings a scope whose parent is writable up to date, as every call into a scope is first, for the entry points
-        /// that enter without a catch-up (<see cref="DefineRule"/>, <see cref="DefineBiRewrite{TSort}"/>,
-        /// <see cref="Freeze"/>, and the queries of an <see cref="Extractor"/> of a writable scope). A scope whose parent
-        /// is frozen, or the root, is not caught up here. Called on the domain's thread, with its guard held.
+        /// Brings a scope whose parent is writable up to date, for the entry points that enter without a catch-up
+        /// (<see cref="DefineRule"/>, <see cref="DefineBiRewrite{TSort}"/>, <see cref="Freeze"/>, and the queries of an
+        /// <see cref="Extractor"/> of a writable scope), so that they report a failure of the catch-up as a read does.
+        /// The root, and a scope whose parent is frozen, are not caught up here: <see cref="DefineRule"/>,
+        /// <see cref="DefineBiRewrite{TSort}"/> and an extractor's queries leave the catch-up a child of a frozen scope
+        /// owes for what its ancestors wrote before they froze, and its failure, to the child's next read, write, run,
+        /// <see cref="CreateChild"/> or <see cref="Freeze"/>. Called on the domain's thread, with its guard held.
         /// </summary>
         /// <exception cref="RuleEvaluationException">A lattice merge the catch-up ran threw, in this scope or a writable
         /// ancestor, or a failure the catch-up's flush recorded; the scope is faulted.</exception>
@@ -370,8 +377,10 @@ namespace Eggnog
         /// <paramref name="called"/> are faulted.</exception>
         void CatchUpLevel(Scope called)
         {
-            // The root is never behind its own writes: every flush there rebuilds and takes what its merges recorded, so its
-            // catch-up records nothing and is not checked.
+            // The root is behind its own writes only after a rebuild that ran out of epochs before it finished: every
+            // other flush there rebuilds to the end and takes what its merges recorded. Its catch-up is then that
+            // rebuild, which throws OverflowException, since the epochs never come back: it records nothing and is not
+            // checked.
             if (IsRoot)
             {
                 Engine.EnsureClean();
