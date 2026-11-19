@@ -16,7 +16,7 @@ namespace Eggnog
     /// <remarks>
     /// A primitive may be partial (<see cref="IsPartial"/>), as egglog's <c>-?&gt;</c> primitives are: it has no result
     /// for some arguments. In a rule body, a let or a filter whose call has no result drops the match, as in egglog; in a
-    /// head, or in a split's case assumptions, it fails the rule, where egglog panics.
+    /// head it fails the rule, where egglog panics.
     /// </remarks>
     public abstract class Primitive
     {
@@ -83,9 +83,9 @@ namespace Eggnog
 
         /// <summary>
         /// Gets whether the primitive is partial, as egglog's <c>-?&gt;</c> primitives are: it has no result for some
-        /// arguments. In a rule body (a let or a filter) and a query that drops the match, as in egglog; in a head or a
-        /// split's case assumptions it fails the rule, where egglog panics. Lambdas (<see cref="Compute"/>) are never
-        /// partial: one that throws fails the rule.
+        /// arguments. In a rule body (a let or a filter) and a query that drops the match, as in egglog; in a head it
+        /// fails the rule, where egglog panics. Lambdas (<see cref="Compute"/>) are never partial: one that throws
+        /// fails the rule.
         /// </summary>
         public bool IsPartial { get; }
 
@@ -448,9 +448,9 @@ namespace Eggnog
 
         /// <summary>
         /// Decodes each argument cell with its parameter's column type, calls the function and encodes the result
-        /// (interning a new value): what a head and a case assumption do, where a partial primitive's call with no result
-        /// throws, as its function does. Allocates nothing beyond what the function allocates and what interning costs,
-        /// except a <see cref="PrimitiveN{TResult}"/>'s argument list.
+        /// (interning a new value): what a head does, where a partial primitive's call with no result throws, as its
+        /// function does. Allocates nothing beyond what the function allocates and what interning costs, except a
+        /// <see cref="PrimitiveN{TResult}"/>'s argument list.
         /// </summary>
         /// <param name="arguments">The argument cells.</param>
         /// <param name="parameters">The parameters' column types.</param>
@@ -522,8 +522,8 @@ namespace Eggnog
         /// <summary>
         /// Gets whether the primitive writes the graph: egglog's write primitive (<c>WritePrim</c>), such as
         /// <c>vec-union</c>, which unions classes. It runs in a rule's head, a host write and a merge, through
-        /// <see cref="TryInvokeWrite"/>, and is refused in a rule's body, a query, a read and a split's assumptions, as
-        /// egglog refuses it in a query.
+        /// <see cref="TryInvokeWrite"/>, and is refused in a rule's body, a query and a read, as egglog refuses it in a
+        /// query.
         /// </summary>
         internal virtual bool IsWrite => false;
 

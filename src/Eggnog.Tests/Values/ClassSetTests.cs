@@ -216,21 +216,6 @@ namespace Eggnog.Tests.Values
             Assert.Equal("xs=(set-of #0 #1)", e.Bindings);
         }
 
-        [Fact]
-        public void ASplitOverASetOfClassesIsRefused()
-        {
-            var t = new Theory();
-            var domain = t.Graph.DefineFunction<long, Set<Node>>("domain");
-            var exception = Assert.Throws<RuleDefinitionException>(() => t.Graph.DefineSplit("cases", s =>
-            {
-                var (k, d) = s.Vars<long, Set<Node>>("k", "d");
-                s.When(d.Is(domain.Of(k)));
-                var v = s.Cases("v", d);
-                s.Assume(domain.Of(k).Is(Primitives.SetOf<Node>().Of(v)));
-            }));
-            Assert.Contains("holds classes", exception.Message);
-        }
-
         [Theory]
         [InlineData(false, "child")]
         [InlineData(false, "writable child")]

@@ -4,7 +4,7 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The head action of a query, a split matcher or a scheduler's query: adds its arguments, one match, to the
+    /// The head action of a query or a scheduler's query: adds its arguments, one match, to the
     /// <see cref="ScopeRuntime.QueryMatches"/> of the scope the engine call runs in, or for a scheduler's query to its
     /// rule's buffer in <see cref="ScopeRuntime.SchedulerMatches"/>, and produces the unit value. For a query asked with
     /// <c>Any</c> (<see cref="ScopeRuntime.StopAtFirstQueryMatch"/>) it triggers the engine's early stop after the first
@@ -29,7 +29,7 @@ namespace Eggnog
         /// <param name="width">The number of columns of a match.</param>
         /// <param name="unit">The unit value's cell, the call's result.</param>
         /// <param name="slot">A scheduler's query's rule slot (<see cref="ScopeRuntime.SchedulerMatches"/>); -1 for a
-        /// query or a split matcher.</param>
+        /// query.</param>
         public MatchCollector(EGraph graph, int width, uint unit, int slot = -1)
         {
             ArgumentOutOfRangeException.ThrowIfNegative(width);

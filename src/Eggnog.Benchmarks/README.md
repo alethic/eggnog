@@ -450,11 +450,6 @@ src/Eggnog.Benchmarks/bin/Release/net10.0/Eggnog.Benchmarks.exe --stale-probe 12
 src/Eggnog.Benchmarks/bin/Release/net10.0/Eggnog.Benchmarks.exe --plan-footprint
 ```
 
-The share of a split's work that goes to catch-up is counted in the tests, not here: `SplitCatchUpCountTests` (in
-`src/Eggnog.Tests/Cases/`) counts, per split step of a domain split on the test fixture `PredicateTheory` under a
-writable query scope, at 3 and 8 cases, the rows the cases examined in catch-ups against those their rule runs scanned
-and indexed. The query's totals are pinned to the recorded figures, so a change to them fails the test.
-
 ## The library benchmarks
 
 The classes in `Library/` measure the library through its public API, as an application uses it; only the baseline of

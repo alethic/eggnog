@@ -192,7 +192,7 @@ namespace Eggnog.Tests.Rules
             // (set (h (Lit 4)) 2) (tag (Lit 4)) (Wrap (Lit 4)) (fail (run 1)): "Illegal merge attempted for function h",
             // and h keeps 2; the run returns at the failure before its rebuild, so (check (= (Lit 4) (Wrap (Lit 4))))
             // fails until a later command's union rebuilds (probe t5.egg). Here the run rebuilds the union, which the
-            // check sees at once (architecture 2.13, item 7).
+            // check sees at once (architecture 2.12, item 7).
             var t = new NodeTheory();
             var h = t.Graph.DefineFunction<Node, long>("h");
             t.Rules.DefineRule("union", r =>

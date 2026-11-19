@@ -17,15 +17,13 @@ namespace Eggnog.Tests.Support
         /// <summary>
         /// Defines the graph, freezes its root and creates <see cref="Parent"/>.
         /// </summary>
-        /// <param name="refuses">Which merges (old value, new value) throw once armed; <c>null</c> for every
-        /// one.</param>
-        public ThrowingLatticeWorld(Func<long, long, bool>? refuses = null)
+        public ThrowingLatticeWorld()
         {
             Graph = new EGraph();
             Graph.DefineSort<Node>("Node");
             A = Graph.DefineConstructor<Node>("A");
             Tag = Graph.DefineRelation<Node>("tag");
-            var max = new ValueLattice<long>("throwing max", (x, y) => fail && (refuses?.Invoke(x, y) ?? true) ? throw new InvalidOperationException("merge refused") : Math.Max(x, y), Math.Min);
+            var max = new ValueLattice<long>("throwing max", (x, y) => fail ? throw new InvalidOperationException("merge refused") : Math.Max(x, y));
             F = Graph.DefineFunction<string, long>("f", max);
             Graph.Root.Freeze();
             Parent = Graph.Root.CreateChild();

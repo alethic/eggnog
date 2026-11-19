@@ -11,9 +11,8 @@ namespace Eggnog.Tests.Scopes
     /// <summary>
     /// A long-lived graph serving query scopes (<see cref="ScopeChurn"/>) leaves nothing behind per query but what the
     /// graph never reclaims, and that in exact, known amounts: interned values only for new literals, one first id
-    /// block per query that makes one term, a fixed number of epochs per query and per case, no child, no local rule,
-    /// no external function, no variant, and no engine context. The retained heap is measured in
-    /// <see cref="ScopeChurnHeapTests"/>.
+    /// block per query that makes one term, a fixed number of epochs per query, no child, no local rule, no external
+    /// function, no variant, and no engine context. The retained heap is measured in <see cref="ScopeChurnHeapTests"/>.
     /// </summary>
     public sealed class ScopeChurnTests
     {
@@ -22,17 +21,6 @@ namespace Eggnog.Tests.Scopes
         /// The derivations of one pass.
         /// </summary>
         const int Queries = 40;
-
-        /// <summary>
-        /// The epochs a split query takes for each case it opens, on this theory: <see cref="SplitBaseEpochs"/> plus this
-        /// per case, the snapshot read included.
-        /// </summary>
-        const int EpochsPerCase = 9;
-
-        /// <summary>
-        /// The epochs a split query takes beside its cases, the snapshot read included.
-        /// </summary>
-        const int SplitBaseEpochs = 21;
 
         /// <summary>
         /// Queries that reuse their literals intern nothing: a second pass of each shape, after a first that interned
@@ -45,13 +33,13 @@ namespace Eggnog.Tests.Scopes
             var c = churn.Theory;
             Pass(churn, _ => churn.Derive(c.StrEq.Of("kind", "a")));
             Pass(churn, _ => churn.Derive(c.NumGt.Of("n", 50L)));
-            Pass(churn, _ => churn.Derive(c.Not.Of(c.StrEq.Of("kind", "zz")), churn.Split));
+            Pass(churn, _ => churn.Derive(c.Not.Of(c.StrEq.Of("kind", "c")), churn.Cases));
             Pass(churn, _ => churn.Derive(c.StrEq.Of("kind", "a"), localConstant: "kept"));
             var before = churn.Graph.Values.InternedCount;
 
             Pass(churn, _ => churn.Derive(c.StrEq.Of("kind", "a")));
             Pass(churn, _ => churn.Derive(c.NumGt.Of("n", 50L)));
-            Pass(churn, _ => churn.Derive(c.Not.Of(c.StrEq.Of("kind", "zz")), churn.Split));
+            Pass(churn, _ => churn.Derive(c.Not.Of(c.StrEq.Of("kind", "c")), churn.Cases));
             Pass(churn, _ => churn.Derive(c.StrEq.Of("kind", "a"), localConstant: "kept"));
 
             Assert.Equal(before, churn.Graph.Values.InternedCount);
@@ -62,15 +50,15 @@ namespace Eggnog.Tests.Scopes
         /// A query with a new literal interns exactly the values it names or computes, and they stay: a new string
         /// in <c>StrEq</c> interns the string and the singleton set <c>inset</c> computes (2); an <c>Or</c> of a new
         /// and a known equality, the string, its singleton and their union (3); a local rule's new constant, that
-        /// constant (1); a small number, nothing (it is stored inline); a split query over a new string, 2 however many
-        /// cases it opens.
+        /// constant (1); a small number, nothing (it is stored inline); a query that reasons by cases and refuses a new
+        /// string, the string and its singleton (2).
         /// </summary>
         [Theory]
         [InlineData("StrEq", 2)]
         [InlineData("Or", 3)]
         [InlineData("LocalRule", 1)]
         [InlineData("NumGt", 0)]
-        [InlineData("Split", 2)]
+        [InlineData("Cases", 2)]
         public void AQueryWithANewLiteralInternsExactlyWhatItNames(string shape, int interned)
         {
             var churn = new ScopeChurn();
@@ -84,7 +72,7 @@ namespace Eggnog.Tests.Scopes
                     "Or" => churn.Derive(c.Or.Of(c.StrEq.Of("kind", fresh), c.StrEq.Of("kind", "a"))),
                     "LocalRule" => churn.Derive(c.StrEq.Of("kind", "a"), localConstant: fresh),
                     "NumGt" => churn.Derive(c.NumGt.Of("n", 10L + i)),
-                    _ => churn.Derive(c.Not.Of(c.StrEq.Of("kind", fresh)), churn.Split),
+                    _ => churn.Derive(c.And.Of(c.Not.Of(c.StrEq.Of("kind", "c")), c.Not.Of(c.StrEq.Of("kind", fresh))), churn.Cases),
                 };
             }
 
@@ -158,7 +146,7 @@ namespace Eggnog.Tests.Scopes
         }
 
         /// <summary>
-        /// The frozen schema has no child left once its queries, plain and split, are disposed.
+        /// The frozen schema has no child left once its queries, plain and reasoning by cases, are disposed.
         /// </summary>
         [Fact]
         public void TheSchemaHasNoChildLeft()
@@ -166,7 +154,7 @@ namespace Eggnog.Tests.Scopes
             var churn = new ScopeChurn();
             var c = churn.Theory;
             Pass(churn, _ => churn.Derive(c.StrEq.Of("kind", "a")));
-            Pass(churn, _ => churn.Derive(c.Not.Of(c.StrEq.Of("kind", "zz")), churn.Split));
+            Pass(churn, _ => churn.Derive(c.Not.Of(c.StrEq.Of("kind", "c")), churn.Cases));
 
             Assert.Empty(churn.Schema.Children);
             Assert.Equal(0, churn.Schema.Engine.Context.Context.ChildCount);
@@ -191,24 +179,42 @@ namespace Eggnog.Tests.Scopes
         }
 
         /// <summary>
-        /// A query that makes one term, and whose run makes none, reserves exactly one first id block: the store's id
-        /// counter rises by <see cref="Relations.IdBlockAllocator.FirstBlockSize"/> per query, and a split query's
-        /// cases, which make no term, add nothing to it.
+        /// A query that makes one small term, and whose run makes none, reserves exactly one first id block: the store's
+        /// id counter rises by <see cref="Relations.IdBlockAllocator.FirstBlockSize"/> per query, for one whose case
+        /// rules derive a stored form too, since they write values only.
         /// </summary>
         [Fact]
         public void EachQueryThatMakesOneTermReservesOneFirstBlock()
         {
-            var churn = new ScopeChurn(6);
+            var churn = new ScopeChurn();
             var c = churn.Theory;
             churn.Derive(c.StrEq.Of("kind", "a"));
             var before = churn.Graph.Usage.IdsReserved;
             Pass(churn, _ => churn.Derive(c.StrEq.Of("kind", "a")));
             Assert.Equal(Queries * (long)Relations.IdBlockAllocator.FirstBlockSize, churn.Graph.Usage.IdsReserved - before);
 
-            churn.Derive(c.IsDefined.Of("kind"), churn.Split);
+            churn.Derive(c.Not.Of(c.StrEq.Of("kind", "c")), churn.Cases);
             before = churn.Graph.Usage.IdsReserved;
-            Pass(churn, _ => Assert.Equal(6, churn.Derive(c.IsDefined.Of("kind"), churn.Split).CasesOpened));
+            Pass(churn, _ => churn.Derive(c.Not.Of(c.StrEq.Of("kind", "c")), churn.Cases));
             Assert.Equal(Queries * (long)Relations.IdBlockAllocator.FirstBlockSize, churn.Graph.Usage.IdsReserved - before);
+        }
+
+        /// <summary>
+        /// The shape that reasons by cases does: under <c>(Not (StrEq "kind" "c"))</c> its case rules derive the
+        /// stored form of <c>ref</c>, which the branches of a and b both declare, and the plain schedule does not.
+        /// </summary>
+        [Fact]
+        public void TheShapeThatReasonsByCasesDerivesByCases()
+        {
+            var churn = new ScopeChurn();
+            var c = churn.Theory;
+            foreach (var cases in new[] { true, false })
+            {
+                using var query = churn.Schema.CreateChild(c.Query);
+                query.Assume(c.WhereClause.Of(query.Make(c.Not.Of(c.StrEq.Of("kind", "c")))));
+                query.Run(cases ? churn.Cases : churn.Plain);
+                Assert.Equal(cases, query.Check(c.Form.Of("ref", "uuid-lower")));
+            }
         }
 
         /// <summary>
@@ -234,31 +240,6 @@ namespace Eggnog.Tests.Scopes
                 }
 
                 Assert.Single(counts);
-            }
-        }
-
-        /// <summary>
-        /// A split query takes a fixed number of epochs per case it opens, on top of a fixed base: on this theory,
-        /// <see cref="SplitBaseEpochs"/> + <see cref="EpochsPerCase"/> x cases, the snapshot read included, for every
-        /// domain size. A change to either constant changes how fast a split workload uses the clock
-        /// (<see cref="GraphUsage"/>), so it should be noticed.
-        /// </summary>
-        [Theory]
-        [InlineData(3)]
-        [InlineData(4)]
-        [InlineData(6)]
-        [InlineData(12)]
-        public void ASplitQueryTakesAFixedNumberOfEpochsPerCase(int cases)
-        {
-            var churn = new ScopeChurn(cases);
-            var c = churn.Theory;
-            churn.Derive(c.Not.Of(c.StrEq.Of("kind", "zz")), churn.Split);
-            for (var i = 0; i < 4; i++)
-            {
-                var before = churn.Graph.Usage.Epochs;
-                var report = churn.Derive(c.Not.Of(c.StrEq.Of("kind", "zz")), churn.Split);
-                Assert.Equal(cases, report.CasesOpened);
-                Assert.Equal(SplitBaseEpochs + EpochsPerCase * cases, churn.Graph.Usage.Epochs - before);
             }
         }
 

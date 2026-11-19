@@ -344,7 +344,7 @@ namespace Eggnog.Tests.Values
         /// twice to (vec-of (B)) holds (B) and V0, the id of (vec-of (B)), and (h3) set twice to (h) holds (B), V0 and
         /// V1, the id of (h); (union (vec-get (h) 1) (vec-get (h3) 2)) makes V0 and V1 one class, and (vec-length (h)) is
         /// 1 here, where egglog's binary gives 2, as its rebuild points the id at the vector it renamed (architecture
-        /// 2.13, item 6). The engine's invariants hold.
+        /// 2.12, item 6). The engine's invariants hold.
         /// </summary>
         [Fact]
         public void AUnionOfTwoVectorsIdsLeavesBothUnderOneId()

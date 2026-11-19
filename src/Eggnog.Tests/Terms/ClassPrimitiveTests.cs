@@ -12,7 +12,7 @@ namespace Eggnog.Tests.Terms
     /// in a rule, a host write or read and a merge; <c>ordering-min</c>, <c>ordering-max</c> and <c>bool-!=</c> compare
     /// the ids, as egglog compares representations; a user primitive sees classes of the scope that runs it, and may
     /// return only a class that scope can use, which a host write or read takes canonically. A batch computes over
-    /// classes only before it merges classes, and a split's assumptions compute over values only.
+    /// classes only before it merges classes.
     /// </summary>
     public sealed class ClassPrimitiveTests
     {
@@ -229,24 +229,6 @@ namespace Eggnog.Tests.Terms
             });
 
             Assert.False(t.Root.Get(flag.Of("k")));
-        }
-
-        [Fact]
-        public void ASplitsAssumptionsComputeOverValuesOnly()
-        {
-            var t = new NodeTheory();
-            var choice = t.Graph.DefineFunction<string, Set<long>>("choice", ValueLattice.Intersect<long>());
-            var pick = t.Graph.DefineFunction<string, Node>("pick");
-
-            var e = Assert.Throws<RuleDefinitionException>(() => t.Graph.DefineSplit("pick", s =>
-            {
-                var (k, d) = s.Vars<string, Set<long>>("k", "d");
-                s.When(d.Is(choice.Of(k)));
-                var v = s.Cases("v", d);
-                s.Assume(choice.Of(k).Is(Primitives.SetOf<long>().Of(v)), pick.Of(k).Is(Primitives.OrderingMin<Node>().Of(t.A.Of(), t.B.Of())));
-            }));
-
-            Assert.Contains("compute over values", e.Message, StringComparison.Ordinal);
         }
 
         /// <summary>

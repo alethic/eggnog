@@ -45,11 +45,10 @@ namespace Eggnog
         /// A table keeps the rows that later writes replaced until it compacts: when they outnumber the rows still
         /// current and number more than 16, and always when its scope freezes. Compaction renumbers the rows, and the
         /// descendants of a scope hold the numbers of the rows they have seen, so a scope's tables do not compact while
-        /// it has live descendants (the cases of a running split included); once the last of them is disposed, they
-        /// compact again at the next write that calls for it. A frozen scope never changes again, so each table counted
-        /// here keeps its replaced rows for the scope's life: memory, and rows that full scans and probes step over.
-        /// Results are never affected. Freezing a scope before creating its children avoids it. Readable at any time,
-        /// from any thread.
+        /// it has live descendants; once the last of them is disposed, they compact again at the next write that calls
+        /// for it. A frozen scope never changes again, so each table counted here keeps its replaced rows for the
+        /// scope's life: memory, and rows that full scans and probes step over. Results are never affected. Freezing a
+        /// scope before creating its children avoids it. Readable at any time, from any thread.
         /// </remarks>
         public int CompactionsBlockedAtFreeze => Engine.CompactionsBlockedAtFreeze;
 
@@ -67,9 +66,9 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets the live children made by <see cref="CreateChild"/>, a <see cref="CaseSet"/> or a split step, in
-        /// creation order (a snapshot). Disposed children are not listed, even while their release waits, and neither are
-        /// the cases a split or a lift dropped; nor are the transient children made for queries on a frozen scope.
+        /// Gets the live children made by <see cref="CreateChild"/>, in creation order (a snapshot). Disposed children
+        /// are not listed, even while their release waits, nor are the transient children made for queries on a frozen
+        /// scope.
         /// </summary>
         public IReadOnlyList<Scope> Children
         {
@@ -114,8 +113,8 @@ namespace Eggnog
         /// from a run observer (a structural call), or from a primitive, lattice, filter or cost function.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
-        /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies
-        /// under one.</exception>
+        /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction, or lies under a
+        /// stopped scope.</exception>
         /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>): no child is
         /// created, the scope is not faulted, and from then on the graph creates no child at all.</exception>
         public Scope CreateChild(ScopeTag? tag = null, ScopeOptions? options = null)
@@ -180,8 +179,8 @@ namespace Eggnog
         /// its thread domain (a query callback, a write), or from a primitive, lattice, filter or cost function.</exception>
         /// <exception cref="RuleEvaluationException">A merge the freeze ran failed, or a lattice merge threw in the catch-up
         /// the freeze makes first; the scope is then faulted.</exception>
-        /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies
-        /// under one.</exception>
+        /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction, or lies under a
+        /// stopped scope.</exception>
         /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>) while the freeze
         /// brought the scope up to date: the scope is neither frozen nor faulted.</exception>
         public void Freeze()
@@ -204,8 +203,9 @@ namespace Eggnog
                 if (IsFrozen)
                     return;
 
-                // A scope with a writable parent is caught up for the check (a case contradicted through its parent is
-                // stopped), and is refused either way; the root and children of frozen scopes are never under a case.
+                // A scope with a writable parent is caught up for the check (a scope stopped through its parent answers
+                // as stopped), and is refused either way; the root and children of frozen scopes are never under a
+                // stopped scope.
                 CatchUpAndThrowIfStopped();
                 if (Parent is { IsFrozen: false })
                     throw new InvalidOperationException("A scope can be frozen only once its parent is");
@@ -279,8 +279,8 @@ namespace Eggnog
         /// <exception cref="RuleDefinitionException">The rule is not valid; nothing is registered.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
-        /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies
-        /// under one.</exception>
+        /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction, or lies under a
+        /// stopped scope.</exception>
         public Rule DefineRule(Ruleset ruleset, string name, Action<RuleBuilder> define)
         {
             ArgumentNullException.ThrowIfNull(ruleset);
@@ -303,7 +303,7 @@ namespace Eggnog
                 if (Guard.InObserver)
                     throw new InvalidOperationException("Not allowed inside a run observer");
 
-                // Brought up to date first: a case its parent's contradiction reached since its last call is stopped.
+                // Brought up to date first: a scope its parent's contradiction reached since its last call is stopped.
                 CatchUpAndThrowIfStopped();
                 var builder = new RuleBuilder(Graph, name);
                 try
@@ -345,8 +345,8 @@ namespace Eggnog
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
         /// <exception cref="RuleDefinitionException">A rule is not valid; nothing is registered.</exception>
         /// <exception cref="RuleEvaluationException">As for <see cref="DefineRule"/>.</exception>
-        /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies
-        /// under one.</exception>
+        /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction, or lies under a
+        /// stopped scope.</exception>
         public (Rule Forward, Rule Backward) DefineBiRewrite<TSort>(Ruleset ruleset, string name,
             Func<RuleBuilder, (Term<TSort> Left, Term<TSort> Right)> define)
             where TSort : struct, ISort<TSort>
@@ -505,8 +505,7 @@ namespace Eggnog
         /// </summary>
         Scope? TryReleaseOne()
         {
-            // A case's engine set owns its context until it ends the ownership (ReleaseCase).
-            if (IsRoot || IsDisposed == false || ownedByCases)
+            if (IsRoot || IsDisposed == false)
                 return null;
 
             // Inside an engine call of this scope's domain (a primitive that disposed it, say), the engine would refuse
@@ -624,11 +623,11 @@ namespace Eggnog
         /// <summary>
         /// Freezes the engine context, planning a chosen set of rules: none for the root, whose statistics are empty by
         /// design; otherwise the default variants of every rule a descendant can run: every global rule, the local
-        /// rules of this scope and its ancestors, every live query, every mirror copy rule, and every split matcher.
-        /// Sibling scopes' local rules are left to be planned on their own statistics. The listed queries are held
+        /// rules of this scope and its ancestors, every live query, and every mirror copy rule. Sibling scopes' local
+        /// rules are left to be planned on their own statistics. The listed queries are held
         /// (<see cref="CompiledQuery.Acquire"/>) until the engine has frozen, so a query disposed on another thread
         /// meanwhile cannot free a listed variant; one disposed before the list is built is left out. Global rules,
-        /// ancestors' local rules, copy rules and split matchers are never freed while this scope lives.
+        /// ancestors' local rules and copy rules are never freed while this scope lives.
         /// </summary>
         void FreezeEngine()
         {
@@ -697,10 +696,6 @@ namespace Eggnog
 
             foreach (var rule in Graph.Mirrors.AllCopyRules())
                 Add(rule.Variants.Default);
-
-            // Split matchers run in any scope a split step reaches, as naive rules; they live as long as the graph.
-            foreach (var split in Graph.SplitRules)
-                Add(split.Program.Variants.Default);
 
             return plans;
         }

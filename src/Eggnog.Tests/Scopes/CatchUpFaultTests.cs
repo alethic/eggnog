@@ -160,40 +160,6 @@ namespace Eggnog.Tests.Scopes
         }
 
         /// <summary>
-        /// A lift over cases whose merge of their parent's new value throws (the lattice refuses only a merge that
-        /// raises the value, so the lift's own merge into the parent succeeds). The engine's lift catches each case up
-        /// before it reads it, and that is where the merge throws: the engine records it in the case, which keeps its
-        /// old value, and the lift reads that value. The found-vacuous check after the lift takes the record and faults
-        /// each case; the lift completes and reports, and the parent is not faulted and keeps its value.
-        /// </summary>
-        [Fact]
-        public void ALiftGoesOnWhenACasesCatchUpMergeThrows()
-        {
-            var w = new ThrowingLatticeWorld((old, incoming) => old < incoming);
-            using var cases = w.Parent.OpenCases();
-            var first = cases.Add();
-            var second = cases.Add();
-            first.Assume(w.F.Of("x").Is(1L));
-            second.Assume(w.F.Of("x").Is(1L));
-            w.Parent.Assume(w.F.Of("x").Is(2L));
-            w.Arm();
-
-            var report = cases.Lift();
-
-            Assert.False(report.Changed);
-            Assert.False(w.Parent.IsFaulted);
-            Assert.True(w.Parent.Check(w.F.Of("x").Is(2L)));
-            foreach (var @case in new[] { first, second })
-            {
-                var failure = Assert.IsType<RuleEvaluationException>(@case.Failure);
-                Assert.Contains("throwing max", failure.Message);
-                Assert.Same(failure, Assert.Throws<InvalidOperationException>(() => @case.Check(w.F.Of("x").Is(1L))).InnerException);
-            }
-
-            Assert.Equal(2, cases.Cases.Count);
-        }
-
-        /// <summary>
         /// An extractor query catches its writable scope up before its stop check. When that catch-up runs a lattice
         /// merge that throws, the query throws <see cref="RuleEvaluationException"/> and the scope is faulted, as at
         /// the other entry points that catch up; the engine's own panic never escapes, and no term is returned.
@@ -211,7 +177,7 @@ namespace Eggnog.Tests.Scopes
                     throw new InvalidOperationException("merge refused");
 
                 return Math.Max(x, y);
-            }, Math.Min);
+            });
             var f = graph.DefineFunction<string, long>("f", max);
             graph.Root.Freeze();
             var parent = graph.Root.CreateChild();
@@ -247,7 +213,7 @@ namespace Eggnog.Tests.Scopes
                     throw new InvalidOperationException("merge refused");
 
                 return Math.Max(x, y);
-            }, Math.Min);
+            });
             var f = graph.DefineFunction<string, long>("f", max);
             graph.Root.Freeze();
             var top = graph.Root.CreateChild();
@@ -283,7 +249,7 @@ namespace Eggnog.Tests.Scopes
                     throw new InvalidOperationException("merge refused");
 
                 return Math.Max(x, y);
-            }, Math.Min);
+            });
             var f = graph.DefineFunction<string, long>("f", max);
             graph.Root.Freeze();
             var top = graph.Root.CreateChild();
@@ -325,21 +291,20 @@ namespace Eggnog.Tests.Scopes
         }
 
         /// <summary>
-        /// The structural entry points <c>CreateChild</c>, <c>OpenCases</c>, <c>CaseSet.Add</c>, <c>DefineRule</c> and
-        /// <c>Freeze</c> each report a catch-up failure as <see cref="RuleEvaluationException"/>, fault the scope, and
-        /// leave nothing behind: no child, no case, no rule, and no freeze.
+        /// The structural entry points <c>CreateChild</c>, <c>DefineRule</c> and <c>Freeze</c> each report a catch-up
+        /// failure as <see cref="RuleEvaluationException"/>, fault the scope, and leave nothing behind: no child, no
+        /// rule, and no freeze.
         /// </summary>
         [Fact]
         public void StructuralCallsReportACatchUpFailureAndLeaveNothingBehind()
         {
-            for (var call = 0; call < 5; call++)
+            for (var call = 0; call < 3; call++)
             {
                 var w = new World();
                 var rules = w.Graph.DefineRuleset("rules");
                 w.Graph.Root.Freeze();
                 var parent = w.Graph.Root.CreateChild();
                 var child = parent.CreateChild();
-                var cases = call == 2 ? child.OpenCases() : null;
                 child.Assume(w.F.Of("x").Is(1L));
                 parent.Assume(w.F.Of("x").Is(2L));
                 w.Arm();
@@ -347,9 +312,7 @@ namespace Eggnog.Tests.Scopes
                 Action act = call switch
                 {
                     0 => () => child.CreateChild(),
-                    1 => () => child.OpenCases(),
-                    2 => () => cases!.Add(),
-                    3 => () => child.DefineRule(rules, "late", r => { r.When(w.Tag.Of(r.Var<Node>("n"))); r.Then(w.Tag.Of(r.Var<Node>("n"))); }),
+                    1 => () => child.DefineRule(rules, "late", r => { r.When(w.Tag.Of(r.Var<Node>("n"))); r.Then(w.Tag.Of(r.Var<Node>("n"))); }),
                     _ => () => child.Freeze(),
                 };
 
@@ -360,57 +323,24 @@ namespace Eggnog.Tests.Scopes
                 Assert.Empty(child.Children);
                 Assert.Empty(child.LocalRules);
                 Assert.False(child.IsFrozen);
-                if (cases is not null)
-                    Assert.Empty(cases.Cases);
             }
         }
 
         /// <summary>
-        /// Where the refused merge of <see cref="ALiftGoesOnWhenACasesCatchUpMergeThrows"/> runs: inside the engine's
-        /// lift, whose lifter catches every case up before reading it. The engine records the failure in the case and
-        /// goes on, so the parent is not faulted; the found-vacuous check after the lift takes the record and faults
-        /// each case.
+        /// <c>Union</c> and <see cref="Scope.Extract"/> catch the scope up at their entry and report a catch-up failure
+        /// as <see cref="RuleEvaluationException"/>, faulting the scope called and not the child under it.
         /// </summary>
         [Fact]
-        public void ACasesCatchUpMergeInsideTheEnginesLiftFaultsTheCaseNotTheParent()
+        public void UnionAndExtractReportTheirEntrysCatchUpFailure()
         {
-            var w = new World((old, incoming) => old < incoming);
-            w.Graph.Root.Freeze();
-            var parent = w.Graph.Root.CreateChild();
-            using var cases = parent.OpenCases();
-            var first = cases.Add();
-            var second = cases.Add();
-            first.Assume(w.F.Of("x").Is(1L));
-            second.Assume(w.F.Of("x").Is(1L));
-            parent.Assume(w.F.Of("x").Is(2L));
-            w.Arm();
-
-            cases.Lift();
-
-            Assert.True(w.Refused > 0);
-            Assert.Equal(w.Refused, w.RefusedInLifter);
-            Assert.False(parent.IsFaulted);
-            Assert.True(first.IsFaulted);
-            Assert.True(second.IsFaulted);
-        }
-
-        /// <summary>
-        /// <c>Union</c>, <see cref="Scope.Extract"/> and <see cref="CaseSet.Lift"/> catch the scope up at their entry
-        /// and report a catch-up failure as <see cref="RuleEvaluationException"/>, faulting the scope called and not
-        /// the case under it.
-        /// </summary>
-        [Fact]
-        public void UnionExtractAndLiftReportTheirEntrysCatchUpFailure()
-        {
-            for (var call = 0; call < 3; call++)
+            for (var call = 0; call < 2; call++)
             {
                 var w = new World();
                 w.Graph.Root.Freeze();
                 var parent = w.Graph.Root.CreateChild();
                 var child = parent.CreateChild();
                 var a = child.Make(w.A.Of());
-                using var cases = child.OpenCases();
-                var @case = cases.Add();
+                using var below = child.CreateChild();
                 child.Assume(w.F.Of("x").Is(1L));
                 parent.Assume(w.F.Of("x").Is(2L));
                 w.Arm();
@@ -418,14 +348,13 @@ namespace Eggnog.Tests.Scopes
                 Action act = call switch
                 {
                     0 => () => child.Union(a, a),
-                    1 => () => child.Extract(a),
-                    _ => () => cases.Lift(),
+                    _ => () => child.Extract(a),
                 };
 
                 var failure = Assert.Throws<RuleEvaluationException>(act);
                 Assert.Contains("throwing max", failure.Message);
                 Assert.Same(failure, child.Failure);
-                Assert.False(@case.IsFaulted);
+                Assert.False(below.IsFaulted);
             }
         }
 

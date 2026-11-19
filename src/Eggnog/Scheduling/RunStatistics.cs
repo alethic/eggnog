@@ -16,13 +16,12 @@ namespace Eggnog
         public int Iterations;
 
         /// <summary>
-        /// Whether an iteration, or a split step's lifts, changed the top-level scope.
+        /// Whether an iteration changed the top-level scope.
         /// </summary>
         public bool TopChanged;
 
         /// <summary>
-        /// Whether the last iteration or split step in the top-level scope made progress: the iteration changed it, or the
-        /// split step opened cases or its lifts changed it.
+        /// Whether the last iteration in the top-level scope changed it.
         /// </summary>
         public bool LastTopStepChanged;
 
@@ -67,27 +66,6 @@ namespace Eggnog
         /// The number of steps made, recorded or not: the next step's <see cref="RunStep.Index"/>.
         /// </summary>
         public int StepCount;
-
-        /// <summary>
-        /// The cases split steps opened, in every scope of the run.
-        /// </summary>
-        public int CasesOpened;
-
-        /// <summary>
-        /// The split requests found and not taken: over the case limit, covered by a live split, or an empty element set;
-        /// splits below the depth limit are never looked for.
-        /// </summary>
-        public int SplitsSkipped;
-
-        /// <summary>
-        /// The lifts split steps ran.
-        /// </summary>
-        public int Lifts;
-
-        /// <summary>
-        /// The candidate rows those lifts skipped over their candidate limit.
-        /// </summary>
-        public long LiftRowsSkipped;
 
     }
 

@@ -40,7 +40,7 @@ namespace Eggnog
         /// <remarks>
         /// A tag is a definition of the graph, kept for its life, and so is the mirror table that the first scoped read
         /// of a table through the tag creates. Define tags with the theory, one per role a scope plays (a schema, a
-        /// query, a case), never one per request: each tag grows the graph's tags and mirrors for good.
+        /// query), never one per request: each tag grows the graph's tags and mirrors for good.
         /// </remarks>
         /// <param name="name">The tag's name: non-empty, unique among the graph's tags; <c>root</c> is the root's.</param>
         /// <returns>The tag.</returns>
@@ -149,7 +149,6 @@ namespace Eggnog
             handle.Role = source.Role;
             handle.KeyArray = source.KeyArray;
             handle.Output = source.Output;
-            handle.Lift = false;
             handle.Subsumable = source.Subsumable;
             handle.Function = function;
             handle.Columns = source.Columns;
@@ -188,7 +187,6 @@ namespace Eggnog
                 Kind = TableKind.Relation,
                 Role = TableRole.Fact,
                 KeyArray = keys,
-                Lift = false,
                 Subsumable = false,
                 Function = function,
                 Columns = columns,

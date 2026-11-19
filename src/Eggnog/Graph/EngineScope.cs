@@ -27,9 +27,9 @@ namespace Eggnog
         public abstract bool IsContradictory { get; }
 
         /// <summary>
-        /// Gets whether the scope is a case whose contradiction set its stop flag: it has no
-        /// model, the engine refuses every read but whether it is contradictory, and its writes and runs are no-ops. Only
-        /// a case can stop. One volatile read.
+        /// Gets whether the scope's contradiction set its stop flag: it has no model, the engine refuses every read but
+        /// whether it is contradictory, and its writes and runs are no-ops. Only a context made to stop on
+        /// contradiction can stop, and no scope's context is. One volatile read.
         /// </summary>
         public abstract bool IsStopped { get; }
 

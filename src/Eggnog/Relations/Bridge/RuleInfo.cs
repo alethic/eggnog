@@ -20,7 +20,7 @@ namespace Eggnog.Relations
     /// <para>
     /// <see cref="AllowInheritance"/> is computed with the plan: a naive rule never inherits, and a semi-naive rule
     /// inherits only when its lowered actions are query-determined (<see cref="ActionReadAnalysis"/>). The bridge has
-    /// no split or callback rules; the rule layer runs those as naive rules.
+    /// no callback rules; the rule layer runs those as naive rules.
     /// </para>
     /// <para>
     /// Thread-safe: the plan and the flag are published with a volatile write; everything else is immutable.

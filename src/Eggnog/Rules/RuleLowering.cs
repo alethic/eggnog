@@ -8,10 +8,10 @@ namespace Eggnog
     /// Builds one engine rule from a program with the bridge's rule builder.
     /// </summary>
     /// <remarks>
-    /// Atoms are lowered in program order (the engine's variant order), each relation atom ending with the unit constant;
-    /// then the body steps as <c>QueryPrim</c>s in placement order, which the bridge runs after the join on every match;
-    /// then the head operations in builder-call order (a query's or split matcher's head is one collector). Every call
-    /// site is registered as an external function owned by the variant. Called under the variants' lock; the bridge's
+    /// Atoms are lowered in program order (the engine's variant order), each relation atom ending with the unit
+    /// constant; then the body steps as <c>QueryPrim</c>s in placement order, which the bridge runs after the join on
+    /// every match; then the head operations in builder-call order (a query's head is one collector). Every call site
+    /// is registered as an external function owned by the variant. Called under the variants' lock; the bridge's
     /// definitions are thread-safe (published copy-on-write).
     /// </remarks>
     internal static class RuleLowering
@@ -22,7 +22,7 @@ namespace Eggnog
         /// </summary>
         /// <param name="graph">The graph.</param>
         /// <param name="program">The program.</param>
-        /// <param name="rule">The rule, for statistics; <c>null</c> for a query, a split matcher or a copy rule.</param>
+        /// <param name="rule">The rule, for statistics; <c>null</c> for a query or a copy rule.</param>
         /// <param name="semiNaive">Whether to build a semi-naive engine rule.</param>
         /// <param name="constants">The values to lower the class constants with, by <see cref="OperandKind.IdConstant"/>
         /// index.</param>

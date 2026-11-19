@@ -4,41 +4,71 @@ namespace Eggnog.Tests.Predicates.Scoped
     public sealed partial class PredicateTheory
     {
 
-        /// <summary>Gets the tag of a discriminator split's cases.</summary>
-        public ScopeTag Case { get; private set; } = null!;
-
         /// <summary>
         /// Gets the paths the running scope's predicate terms mention: an analysis, derived from terms alone.
         /// </summary>
         public Relation<string> Mentioned { get; private set; } = null!;
 
-        /// <summary>Gets the split a schema is compiled with: every present discriminator.</summary>
-        public SplitRule SchemaSplit { get; private set; } = null!;
+        /// <summary>
+        /// Gets <c>form-cases</c>: the values of discriminator p whose branch declares that path q has stored form f.
+        /// </summary>
+        public Function<string, string, string, Set<string>> FormCases { get; private set; } = null!;
+
+        /// <summary>Gets <c>present-cases</c>: the values of discriminator p whose branch declares q present.</summary>
+        public Function<string, string, Set<string>> PresentCases { get; private set; } = null!;
 
         /// <summary>
-        /// Gets the split a query runs: the present discriminators its predicate mentions, so that a query does not
-        /// split again on every discriminator the frozen schema already split on.
+        /// Gets <c>string-cases</c>: the values of discriminator p whose branch declares a stored form or a domain of q,
+        /// by which q holds a string or null.
         /// </summary>
-        public SplitRule QuerySplit { get; private set; } = null!;
+        public Function<string, string, Set<string>> StringCases { get; private set; } = null!;
 
-        /// <summary>Gets the schedule a schema is compiled with: facts and splits, no rewrites.</summary>
+        /// <summary>
+        /// Gets <c>case-dom</c>: the values path q can hold, if present, where discriminator p holds v: the domain that
+        /// v's branch declares, narrowed by what the running scope holds of q.
+        /// </summary>
+        public Function<string, string, string, Set<string>> CaseDom { get; private set; } = null!;
+
+        /// <summary>
+        /// Gets <c>dom-cases</c>: for discriminator p and its domain d, the union of the case domains of q
+        /// (<see cref="CaseDom"/>) of the values of d that have one.
+        /// </summary>
+        public Function<string, Set<string>, string, Set<string>> DomCases { get; private set; } = null!;
+
+        /// <summary>
+        /// Gets <c>dom-reported</c>: for discriminator p and its domain d, the values of d that have a case domain of q,
+        /// which <see cref="DomCases"/> unions.
+        /// </summary>
+        public Function<string, Set<string>, string, Set<string>> DomReported { get; private set; } = null!;
+
+        /// <summary>
+        /// Gets the case rules a schema is compiled with: wherever a present discriminator's domain still holds more
+        /// than one value, they reason by its values (<see cref="DefineCaseRules"/>).
+        /// </summary>
+        public Ruleset SchemaCases { get; private set; } = null!;
+
+        /// <summary>
+        /// Gets the case rules a query runs: those of <see cref="SchemaCases"/>, over the present discriminators its
+        /// predicate mentions only, so that a query does not reason again by the cases of every discriminator the
+        /// frozen schema already reasoned by.
+        /// </summary>
+        public Ruleset QueryCases { get; private set; } = null!;
+
+        /// <summary>Gets the schedule a schema is compiled with: horn, lattice and the schema's case rules.</summary>
         public Schedule Facts { get; private set; } = null!;
 
         /// <summary>
-        /// Gets the schedule a query runs: horn, lattice, split and rewrite steps saturated together, with the facts
-        /// settled before each split step, so that the split sees the narrowest domain and opens no case that goes
-        /// vacuous only once the domain narrows.
+        /// Gets the schedule a query runs: horn, lattice, the query's case rules and rewrites, saturated together.
         /// </summary>
         public Schedule Saturation { get; private set; } = null!;
 
         /// <summary>
-        /// Defines the split members: the case tag, the analysis <see cref="Mentioned"/> and the rules that derive it,
-        /// the schema's and the query's domain splits, and the schedules that take them.
+        /// Defines the case members: the analysis <see cref="Mentioned"/> and the rules that derive it, the tables a
+        /// branch declares its claims in and the case rules derive from them, the schema's and the query's case rules,
+        /// and the schedules that take them.
         /// </summary>
         partial void DefineCases()
         {
-            Case = Graph.DefineScopeTag("case");
-
             // A path is mentioned when a comparison or test over it is a term of the running scope.
             Mentioned = Graph.DefineRelation<string>("mentioned", new RelationOptions { Analysis = true });
             foreach (var comparison in new[] { StrEq, StrGe, StrGt, UuidEq, InstantGt })
@@ -71,14 +101,163 @@ namespace Eggnog.Tests.Predicates.Scoped
                 });
             }
 
-            // One case per value a present discriminator can still hold: the cases cover the scope. A query splits only
-            // what it mentions; the schema's own split has already lifted what the schema alone implies.
-            SchemaSplit = Graph.DefineDomainSplit("discriminator", Dom, [Discriminator, Present], Case);
-            QuerySplit = Graph.DefineDomainSplit("mentioned discriminator", Dom, [Discriminator, Present, Mentioned], Case);
+            // What the branches declare, by the values whose branch declares it: sets that only grow. A domain is kept
+            // per value, and narrows as a domain does; the union of a discriminator's cases is keyed by its domain, so
+            // that a narrower domain unions only its own values.
+            FormCases = Graph.DefineFunction<string, string, string, Set<string>>("form-cases", ValueLattice.Union<string>());
+            PresentCases = Graph.DefineFunction<string, string, Set<string>>("present-cases", ValueLattice.Union<string>());
+            StringCases = Graph.DefineFunction<string, string, Set<string>>("string-cases", ValueLattice.Union<string>());
+            CaseDom = Graph.DefineFunction<string, string, string, Set<string>>("case-dom", ValueLattice.Intersect<string>());
+            DomCases = Graph.DefineFunction<string, Set<string>, string, Set<string>>("dom-cases", ValueLattice.Union<string>());
+            DomReported = Graph.DefineFunction<string, Set<string>, string, Set<string>>("dom-reported", ValueLattice.Union<string>());
+
+            // A schema reasons by the cases of every present discriminator; a query only by those it mentions, since
+            // the schema has derived already what the schema alone implies.
+            SchemaCases = Graph.DefineRuleset("schema cases");
+            QueryCases = Graph.DefineRuleset("query cases");
+            DefineCaseRules(SchemaCases, mentioned: false);
+            DefineCaseRules(QueryCases, mentioned: true);
 
             var settle = Schedule.Saturate(Horn, Lattice);
-            Facts = Schedule.Saturate(settle, Schedule.Split(SchemaSplit, settle));
-            Saturation = Schedule.Saturate(settle, Schedule.Split(QuerySplit, settle), Rewrite);
+            Facts = Schedule.Saturate(settle, SchemaCases);
+            Saturation = Schedule.Saturate(settle, QueryCases, Rewrite);
+        }
+
+        /// <summary>
+        /// Defines the case rules of one ruleset. Where discriminator p is present and its domain d holds more than one
+        /// value, p holds one value of d, and where it holds v the claims of v's branch hold
+        /// (<see cref="DeclareBranch"/>). So a value is dropped from d when the scope rules out its branch's claims: a
+        /// stored form or a domain of a path whose types in the scope hold neither a string nor null, or a domain of a
+        /// path that the scope's domain of the path and its refused values leave empty, the path being present in the
+        /// scope or declared present by the branch. And what the branches of the values of d all declare holds: a stored
+        /// form or a presence that every one declares; that a path holds a string or null, where every one declares a
+        /// stored form or a domain of it; and, where every one declares a domain of a path, the union of those domains,
+        /// each narrowed as above.
+        /// </summary>
+        /// <remarks>
+        /// The rules read only what the branches declare, against what the scope holds: a consequence that a case would
+        /// derive through further rules, such as the claims of another discriminator's branch that a case's own claims
+        /// select, is neither derived nor used to drop a value. <see cref="Literal.ContextArgumentTheory"/> opens a
+        /// context per value and runs the whole theory there, so its cases derive such consequences.
+        /// </remarks>
+        /// <param name="ruleset">The ruleset.</param>
+        /// <param name="mentioned">Whether the rules reason only by the discriminators the running scope's predicate
+        /// mentions (<see cref="Mentioned"/>).</param>
+        void DefineCaseRules(Ruleset ruleset, bool mentioned)
+        {
+            // The discriminator's guards and its domain. A domain of one value is the branch rule's own case, and an
+            // empty one is a contradiction.
+            Fact[] Cases(Var<string> p, Var<Set<string>> d) =>
+                mentioned
+                    ? [Discriminator.Of(p), Present.Of(p), Mentioned.Of(p), d.Is(Dom.Of(p))]
+                    : [Discriminator.Of(p), Present.Of(p), d.Is(Dom.Of(p))];
+
+            Term<bool> Several(Var<Set<string>> d) => Int64Primitives.Greater.Of(Primitives.SetLength<string>().Of(d), 1L);
+
+            // The values the scope rules out. A case domain narrows as the scope's domain of its path does, and a case
+            // in which a path present there can hold no value, or no string or null that its branch's claims allow, has
+            // no document.
+            ruleset.DefineRule("a case domain narrows to the path's domain", r =>
+            {
+                var (p, v, q) = r.Vars<string, string, string>("p", "v", "q");
+                var (d, dv, dq) = r.Vars<Set<string>, Set<string>, Set<string>>("d", "dv", "dq");
+                r.When(Cases(p, d));
+                r.When(dv.Is(CaseDom.Of(p, v, q)), dq.Is(Dom.Of(q)));
+                r.Where(Several(d));
+                r.Where(Primitives.SetContains<string>().Of(d, v));
+                r.Then(CaseDom.Of(p, v, q).Is(Primitives.SetIntersect<string>().Of(dv, dq)));
+            });
+            ruleset.DefineRule("a disequality narrows a case domain", r =>
+            {
+                var (p, v, q, w) = r.Vars<string, string, string, string>("p", "v", "q", "w");
+                var (d, dv) = r.Vars<Set<string>, Set<string>>("d", "dv");
+                r.When(Cases(p, d));
+                r.When(dv.Is(CaseDom.Of(p, v, q)), Ne.Of(q, w));
+                r.Where(Several(d));
+                r.Where(Primitives.SetContains<string>().Of(d, v));
+                r.Where(Primitives.SetContains<string>().Of(dv, w));
+                r.Then(CaseDom.Of(p, v, q).Is(Primitives.SetRemove<string>().Of(dv, w)));
+            });
+            foreach (var declared in new[] { false, true })
+            {
+                var path = declared ? "a path its branch declares present" : "a present path";
+                ruleset.DefineRule($"a case with an empty domain of {path} is vacuous", r =>
+                {
+                    var (p, v, q) = r.Vars<string, string, string>("p", "v", "q");
+                    var (d, dv, s) = r.Vars<Set<string>, Set<string>, Set<string>>("d", "dv", "s");
+                    r.When(Cases(p, d));
+                    r.When(dv.Is(CaseDom.Of(p, v, q)), declared ? s.Is(PresentCases.Of(p, q)) : Present.Of(q));
+                    r.Where(Several(d));
+                    r.Where(Primitives.SetContains<string>().Of(d, v));
+                    r.Where(Primitives.SetIsEmpty<string>().Of(dv));
+                    if (declared)
+                        r.Where(Primitives.SetContains<string>().Of(s, v));
+
+                    r.Then(Dom.Of(p).Is(Primitives.SetRemove<string>().Of(d, v)));
+                });
+                ruleset.DefineRule($"cases whose strings the types of {path} exclude are vacuous", r =>
+                {
+                    var (p, q) = r.Vars<string, string>("p", "q");
+                    var (d, s, t, present) = r.Vars<Set<string>, Set<string>, Set<string>, Set<string>>("d", "s", "t", "present");
+                    r.When(Cases(p, d));
+                    r.When(s.Is(StringCases.Of(p, q)), t.Is(Types.Of(q)), declared ? present.Is(PresentCases.Of(p, q)) : Present.Of(q));
+                    r.Where(Several(d));
+                    r.Where(Primitives.SetIsEmpty<string>().Of(Primitives.SetIntersect<string>().Of(t, StringOrNull)));
+                    r.Then(Dom.Of(p).Is(Primitives.SetDifference<string>().Of(d, declared ? Primitives.SetIntersect<string>().Of(s, present) : s)));
+                });
+            }
+
+            // What the branch of every value of the domain declares.
+            ruleset.DefineRule("every case declares a stored form", r =>
+            {
+                var (p, q, f) = r.Vars<string, string, string>("p", "q", "f");
+                var (d, s) = r.Vars<Set<string>, Set<string>>("d", "s");
+                r.When(Cases(p, d));
+                r.When(s.Is(FormCases.Of(p, q, f)));
+                r.Where(Several(d));
+                r.Where(Primitives.SetIsSubset<string>().Of(d, s));
+                r.Then(Form.Of(q, f));
+            });
+            ruleset.DefineRule("every case declares presence", r =>
+            {
+                var (p, q) = r.Vars<string, string>("p", "q");
+                var (d, s) = r.Vars<Set<string>, Set<string>>("d", "s");
+                r.When(Cases(p, d));
+                r.When(s.Is(PresentCases.Of(p, q)));
+                r.Where(Several(d));
+                r.Where(Primitives.SetIsSubset<string>().Of(d, s));
+                r.Then(Present.Of(q));
+            });
+            ruleset.DefineRule("every case declares a string", r =>
+            {
+                var (p, q) = r.Vars<string, string>("p", "q");
+                var (d, s) = r.Vars<Set<string>, Set<string>>("d", "s");
+                r.When(Cases(p, d));
+                r.When(s.Is(StringCases.Of(p, q)));
+                r.Where(Several(d));
+                r.Where(Primitives.SetIsSubset<string>().Of(d, s));
+                r.Then(Types.Of(q).Is(StringOrNull));
+            });
+            ruleset.DefineRule("a case domain joins the union of the cases'", r =>
+            {
+                var (p, v, q) = r.Vars<string, string, string>("p", "v", "q");
+                var (d, dv) = r.Vars<Set<string>, Set<string>>("d", "dv");
+                r.When(Cases(p, d));
+                r.When(dv.Is(CaseDom.Of(p, v, q)));
+                r.Where(Several(d));
+                r.Where(Primitives.SetContains<string>().Of(d, v));
+                r.Then(DomCases.Of(p, d, q).Is(dv), DomReported.Of(p, d, q).Is(Primitives.SetOf<string>().Of(v)));
+            });
+            ruleset.DefineRule("every case declares a domain", r =>
+            {
+                var (p, q) = r.Vars<string, string>("p", "q");
+                var (d, reported, u) = r.Vars<Set<string>, Set<string>, Set<string>>("d", "r", "u");
+                r.When(Cases(p, d));
+                r.When(reported.Is(DomReported.Of(p, d, q)), u.Is(DomCases.Of(p, d, q)));
+                r.Where(Several(d));
+                r.Where(Primitives.SetIsSubset<string>().Of(d, reported));
+                r.Then(Dom.Of(q).Is(u));
+            });
         }
 
     }

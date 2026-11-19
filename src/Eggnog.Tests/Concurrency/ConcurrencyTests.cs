@@ -14,8 +14,8 @@ namespace Eggnog.Tests.Concurrency
 
     /// <summary>
     /// Children of a frozen scope run concurrently: queries under one frozen schema on parallel threads give the
-    /// results of serial runs, queries that split included, and host reads, queries and extractors on a frozen scope
-    /// run from many threads. Most tests run on dedicated threads that meet at a barrier first
+    /// results of serial runs, queries that reason by cases included, and host reads, queries and extractors on a
+    /// frozen scope run from many threads. Most tests run on dedicated threads that meet at a barrier first
     /// (<see cref="DedicatedThreads"/>), so the calls overlap. <see cref="Soak"/> runs random queries the same way over
     /// fresh seeds, query counts and thread counts.
     /// </summary>
@@ -311,12 +311,13 @@ namespace Eggnog.Tests.Concurrency
         }
 
         /// <summary>
-        /// Children of a frozen scope have their own thread domains and may run concurrently, and a split's cases run
-        /// on their parent's thread. Queries that split (sharing the split rules, their sources, the graph's lift spec
-        /// and the functions' case joins) run on 8 threads under one frozen schema and give the serial answer.
+        /// Children of a frozen scope have their own thread domains and may run concurrently. Queries that reason by
+        /// cases (sharing the theory's case rules and the branch claims the frozen schema holds) run on 8 threads under
+        /// one frozen schema and give the serial answer, each deriving by the cases of <c>kind</c> the ref's stored
+        /// form, by which its comparison lowers.
         /// </summary>
         [Fact]
-        public void SplittingQueriesUnderOneFrozenSchemaRunOnParallelThreads()
+        public void QueriesThatReasonByCasesUnderOneFrozenSchemaRunOnParallelThreads()
         {
             var c = new Predicates.Scoped.PredicateTheory(new EGraph());
             c.Graph.Root.Freeze();
@@ -331,8 +332,8 @@ namespace Eggnog.Tests.Concurrency
                 query.Assume(c.WhereClause.Of(q));
                 var report = query.Run(c.Saturation);
                 Assert.Equal(RunStopReason.Completed, report.StopReason);
-                Assert.Equal(2, report.CasesOpened);
                 Assert.Empty(query.Children);
+                Assert.True(query.Check(c.Form.Of("body.ref", "uuid-lower")));
                 return query.Extract(q).ToString();
             }
 
@@ -345,12 +346,12 @@ namespace Eggnog.Tests.Concurrency
         }
 
         /// <summary>
-        /// Queries under one frozen schema run their split steps concurrently on parallel threads (each query scope
-        /// is its own thread domain; split rules, their sources, lift specs and case joins are shared), and give the
-        /// results of serial runs.
+        /// Queries under one frozen schema run their case rules concurrently on parallel threads (each query scope is
+        /// its own thread domain; the rules and the branch claims the schema holds are shared), and give the results of
+        /// serial runs.
         /// </summary>
         [Fact]
-        public void SplitQueriesUnderOneFrozenSchemaOnParallelThreadsGiveTheSerialResults()
+        public void QueriesWithCaseRulesUnderOneFrozenSchemaOnParallelThreadsGiveTheSerialResults()
         {
             static string Ask(PredicateTheory c, Scope schema, ConstructorTerm<Pred> term)
             {
@@ -361,14 +362,16 @@ namespace Eggnog.Tests.Concurrency
                 Assert.Empty(query.Children);
                 var best = query.Extract(q);
                 var forms = string.Join(",", query.Rows(c.Form).Select(r => r.ToString()));
-                return $"{best} cost {best.Cost} cases {report.CasesOpened} contradictory {query.IsContradictory} forms {forms}";
+                return $"{best} cost {best.Cost} stop {report.StopReason} contradictory {query.IsContradictory} forms {forms}";
             }
 
             var serial = new PredicateTheory(new EGraph());
             serial.Graph.Root.Freeze();
             var serialSchema = DiscriminatedSchema.Compile(serial);
             var expected = DiscriminatedSchema.Queries(serial).Select(term => Ask(serial, serialSchema, term)).ToArray();
-            Assert.Contains(expected, e => e.Contains("cases 2", StringComparison.Ordinal));
+
+            // The second query, of kinds a or b, has the ref's stored form only by the case rules.
+            Assert.Contains("(form \"body.ref\" \"uuid-lower\")", expected[1], StringComparison.Ordinal);
 
             var c = new PredicateTheory(new EGraph());
             c.Graph.Root.Freeze();
@@ -392,12 +395,12 @@ namespace Eggnog.Tests.Concurrency
         const string Ref = "123e4567-e89b-12d3-a456-426614174000";
 
         /// <summary>
-        /// Children of a frozen scope may run concurrently, and each query's splits are its own: eight queries under
-        /// one frozen schema run the scoped saturation, whose query split opens their cases, on pool threads and
-        /// reach the serial result; the schema learns nothing from them.
+        /// Children of a frozen scope may run concurrently, and what each query's case rules derive is its own: eight
+        /// queries under one frozen schema run the scoped saturation, whose case rules prove the form of <c>ref</c> by
+        /// the cases of <c>kind</c>, on pool threads and reach the serial result; the schema learns nothing from them.
         /// </summary>
         [Fact]
-        public void SplitsInSiblingQueriesRunConcurrentlyAndAgreeWithASerialRun()
+        public void CaseRulesInSiblingQueriesRunConcurrentlyAndAgreeWithASerialRun()
         {
             var graph = new EGraph();
             var c = new PredicateTheory(graph);
@@ -407,9 +410,9 @@ namespace Eggnog.Tests.Concurrency
                 c.Present.Of("kind"),
                 c.Dom.Of("kind").Is(Set.Of(["order", "invoice", "note"])),
                 c.Discriminator.Of("kind"));
-            c.DeclareBranch(schema, "kind", "order", c.Form.Of("ref", "uuid-lower"));
-            c.DeclareBranch(schema, "kind", "invoice", c.Form.Of("ref", "uuid-lower"));
-            Assert.Equal(3, schema.Run(c.Facts).CasesOpened);
+            c.DeclareBranch(schema, "kind", "order", forms: [("ref", "uuid-lower")]);
+            c.DeclareBranch(schema, "kind", "invoice", forms: [("ref", "uuid-lower")]);
+            Assert.True(schema.Run(c.Facts).Saturated);
             schema.Freeze();
 
             string RunOne()
@@ -421,7 +424,6 @@ namespace Eggnog.Tests.Concurrency
                 query.Assume(c.WhereClause.Of(q));
                 var report = query.Run(c.Saturation);
                 Assert.Equal(RunStopReason.Completed, report.StopReason);
-                Assert.Equal(2, report.CasesOpened);
                 Assert.Empty(query.Children);
                 Assert.True(query.Check(c.Form.Of("ref", "uuid-lower")));
                 return query.Extract(q).ToString();
@@ -440,12 +442,12 @@ namespace Eggnog.Tests.Concurrency
 
         /// <summary>
         /// The soak (<see cref="ConcurrentSoak"/>, <c>EGGNOG_CONCURRENT_SOAK</c>): each seed draws 2 to 64 random WHERE
-        /// clauses over the discriminated schema (<see cref="RandomClause"/>), each asked with or without the query split, and
-        /// runs them as queries under one frozen schema on 2 to 8 dedicated threads, each query disposed as soon as it
-        /// is described. Every query must give what the same query gave when asked serially before; the schema must
-        /// be unchanged and left without children. In half the iterations the queries have two threads and their rule
-        /// sets are forced onto the parallel executor; their extractions are then compared by cost only, since ids,
-        /// and so ties between terms of equal cost, may differ between parallel runs.
+        /// clauses over the discriminated schema (<see cref="RandomClause"/>), each asked with or without the case
+        /// rules, and runs them as queries under one frozen schema on 2 to 8 dedicated threads, each query disposed as
+        /// soon as it is described. Every query must give what the same query gave when asked serially before; the
+        /// schema must be unchanged and left without children. In half the iterations the queries have two threads and
+        /// their rule sets are forced onto the parallel executor; their extractions are then compared by cost only,
+        /// since ids, and so ties between terms of equal cost, may differ between parallel runs.
         /// </summary>
         [Fact]
         public void Soak()
@@ -475,22 +477,22 @@ namespace Eggnog.Tests.Concurrency
             var schema = DiscriminatedSchema.Compile(c);
             var version = schema.Version;
             var random = new Random(seed);
-            var jobs = Enumerable.Range(0, queries).Select(_ => (Clause: RandomClause(c, random, 3), Split: random.Next(2) == 0)).ToArray();
+            var jobs = Enumerable.Range(0, queries).Select(_ => (Clause: RandomClause(c, random, 3), Cases: random.Next(2) == 0)).ToArray();
 
             string Ask(int i)
             {
-                var (clause, split) = jobs[i];
+                var (clause, cases) = jobs[i];
                 using var query = schema.CreateChild(c.Query, parallel ? new ScopeOptions { DegreeOfParallelism = 2 } : null);
                 if (parallel)
                     query.Engine.Context.Context.Database.ParallelRuleSetsOverride = true;
 
                 var q = query.Make(clause);
                 query.Assume(c.WhereClause.Of(q));
-                var report = query.Run(split ? c.Saturation : Schedule.Saturate(c.Horn, c.Lattice, c.Rewrite));
+                var report = query.Run(cases ? c.Saturation : Schedule.Saturate(c.Horn, c.Lattice, c.Rewrite));
                 Assert.Empty(query.Children);
                 var best = query.Extract(q);
                 var term = parallel ? "" : best.ToString();
-                return $"{term} cost {best.Cost} stop {report.StopReason} cases {report.CasesOpened} contradictory {query.IsContradictory}{Environment.NewLine}{string.Join(Environment.NewLine, ScopeFacts.Of(query))}";
+                return $"{term} cost {best.Cost} stop {report.StopReason} contradictory {query.IsContradictory}{Environment.NewLine}{string.Join(Environment.NewLine, ScopeFacts.Of(query))}";
             }
 
             var expected = Enumerable.Range(0, queries).Select(Ask).ToArray();
@@ -499,7 +501,7 @@ namespace Eggnog.Tests.Concurrency
 
             Assert.Equal(Math.Min(threads, queries), ran);
             for (var i = 0; i < queries; i++)
-                Assert.True(expected[i] == results[i], $"query {i} ({jobs[i].Clause}, split {jobs[i].Split}) differs from its serial run:{Environment.NewLine}{expected[i]}{Environment.NewLine}---{Environment.NewLine}{results[i]}");
+                Assert.True(expected[i] == results[i], $"query {i} ({jobs[i].Clause}, cases {jobs[i].Cases}) differs from its serial run:{Environment.NewLine}{expected[i]}{Environment.NewLine}---{Environment.NewLine}{results[i]}");
 
             Assert.Equal(version, schema.Version);
             Assert.Empty(schema.Children);

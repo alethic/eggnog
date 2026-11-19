@@ -86,13 +86,13 @@ namespace Eggnog
         /// </summary>
         /// <remarks>
         /// Every scope interns into these pools, and what a scope interned outlives it. A write interns each new
-        /// constant that is not stored inline (strings, doubles, sets, pairs, vectors, registered values, and <c>long</c>s outside
-        /// <c>[0, 2^31)</c>, and every <c>BigInt</c> and <c>BigRat</c>); a run interns each new result of a primitive or a lattice merge,
-        /// a split each new value its cases assume, a lift each new case join; and a rule or query interns its constants
-        /// when it is defined, and when it runs the new results of the computations in its body. Reads and checks never
-        /// intern. A container (a set, pair, vector, map or multiset) also takes an id from the graph's id counter, as egglog's
-        /// containers do. A container of classes a child scope makes is not in these pools and not counted: the child
-        /// keeps it in its own containers until it is disposed.
+        /// constant that is not stored inline (strings, doubles, sets, pairs, vectors, registered values, and
+        /// <c>long</c>s outside <c>[0, 2^31)</c>, and every <c>BigInt</c> and <c>BigRat</c>); a run interns each new
+        /// result of a primitive or a lattice merge; and a rule or query interns its constants when it is defined, and
+        /// when it runs the new results of the computations in its body. Reads and checks never intern. A container (a
+        /// set, pair, vector, map or multiset) also takes an id from the graph's id counter, as egglog's containers do.
+        /// A container of classes a child scope makes is not in these pools and not counted: the child keeps it in its
+        /// own containers until it is disposed.
         /// </remarks>
         public long InternedCount
         {

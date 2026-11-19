@@ -1,19 +1,16 @@
-using Eggnog.Tests.Predicates;
-using Eggnog.Tests.Predicates.Scoped;
-
 using Xunit;
 
-namespace Eggnog.Tests.Cases
+namespace Eggnog.Tests.Predicates.Scoped
 {
 
     /// <summary>
-    /// Splits end to end on <see cref="PredicateTheory"/>: what a schema's or a query's split lifts, what the query's
+    /// <see cref="PredicateTheory"/> end to end: what a schema's or a query's case rules derive, what the query's
     /// rewrites then prove, and the predicate extraction returns, with its cost. The queries over a discriminated
-    /// schema run in their own query scopes under <see cref="DiscriminatedSchema"/>, whose compile split <c>kind</c>
-    /// three ways (a, b, c); a UUID or instant comparison costs 1000, so a predicate that still holds one after the
-    /// run did not lower.
+    /// schema run in their own query scopes under <see cref="DiscriminatedSchema"/>, whose discriminator <c>kind</c>
+    /// holds a, b or c; a UUID or instant comparison costs 1000, so a predicate that still holds one after the run did
+    /// not lower.
     /// </summary>
-    public sealed class SplitExtractionTests
+    public sealed class DiscriminatedSchemaTests
     {
 
         /// <summary>
@@ -27,10 +24,10 @@ namespace Eggnog.Tests.Cases
         }
 
         /// <summary>
-        /// Asks a query with the query split (<see cref="PredicateTheory.Saturation"/>) and checks that the run
-        /// saturated and left no case behind.
+        /// Asks a query with the query's case rules (<see cref="PredicateTheory.Saturation"/>) and checks that the run
+        /// saturated and left no child behind.
         /// </summary>
-        static (Scope Query, Pred Q, RunReport Report) AskWithSplit(PredicateTheory c, Scope schema, ConstructorTerm<Pred> term)
+        static (Scope Query, Pred Q) AskWithCases(PredicateTheory c, Scope schema, ConstructorTerm<Pred> term)
         {
             var query = schema.CreateChild(c.Query);
             var q = query.Make(term);
@@ -39,7 +36,7 @@ namespace Eggnog.Tests.Cases
             Assert.Equal(RunStopReason.Completed, report.StopReason);
             Assert.True(report.Saturated);
             Assert.Empty(query.Children);
-            return (query, q, report);
+            return (query, q);
         }
 
         /// <summary>
@@ -52,11 +49,11 @@ namespace Eggnog.Tests.Cases
                 c.And.Of(c.BoolTrue.Of("flag"), updated));
 
         /// <summary>
-        /// The schema split lifted branch b's UUID form to every document of kind b, so a query that names the kind
-        /// lowers its UUID comparison to a string comparison without a split of its own.
+        /// Branch b declares the UUID form of every document of kind b, so a query that names the kind lowers its UUID
+        /// comparison to a string comparison without case rules of its own.
         /// </summary>
         [Fact]
-        public void AQueryThatNamesTheKindLowersWithoutASplit()
+        public void AQueryThatNamesTheKindLowersWithoutCaseRules()
         {
             var (c, schema) = Compiled();
             var (query, q) = DiscriminatedSchema.Ask(c, schema, c.And.Of(c.StrEq.Of("kind", "b"), c.UuidEq.Of("body.key", DiscriminatedSchema.Key)));
@@ -111,18 +108,17 @@ namespace Eggnog.Tests.Cases
         }
 
         /// <summary>
-        /// The query split opens the cases a and b (c is excluded before the split); both prove the ref's form, which
-        /// is lifted to the query, not to the schema, and the comparison lowers.
+        /// The query narrows <c>kind</c> to a and b, whose branches both declare the ref's form: the query's case rules
+        /// derive it in the query, not in the schema, and the comparison lowers.
         /// </summary>
         [Fact]
-        public void ADisjunctionOfKindsLowersThroughTheQuerySplit()
+        public void ADisjunctionOfKindsLowersThroughTheQuerysCaseRules()
         {
             var (c, schema) = Compiled();
-            var (query, q, report) = AskWithSplit(c, schema,
+            var (query, q) = AskWithCases(c, schema,
                 c.And.Of(c.Or.Of(c.StrEq.Of("kind", "a"), c.StrEq.Of("kind", "b")), c.UuidEq.Of("body.ref", DiscriminatedSchema.Ref)));
             using (query)
             {
-                Assert.Equal(2, report.CasesOpened);
                 Assert.True(query.Check(c.Form.Of("body.ref", "uuid-lower")));
                 Assert.False(schema.Check(c.Form.Of("body.ref", "uuid-lower")));
                 Assert.True(query.AreEqual(q, c.And.Of(
@@ -137,19 +133,17 @@ namespace Eggnog.Tests.Cases
         }
 
         /// <summary>
-        /// The same query spelt as one conjunction per kind: the split narrows the domain to a and b, and both
-        /// comparisons lower.
+        /// The same query spelt as one conjunction per kind: the domain narrows to a and b, and both comparisons lower.
         /// </summary>
         [Fact]
-        public void ADisjunctionSpeltPerKindLowersThroughTheQuerySplit()
+        public void ADisjunctionSpeltPerKindLowersThroughTheQuerysCaseRules()
         {
             var (c, schema) = Compiled();
-            var (query, q, report) = AskWithSplit(c, schema, c.Or.Of(
+            var (query, q) = AskWithCases(c, schema, c.Or.Of(
                 c.And.Of(c.StrEq.Of("kind", "a"), c.UuidEq.Of("body.ref", DiscriminatedSchema.Ref)),
                 c.And.Of(c.StrEq.Of("kind", "b"), c.UuidEq.Of("body.ref", DiscriminatedSchema.Ref))));
             using (query)
             {
-                Assert.Equal(2, report.CasesOpened);
                 Assert.Equal(Set.Of(["a", "b"]), query.Get(c.Dom.Of("kind")));
                 Assert.True(query.Check(c.Form.Of("body.ref", "uuid-lower")));
                 Assert.True(query.AreEqual(q, c.Or.Of(
@@ -168,18 +162,17 @@ namespace Eggnog.Tests.Cases
         }
 
         /// <summary>
-        /// Nested in a larger conjunction, the split still lowers the UUID comparison, and the instant comparison
+        /// Nested in a larger conjunction, the case rules still lower the UUID comparison, and the instant comparison
         /// lowers to a string comparison on the schema's fixed-width form.
         /// </summary>
         [Fact]
         public void EveryCostlyComparisonOfANestedPredicateLowers()
         {
             var (c, schema) = Compiled();
-            var (query, q, report) = AskWithSplit(c, schema, FlaggedUpdates(c,
+            var (query, q) = AskWithCases(c, schema, FlaggedUpdates(c,
                 c.UuidEq.Of("body.ref", DiscriminatedSchema.Ref), c.InstantGt.Of("meta.updated", DiscriminatedSchema.Since)));
             using (query)
             {
-                Assert.Equal(2, report.CasesOpened);
                 Assert.True(query.AreEqual(q, FlaggedUpdates(c,
                     c.StrEq.Of("body.ref", DiscriminatedSchema.Ref), c.StrGt.Of("meta.updated", DiscriminatedSchema.Since))));
                 Assert.True(query.Check(c.Form.Of("body.ref", "uuid-lower")));
@@ -195,35 +188,33 @@ namespace Eggnog.Tests.Cases
 
         /// <summary>
         /// A disjunction with no discriminator of its own, modelled with a hidden one: a synthesized key
-        /// <c>$anyOf/0</c>, present, whose domain is the branch indices, marked as a discriminator, with branch rules
-        /// guarded on its value. The schema's split opens a case per branch, and the case join of <c>dom(status)</c>
-        /// is the union of the branch domains; neither branch's own field is lifted. A query that compares status with
-        /// a value outside the union is refuted; it mentions <c>status</c>, not the key, so it opens no case of its
-        /// own.
+        /// <c>$anyOf/0</c>, present, whose domain is the branch indices, marked as a discriminator, with branches on
+        /// its value. Both branches declare a domain of <c>status</c>, so the schema's case rules derive the union of
+        /// the branch domains; neither branch's own field holds in the schema. A query that compares status with a
+        /// value outside the union is refuted; it mentions <c>status</c>, not the key, so its case rules derive nothing
+        /// more.
         /// </summary>
         [Fact]
-        public void ASplitOnAHiddenDiscriminatorJoinsTheBranchDomains()
+        public void TheCaseRulesOfAHiddenDiscriminatorJoinTheBranchDomains()
         {
             var c = new PredicateTheory(new EGraph());
             c.Graph.Root.Freeze();
             var schema = c.Graph.Root.CreateChild(c.Schema);
             schema.Assume(c.Present.Of("$anyOf/0"), c.Dom.Of("$anyOf/0").Is(Set.Of(["0", "1"])), c.Discriminator.Of("$anyOf/0"));
-            c.DeclareBranch(schema, "$anyOf/0", "0", c.Present.Of("legacyId"), c.Dom.Of("status").Is(Set.Of(["active", "archived"])));
-            c.DeclareBranch(schema, "$anyOf/0", "1", c.Present.Of("id2"), c.Dom.Of("status").Is(Set.Of(["draft", "active"])));
+            c.DeclareBranch(schema, "$anyOf/0", "0", present: ["legacyId"], domains: [("status", Set.Of(["active", "archived"]))]);
+            c.DeclareBranch(schema, "$anyOf/0", "1", present: ["id2"], domains: [("status", Set.Of(["draft", "active"]))]);
 
             var compiled = schema.Run(c.Facts);
             Assert.True(compiled.Saturated);
-            Assert.Equal(2, compiled.CasesOpened);
             Assert.Empty(schema.Children);
             Assert.Equal(Set.Of(["active", "archived", "draft"]), schema.Get(c.Dom.Of("status")));
             Assert.False(schema.Check(c.Present.Of("legacyId")));
             Assert.False(schema.Check(c.Present.Of("id2")));
             schema.Freeze();
 
-            var (query, q, report) = AskWithSplit(c, schema, c.StrEq.Of("status", "purged"));
+            var (query, q) = AskWithCases(c, schema, c.StrEq.Of("status", "purged"));
             using (query)
             {
-                Assert.Equal(0, report.CasesOpened);
                 Assert.True(query.IsContradictory);
                 Assert.True(query.AreEqual(q, c.PFalse.Of()));
                 var best = query.Extract(q);

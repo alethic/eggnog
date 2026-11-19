@@ -180,17 +180,14 @@ namespace Eggnog.Tests.Definitions
             var analysis = graph.DefineRelation<Node>("analysis", new RelationOptions { Analysis = true });
             var dom = graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
             var lit = graph.DefineConstructor<long, Node>("Lit", cost: 3);
-            var unlifted = graph.DefineRelation<string>("unlifted", new RelationOptions { Lift = false });
 
-            Assert.Equal(new TableHandle[] { graph.Contradiction, present, analysis, dom, lit, unlifted }, graph.Tables);
+            Assert.Equal(new TableHandle[] { graph.Contradiction, present, analysis, dom, lit }, graph.Tables);
             Assert.Equal(1, present.Index);
             Assert.Equal(TableKind.Relation, present.Kind);
             Assert.Null(present.Output);
-            Assert.True(present.Lift);
             Assert.True(present.IsValueOnly);
             Assert.Same(graph, present.Graph);
             Assert.Equal("present", present.ToString());
-            Assert.False(analysis.Lift);
             Assert.False(analysis.IsValueOnly);
             Assert.Equal(TableKind.Function, dom.Kind);
             Assert.Same(graph.Values.TypeOf<Set<string>>(), dom.Output);
@@ -198,11 +195,9 @@ namespace Eggnog.Tests.Definitions
             Assert.True(dom.IsValueOnly);
             Assert.Equal(TableKind.Constructor, lit.Kind);
             Assert.Equal(TableRole.Term, lit.Role);
-            Assert.True(lit.Lift);
             Assert.False(lit.Unextractable);
             Assert.Equal<ulong>(3, lit.Cost);
             Assert.False(lit.IsValueOnly);
-            Assert.False(unlifted.Lift);
         }
 
         [Fact]

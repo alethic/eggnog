@@ -78,7 +78,7 @@ namespace Eggnog.Tests.Concurrency
         [Fact]
         public void EachQueryCaseHasTheSerialFacts()
         {
-            // Every query that runs without a split; the discriminated schema's are the test above's.
+            // Every query that runs without the case rules; the discriminated schema's are the test above's.
             foreach (var queryCase in ScopedQueryCases.All)
             {
                 var serial = Query(1, queryCase.Declare, queryCase.Query);

@@ -1,15 +1,16 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace Eggnog.Tests.Differential.Splits
+namespace Eggnog.Tests.Differential.CaseRules
 {
 
     /// <summary>
-    /// What one encoding of a split-oracle program proves in its query: whether the query is contradictory, and for
-    /// each path the query mentions whether it is present, its stored forms, and its domain.
+    /// What the scoped encoding of a case-rule oracle program derives in its query: whether the query is contradictory,
+    /// and for each of the program's paths whether it is present, its stored forms, its domain and its types.
     /// </summary>
-    public sealed class SplitOracleFacts
+    public sealed class CaseRuleFacts
     {
 
         /// <summary>
@@ -20,17 +21,22 @@ namespace Eggnog.Tests.Differential.Splits
         /// <summary>
         /// Gets the paths found present.
         /// </summary>
-        public SortedSet<string> Present { get; } = new(System.StringComparer.Ordinal);
+        public SortedSet<string> Present { get; } = new(StringComparer.Ordinal);
 
         /// <summary>
         /// Gets the stored forms found, as <c>path:form</c>.
         /// </summary>
-        public SortedSet<string> Forms { get; } = new(System.StringComparer.Ordinal);
+        public SortedSet<string> Forms { get; } = new(StringComparer.Ordinal);
 
         /// <summary>
         /// Gets the domains found, by path.
         /// </summary>
-        public SortedDictionary<string, Set<string>> Domains { get; } = new(System.StringComparer.Ordinal);
+        public SortedDictionary<string, Set<string>> Domains { get; } = new(StringComparer.Ordinal);
+
+        /// <summary>
+        /// Gets the type sets found, by path.
+        /// </summary>
+        public SortedDictionary<string, Set<string>> Types { get; } = new(StringComparer.Ordinal);
 
         /// <summary>
         /// Renders the facts.
@@ -40,7 +46,8 @@ namespace Eggnog.Tests.Differential.Splits
         {
             var text = new StringBuilder(Contradictory ? "contradictory; " : "");
             text.Append("present {").Append(string.Join(", ", Present)).Append("}; forms {").Append(string.Join(", ", Forms)).Append("}; dom ");
-            text.Append(string.Join(", ", Domains.Select(d => $"{d.Key}={d.Value}")));
+            text.Append(string.Join(", ", Domains.Select(d => $"{d.Key}={d.Value}"))).Append("; types ");
+            text.Append(string.Join(", ", Types.Select(t => $"{t.Key}={t.Value}")));
             return text.ToString();
         }
 

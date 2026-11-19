@@ -10,14 +10,13 @@ namespace Eggnog
     /// <remarks>
     /// <para>
     /// Ids and epochs are 32-bit counters shared by every scope. A child scope that writes or runs reserves ids in
-    /// blocks (16 for its first, so a query scope that makes one term reserves 16), and every write batch, run iteration,
-    /// rebuild pass and query read (<see cref="Scope.Any"/>, <see cref="Scope.Count"/>, <see cref="Scope.ForEachMatch"/>)
-    /// of any scope takes an epoch, and so does a read of a writable scope that must catch up first. A case split's
-    /// cases take epochs in proportion to their number, so a workload that splits usually runs out of epochs before
-    /// ids. When either runs out, the call that needs one throws <see cref="OverflowException"/>: the scope is not
-    /// faulted, but every later call that needs an id or an epoch throws the same way, and once the epochs are out the
-    /// graph creates no more children. Interned values are bounded too, at about 2.1 billion per type, but memory runs
-    /// out long before that.
+    /// blocks (16 for its first, so a query scope that makes one term reserves 16), and every write batch, run
+    /// iteration, rebuild pass and query read (<see cref="Scope.Any"/>, <see cref="Scope.Count"/>,
+    /// <see cref="Scope.ForEachMatch"/>) of any scope takes an epoch, and so does a read of a writable scope that must
+    /// catch up first. When either runs out, the call that needs one throws <see cref="OverflowException"/>: the scope
+    /// is not faulted, but every later call that needs an id or an epoch throws the same way, and once the epochs are
+    /// out the graph creates no more children. Interned values are bounded too, at about 2.1 billion per type, but
+    /// memory runs out long before that.
     /// </para>
     /// <para>
     /// A long-lived host retires a graph before it runs out: it builds a new graph from its definitions, moves new

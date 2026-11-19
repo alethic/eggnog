@@ -1060,15 +1060,6 @@ namespace Eggnog
         static bool IsApplication(TermShape shape, TableKind kind) => shape.Kind == TermShapeKind.Application && shape.Table!.Kind == kind;
 
         /// <summary>
-        /// Gets whether a fact is a write of a function's value: an equality one side of which applies a function.
-        /// </summary>
-        /// <param name="fact">The fact.</param>
-        /// <returns>Whether <see cref="PlanFact"/> would plan it as a function write.</returns>
-        public static bool IsFunctionWrite(Fact fact) =>
-            fact is EqualityFact equality
-            && (IsApplication(equality.Left.Shape, TableKind.Function) || IsApplication(equality.Right.Shape, TableKind.Function));
-
-        /// <summary>
         /// Gets whether a shape stands for a value a function may be written: a constant, a computation, or a function's
         /// value read.
         /// </summary>

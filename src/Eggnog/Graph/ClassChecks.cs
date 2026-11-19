@@ -90,8 +90,8 @@ namespace Eggnog
         /// <summary>
         /// Gets the message of the first check a class constant held by a rule owned by <paramref name="owner"/> fails, or
         /// <c>null</c> when it passes: <see cref="CheckConstant"/>, then that a batch origin committed and that the rule
-        /// may hold it (<see cref="AllowedInRule"/>). A rule of the root, such as a global rule, a split rule or a merge,
-        /// has no owner.
+        /// may hold it (<see cref="AllowedInRule"/>). A rule of the root, such as a global rule or a merge, has no
+        /// owner.
         /// </summary>
         /// <param name="owner">The rule's owner scope; <c>null</c> for a rule of the root.</param>
         /// <param name="graph">The graph the constant is held in.</param>
