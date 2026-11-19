@@ -14,8 +14,8 @@ namespace Eggnog.Relations.Tests
     /// <summary>
     /// Contradiction in the bridge: designating the contradiction function (atomically with child creation), a child
     /// created to stop on contradictions (<see cref="ContextOptions.StopOnContradiction"/>), which stops at the merge
-    /// after its whole search, the stop flag a run reports, and contradiction as an ordinary fact elsewhere. Named
-    /// apart from the storage <c>ContradictionTests</c>.
+    /// after its whole search, or at the catch-up a flush makes before it merges, the stop flag a run reports, and
+    /// contradiction as an ordinary fact elsewhere. Named apart from the storage <c>ContradictionTests</c>.
     /// </summary>
     public class BridgeContradictionTests
     {
@@ -114,6 +114,28 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(9, ordinary.RuleSetReport.NumMatches("edge-path"));
             Assert.Equal(9, plain.TableSize(g.Path));
             plain.CheckInvariants();
+        }
+
+        /// <summary>
+        /// A child of the writable root, created to stop on contradictions, stages a row, and the root merges the
+        /// contradiction row: the child's flush, which catches up with the root before it stages anything, stops the
+        /// child there and returns without merging, the child stopped and unfaulted.
+        /// </summary>
+        [Fact]
+        public void AStoppingChildStopsWhenItsFlushCatchesUpAContradiction()
+        {
+            var g = new ContextGraph();
+            g.EGraph.DesignateContradiction(g.Bottom);
+            using var stopping = g.Root.CreateChild(new ContextOptions { StopOnContradiction = true });
+            g.Assert(stopping, g.Mark, stopping.FreshId());
+            g.Root.StageRow(g.Bottom, [g.Unit]);
+            g.Root.FlushUpdates();
+
+            Assert.False(stopping.FlushUpdates());
+            Assert.True(stopping.IsStopped);
+            Assert.True(stopping.IsContradictory);
+            Assert.False(stopping.IsFaulted);
+            stopping.CheckInvariants();
         }
 
         /// <summary>

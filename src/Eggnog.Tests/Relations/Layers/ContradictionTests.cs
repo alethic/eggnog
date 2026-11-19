@@ -98,9 +98,9 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// The children of a context that a contradiction stopped with writes pending: its parent is never clean again,
         /// and a child catches up only with a parent that is frozen or clean, so it never catches up with that parent.
-        /// A child that stops on contradictions stops too (the contradiction row is visible in its parent); any other
-        /// child is refused on rebuild, write and child creation, unfaulted and without taking an epoch; both may be
-        /// disposed.
+        /// A child that stops on contradictions stops too (the contradiction row is visible in its parent), which moves
+        /// its change stamp; any other child is refused on rebuild, write and child creation, unfaulted and without
+        /// taking an epoch; both may be disposed.
         /// </summary>
         [Fact]
         public void TheChildrenOfAStoppedContextStopOrAreRefused()
@@ -135,8 +135,10 @@ namespace Eggnog.Relations.Tests
             Assert.False(grandchild.IsFaulted);
             Assert.False(ordinary.IsClean);
 
+            var before = inner.Version;
             Assert.False(inner.Rebuild());
             Assert.True(inner.IsContradicted);
+            Assert.True(inner.Version > before, "the stop moved the change stamp");
             Assert.True(inner.IsContradictory);
             Assert.Throws<InvalidOperationException>(() => Insert(inner, g, x, x, 0));
             Assert.False(inner.IsFaulted);

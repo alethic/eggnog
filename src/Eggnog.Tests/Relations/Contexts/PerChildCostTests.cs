@@ -572,7 +572,7 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The copy-volume benchmark's own workload (<c>CopyVolumeBenchmarks.UnionsInOneChild</c>): 200 unions in one
+        /// The copy-volume benchmark's workload (<c>CopyVolumeBenchmarks.UnionsInOneChild</c>) at 200 unions in one
         /// child, a rebuild after each, over roots of 20,000 and 200,000 ids. Per-child bytes do not follow the root.
         /// </summary>
         [Fact]

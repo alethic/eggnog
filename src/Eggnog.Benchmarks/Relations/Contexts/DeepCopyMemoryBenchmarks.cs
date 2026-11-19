@@ -4,9 +4,9 @@ namespace Eggnog.Relations.Benchmarks
 {
 
     /// <summary>
-    /// Memory of deep copies, the baseline a cheaper copy is measured against: the bytes <see cref="Copies"/> copies of
-    /// a root allocate, each a <see cref="Database.Clone"/> of the root database with one union and one fact merged
-    /// into it, over roots of 20,000 and 200,000 ids.
+    /// Memory of deep copies of the root: the bytes <see cref="Copies"/> copies of a root allocate, each a
+    /// <see cref="Database.Clone"/> of the root database with one union and one fact merged into it, over roots of
+    /// 20,000 and 200,000 ids.
     /// </summary>
     /// <remarks>
     /// <para>

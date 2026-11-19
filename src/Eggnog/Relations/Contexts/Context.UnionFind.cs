@@ -169,8 +169,8 @@ namespace Eggnog.Relations
         /// <returns><c>true</c> if the classes were distinct: the displaced count grew.</returns>
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
         /// <exception cref="InvalidOperationException">The context is frozen, faulted or contradicted; its domain is
-        /// held by another thread; or the call comes from inside a write batch's action or other user code that an
-        /// operation of the same domain runs.</exception>
+        /// held by another thread; or the call comes from inside a write batch's action or another callback of the same
+        /// domain (<see cref="ThreadAffinityGuard.InCallback"/>).</exception>
         public bool Union(uint a, uint b)
         {
             var before = Write((Context: this, A: a, B: b), static (state, args) =>
@@ -207,10 +207,11 @@ namespace Eggnog.Relations
         internal uint FindInParent(uint id) => parentFinder!.Find(id);
 
         /// <summary>
-        /// Throws <see cref="InvalidOperationException"/> when the calling thread runs a caller's code inside an
-        /// operation of <paramref name="domain"/> (a write batch's action, a rule search's calls into user code): the
-        /// operation named by <paramref name="operation"/> would change a context the running operation depends on.
-        /// Nothing has been staged or changed when it throws, and no context is faulted.
+        /// Throws <see cref="InvalidOperationException"/> when the calling thread runs a caller's code as a callback of
+        /// <paramref name="domain"/> (a write batch's action, a child's rule search's calls into user code;
+        /// <see cref="ThreadAffinityGuard.InCallback"/>): the operation named by <paramref name="operation"/> would
+        /// change a context the running operation depends on. Nothing has been staged or changed when it throws, and no
+        /// context is faulted.
         /// </summary>
         /// <param name="domain">The domain the calling thread holds.</param>
         /// <param name="operation">The refused operation's name.</param>
@@ -225,7 +226,7 @@ namespace Eggnog.Relations
         [MethodImpl(MethodImplOptions.NoInlining)]
         static void ThrowInCallback(string operation)
         {
-            throw new InvalidOperationException($"{operation} cannot change a context from inside a write batch's action, a visitor or other user code that an operation of the same thread domain runs; reads are allowed there.");
+            throw new InvalidOperationException($"{operation} cannot change a context from inside a write batch's action or another callback of the same thread domain; reads are allowed there.");
         }
 
     }

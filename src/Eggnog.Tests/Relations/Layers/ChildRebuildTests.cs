@@ -10,9 +10,9 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// Tests for one rebuild pass of a child: only rows naming its losers are copied, the epochs of copies and
-    /// rewrites, congruence through the layered merge, the examination of exactly the uses of the own losers, the rows
-    /// written since the last rebuild, own rewrites merged, the incremental path on a large own layer, and a parent
-    /// union over the child's own rows.
+    /// rewrites, congruence through the layered merge, the examination of exactly the uses of the own losers and none
+    /// of an import's, the rows written since the last rebuild, own rewrites merged, the incremental path on a large
+    /// own layer, and a parent union over the child's own rows.
     /// </summary>
     public class ChildRebuildTests
     {
@@ -163,6 +163,39 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(0, statistics.CatchUpRowsExamined);
             Assert.Equal(36, child.GetView(g).VisibleCount);
             Assert.Equal(1u, Row(child, h, ids[38])![1]);
+            LookupPaths.Check(child);
+        }
+
+        /// <summary>
+        /// An import is not probed: the writable parent's union of <c>a</c> and <c>b</c> hid and copied the root's row
+        /// naming <c>b</c> in the parent, so its child, which imports the displacement, examines and copies no ancestor
+        /// row, and reads the parent's merged row at the winner.
+        /// </summary>
+        [Fact]
+        public void AnImportedDisplacementIsNotProbed()
+        {
+            var store = new Store(ParallelHeuristics.Serial);
+            var f = store.AddTable(MaxFunction(1), name: "f");
+            var root = store.Root;
+            var a = root.NewId();
+            var b = root.NewId();
+            Insert(root, f, a, 1, 0);
+            Insert(root, f, b, 2, 0);
+            root.Freeze();
+
+            var parent = root.CreateChild();
+            var child = parent.CreateChild();
+            parent.Union(a, b);
+            parent.Rebuild();
+            child.Rebuild();
+
+            Assert.Equal(a, child.Find(b));
+            Assert.False(child.IsOwnDisplacement(b));
+            var statistics = child.Tables!.Statistics;
+            Assert.Equal(0, statistics.AncestorRowsExamined);
+            Assert.Equal(0, statistics.RowsCopied);
+            Assert.Equal(2u, Row(child, f, a)![1]);
+            Assert.Null(Row(child, f, b));
             LookupPaths.Check(child);
         }
 

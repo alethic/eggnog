@@ -14,9 +14,9 @@ namespace Eggnog.Relations
         public static ContextOptions Default { get; } = new();
 
         /// <summary>
-        /// Gets whether merging a row into the store's designated contradiction table stops the context, which then
-        /// answers only whether it is contradictory. Default <c>false</c>: for host runs a contradiction is an ordinary
-        /// fact.
+        /// Gets whether a row of the store's designated contradiction table stops the context when it merges into the
+        /// context or becomes visible in it from an ancestor; a stopped context answers only whether it is
+        /// contradictory. Default <c>false</c>: a contradiction is then an ordinary fact.
         /// </summary>
         public bool StopOnContradiction { get; init; }
 

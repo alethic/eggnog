@@ -161,8 +161,10 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A child that stops on contradictions, whose ancestor asserts the contradiction, catches it up and stops; it
-        /// then answers only <see cref="Context.IsContradictory"/>.
+        /// A child that stops on contradictions, whose ancestor asserts the contradiction, catches it up and stops,
+        /// unfaulted, and its change stamp moves; it then answers only <see cref="Context.IsContradictory"/>. The stop
+        /// ends the catch-up: a row naming the child's loser in a table the catch-up reads after the contradiction
+        /// table, which it would copy into a new layer of the child, is not read.
         /// </summary>
         [Fact]
         public void AStoppingChildStopsWhenItCatchesUpAContradiction()
@@ -170,14 +172,23 @@ namespace Eggnog.Relations.Tests
             var store = new Store(ParallelHeuristics.Serial);
             var bottom = store.AddTable(Relation(0), name: "bottom");
             store.DesignateContradiction(bottom);
+            var g = store.AddTable(Relation(2), name: "g");
             var root = store.Root;
             var a = root.NewId();
+            var b = root.NewId();
             var plain = root.CreateChild();
             var stopping = root.CreateChild(new ContextOptions { StopOnContradiction = true });
-            Insert(root, bottom, 0);
+            stopping.Union(a, b);
+            stopping.Rebuild();
 
+            // The contradiction row, then, in a table the catch-up reads after it, a row naming the loser b.
+            Insert(root, bottom, 0);
+            Insert(root, g, b, b, 0);
+            var before = stopping.Version;
             stopping.Rebuild();
             Assert.True(stopping.IsContradicted);
+            Assert.False(stopping.IsFaulted);
+            Assert.True(stopping.Version > before, "the stop moved the change stamp");
             Assert.True(stopping.IsContradictory);
             Assert.Throws<InvalidOperationException>(() => stopping.Find(a));
 

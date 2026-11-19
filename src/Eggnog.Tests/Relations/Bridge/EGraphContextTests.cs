@@ -175,11 +175,11 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// Every term minted in a child is local to it, since every term mint draws on the child's own id blocks: fresh
-        /// ids, staged terms, and the ids its rules mint; container ids are minted on the shared counter and are never
-        /// local. The root, which has no local ids, refuses the question.
+        /// ids, staged terms, and the ids its rules mint; the ids of containers of values are minted on the shared
+        /// counter and are never local. The root, which has no local ids, refuses the question.
         /// </summary>
         [Fact]
-        public void IsLocalIdCoversTermMintsAndNotContainerMints()
+        public void IsLocalIdCoversTermMintsAndNotValueContainerMints()
         {
             var g = new ContextGraph();
             g.EGraph.RegisterContainerType<VecContainer>(holdsIds: false);
@@ -380,7 +380,8 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// A stopped context's writes and runs are no-ops, and its reads but
-        /// <see cref="EGraphContext.IsContradictory"/> are refused: a contradicted context has no model.
+        /// <see cref="EGraphContext.IsContradictory"/> are refused: a contradicted context has no model. A row staged
+        /// in it is dropped at once, so it stays clean.
         /// </summary>
         [Fact]
         public void AStoppedContextIgnoresWritesAndRuns()
@@ -394,7 +395,9 @@ namespace Eggnog.Relations.Tests
             Assert.True(stopping.FlushUpdates());
             Assert.True(stopping.IsStopped);
             Assert.True(stopping.IsContradictory);
+            Assert.True(stopping.IsClean);
             g.Assert(stopping, g.Mark, a);
+            Assert.True(stopping.IsClean, "the row staged in the stopped context was dropped");
             Assert.False(stopping.FlushUpdates());
             Assert.True(stopping.RunRules(g.EdgeToPath()).Stopped);
             Assert.Throws<InvalidOperationException>(() => stopping.TableSize(g.Mark));

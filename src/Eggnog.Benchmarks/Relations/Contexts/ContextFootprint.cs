@@ -12,9 +12,10 @@ namespace Eggnog.Relations.Benchmarks
     /// </summary>
     /// <remarks>
     /// Bytes are <see cref="GC.GetAllocatedBytesForCurrentThread"/> differences after a warm-up, averaged over many
-    /// repetitions, so they are the memory diagnoser's steady state without the cold-start allocations (JIT, static
-    /// initialization) that a dry run's single invocation includes. Every workload runs serially on the calling thread,
-    /// and each repetition creates and disposes what it measures, as the matching benchmark's invocation does.
+    /// repetitions (the deep copies over three), so they are the memory diagnoser's steady state without the
+    /// cold-start allocations (JIT, static initialization) that a dry run's single invocation includes. Every workload
+    /// runs serially on the calling thread, and each repetition creates and disposes what it measures, as the matching
+    /// benchmark's invocation does.
     /// </remarks>
     internal static class ContextFootprint
     {

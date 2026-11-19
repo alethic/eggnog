@@ -26,12 +26,13 @@ namespace Eggnog.Relations
     /// <para>
     /// Lifecycle. <see cref="CreateChild"/> makes a child; children of a context that is not frozen share its thread
     /// domain (<see cref="Domain"/>), so a non-frozen context and everything below it behave as one thread; a second
-    /// thread entering the domain is refused. Inside an operation that runs a caller's code (a write batch's action, a
-    /// rule search's calls into user code), reads are allowed, but writes to a context of the same domain, rebuilds with
-    /// work to do, <see cref="CreateChild"/>, <see cref="Freeze"/> and <see cref="Dispose"/> are refused before they
-    /// change anything. <see cref="Dispose"/> drops a child once it has no live children; the root is never
-    /// disposed. A chain may be any depth, as egglog's stack of pushes may. Every ancestor's <see cref="Gate"/> counts its
-    /// live descendants.
+    /// thread entering the domain is refused. Inside an operation that runs a caller's code as a callback of the domain
+    /// (a write batch's action, a child's rule search's calls into user code;
+    /// <see cref="ThreadAffinityGuard.InCallback"/>), reads are allowed, but writes to a context of the same domain,
+    /// rebuilds with work to do, <see cref="CreateChild"/>, <see cref="Freeze"/> and <see cref="Dispose"/> are refused
+    /// before they change anything. <see cref="Dispose"/> drops a child once it has no live children; the root is never
+    /// disposed. A chain may be any depth, as egglog's stack of pushes may. Every ancestor's <see cref="Gate"/> counts
+    /// its live descendants.
     /// </para>
     /// <para>
     /// Union-find. The root's union-find is egglog's <see cref="DisplacedTable"/>; a child's is an
