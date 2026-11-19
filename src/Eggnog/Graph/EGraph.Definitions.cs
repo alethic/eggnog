@@ -536,26 +536,16 @@ namespace Eggnog
             DefineTable(() => sort.CreateUntypedConstructor(), name, TableKind.Constructor, Copy(keys), sort ?? throw new ArgumentNullException(nameof(sort)), TableSettings.Of(options), null, cost);
 
         /// <summary>
-        /// Defines the built-in nullary relation <see cref="Contradiction"/>, named <c>$contradiction</c>. A built-in table
-        /// takes no name of the user's: it is not entered among the names a definition checks, so a user's table may be
-        /// named <c>$contradiction</c> too, as in egglog, and is another table.
-        /// </summary>
-        /// <returns>The relation.</returns>
-        Relation DefineContradiction() =>
-            DefineTable(static () => new Relation(), ContradictionName, TableKind.Relation, Array.Empty<ColumnType>(), null, TableSettings.Of((RelationOptions?)null), null, 0, builtIn: true);
-
-        /// <summary>
         /// Defines a table: validates, then under the definition lock adds the engine function
         /// (<see cref="AddEngineTable"/>, which enters the root's guard while the root is writable) and publishes the
         /// handle.
         /// </summary>
         T DefineTable<T>(Func<T> create, string name, TableKind kind, ColumnType[] keys, ColumnType? output, TableSettings settings, ValueLattice? lattice, ulong cost,
-            bool builtIn = false, FunctionMergeDefinition? merge = null)
+            FunctionMergeDefinition? merge = null)
             where T : TableHandle
         {
             EngineCallMarker.ThrowIfActive();
-            if (builtIn == false)
-                NameRules.ValidateName(name, nameof(name));
+            NameRules.ValidateName(name, nameof(name));
             foreach (var key in keys)
                 CheckOwnType(key ?? throw new ArgumentNullException(nameof(keys), "A column type is null."));
 
@@ -596,7 +586,7 @@ namespace Eggnog
 
             lock (DefinitionLock)
             {
-                if (builtIn == false && tablesByName.ContainsKey(name))
+                if (tablesByName.ContainsKey(name))
                     throw new ArgumentException($"A table named '{name}' is already defined.", nameof(name));
 
                 var columns = new ColumnType[keys.Length + 1];
@@ -630,8 +620,7 @@ namespace Eggnog
                     Extraction.Declare(constructor);
                 }
 
-                if (builtIn == false)
-                    tablesByName.Add(name, handle);
+                tablesByName.Add(name, handle);
                 var nextTables = new TableHandle[tables.Length + 1];
                 tables.CopyTo(nextTables, 0);
                 nextTables[^1] = handle;

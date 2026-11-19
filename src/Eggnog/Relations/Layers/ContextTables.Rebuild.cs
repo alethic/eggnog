@@ -97,9 +97,6 @@ namespace Eggnog.Relations
         /// lattice merge, which only the root may write; the context is then faulted.</exception>
         internal bool RebuildPass(uint epoch, ReadOnlySpan<uint> restamp, ReadOnlySpan<uint> dirty)
         {
-            if (owner.IsContradicted)
-                return false;
-
             var journal = owner.Journal!;
             var from = owner.JournalMark;
             var end = journal.Count;
@@ -135,7 +132,7 @@ namespace Eggnog.Relations
 
             // Merge.
             var changed = owner.Database.MergeAll(epoch) | hidden;
-            if ((restamp.IsEmpty && dirty.IsEmpty) || owner.IsContradicted)
+            if (restamp.IsEmpty && dirty.IsEmpty)
                 return changed;
 
             // Re-stamp the rows that name a container changed in place, which stayed at their keys, and merge again.

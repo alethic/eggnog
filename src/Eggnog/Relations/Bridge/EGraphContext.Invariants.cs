@@ -18,49 +18,36 @@ namespace Eggnog.Relations
         /// floor, at least its creation in a child, with as many constants as its rule; every watermark a run would
         /// use, own or inherited, at most the floor, an inherited one at most the context's creation); <b>frozen
         /// state</b> (a frozen context holds no host writes and no failure, its database is frozen, and every rebuild
-        /// index of its own tables is current); <b>the stop flag</b> (a stopped context sees a contradiction row, and a
-        /// context that stops on contradictions and sees one is stopped); <b>the tree</b> (the storage context's host
-        /// is this context, and each live storage child's host is a bridge child of this one). Each violation starts
-        /// with the name of its part: <c>rule progress:</c>, <c>frozen state:</c>, <c>stop flag:</c> or <c>tree:</c>;
-        /// the storage checker's container-layers part reports a child's view of containers of classes under
-        /// <c>container view:</c>.
+        /// index of its own tables is current); <b>the tree</b> (the storage context's host is this context, and each live
+        /// storage child's host is a bridge child of this one). Each violation starts with the name of its part:
+        /// <c>rule progress:</c>, <c>frozen state:</c> or <c>tree:</c>; the storage checker's container-layers part
+        /// reports a child's view of containers of classes under <c>container view:</c>.
         /// </para>
         /// <para>
-        /// A stopped context answers only <see cref="IsContradictory"/> and may have stopped its merge with writes
-        /// pending: only the stop flag and the tree are checked on it. Any other context must be clean
-        /// (<see cref="IsClean"/>), except that host writes held by a frozen context are reported as a frozen-state
-        /// violation. Cost: the storage checker's, plus O(rules × constants × depth).
+        /// The context must be clean (<see cref="IsClean"/>), except that host writes held by a frozen context are
+        /// reported as a frozen-state violation. Cost: the storage checker's, plus O(rules × constants × depth).
         /// </para>
         /// </remarks>
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
-        /// <exception cref="InvalidOperationException">The context is not stopped and not clean, or its domain is held by
-        /// another thread.</exception>
+        /// <exception cref="InvalidOperationException">The context is not clean, or its domain is held by another
+        /// thread.</exception>
         /// <exception cref="ContextInvariantException">An invariant is violated.</exception>
         public void CheckInvariants()
         {
             context.ThrowIfDisposed();
             var current = context.IsFrozen ? null : context.Domain;
             using var scope = current is null ? default : current.Enter();
+
+            // A frozen context cannot stage host writes (it is not writable), so host writes there are corrupt state that
+            // the frozen-state check reports rather than a precondition the caller missed.
+            if (IsClean == false && (context.IsFrozen == false || CleanApartFromOwnHostWrites() == false))
+                throw new InvalidOperationException("Invariants are checked on a clean context; call EnsureClean() first.");
+
             var violations = new List<string>();
-            if (IsStopped)
-            {
-                CheckStop(violations);
-                CheckTree(violations);
-            }
-            else
-            {
-                // A frozen context cannot stage host writes (it is not writable), so host writes there are corrupt
-                // state that the frozen-state check reports rather than a precondition the caller missed.
-                if (IsClean == false && (context.IsFrozen == false || CleanApartFromOwnHostWrites() == false))
-                    throw new InvalidOperationException("Invariants are checked on a clean context; call EnsureClean() first.");
-
-                context.CollectInvariantViolations(violations);
-                CheckProgress(violations);
-                CheckFrozenState(violations);
-                CheckStop(violations);
-                CheckTree(violations);
-            }
-
+            context.CollectInvariantViolations(violations);
+            CheckProgress(violations);
+            CheckFrozenState(violations);
+            CheckTree(violations);
             if (violations.Count > 0)
                 throw new ContextInvariantException(Depth, violations);
         }
@@ -160,46 +147,6 @@ namespace Eggnog.Relations
                     return false;
 
             return true;
-        }
-
-        /// <summary>
-        /// Checks that the stop flag agrees with the contradiction rows the context sees.
-        /// </summary>
-        void CheckStop(List<string> violations)
-        {
-            var contradiction = owner.Store.Schema.Contradiction;
-            if (IsStopped)
-            {
-                if (contradiction is not { } c)
-                {
-                    Context.Report(violations, "stop flag: the context is stopped, but the e-graph has no contradiction function");
-                    return;
-                }
-
-                if (context.Tables is { } tables && tables.GetView(c).FindRow(ReadOnlySpan<uint>.Empty, out _) < 0 && OwnContradictionRow(tables, c) == false)
-                    Context.Report(violations, "stop flag: the context is stopped, but no contradiction row is visible in it or merged into it");
-
-                return;
-            }
-
-            if (contradiction is not null && context.Options.StopOnContradiction && context.IsContradictory)
-                Context.Report(violations, "stop flag: the context stops on contradictions and sees a contradiction row, but is not stopped");
-        }
-
-        /// <summary>
-        /// Gets whether the child's own layer of the contradiction table holds a live row, hidden or not by its view.
-        /// </summary>
-        static bool OwnContradictionRow(ContextTables tables, TableId contradiction)
-        {
-            if (tables.TryGetLayer(contradiction)?.Own is not { } own)
-                return false;
-
-            var rows = own.Rows;
-            for (var r = 0; r < rows.Count; r++)
-                if (rows.IsStale(r) == false)
-                    return true;
-
-            return false;
         }
 
         /// <summary>

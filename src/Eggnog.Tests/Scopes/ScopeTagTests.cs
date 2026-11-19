@@ -169,7 +169,7 @@ namespace Eggnog.Tests.Scopes
             Assert.Equal(0, inner.CountRows(later));
             Assert.Equal(new[] { "copy fact @outer", "copy subsumed fact @outer" },
                 graph.Mirrors.AllCopyRules().Select(r => r.Rule.Name).OrderBy(n => n, StringComparer.Ordinal));
-            Assert.Equal(new TableHandle[] { graph.Contradiction, fact, own, later }, graph.Tables);
+            Assert.Equal(new TableHandle[] { fact, own, later }, graph.Tables);
             Assert.Equal("fact@outer", own.ToString());
             Assert.Equal("fact @outer", fact.In(outerTag).ToString());
             Assert.Equal("(query ((fact @outer x)) (x))", scoped.ToString());

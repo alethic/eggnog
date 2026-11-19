@@ -169,32 +169,39 @@ namespace Eggnog.Tests.Scheduling
             Assert.False(t.Root.Check(t.Num.Of(5L)));
         }
 
+        /// <summary>
+        /// A contradiction is a relation of the theory's own: a rule derives a nullary relation where the scope has no
+        /// model, <c>Check</c> reads it, and <c>Until</c> stops a schedule on it. The run that meets it completes, the
+        /// scope stays usable, and a schedule whose condition holds already runs nothing.
+        /// </summary>
         [Fact]
-        public void StopOnContradictionStopsTheTopLevelRun()
+        public void UntilStopsARunOnANullaryRelationARuleDerives()
         {
             var t = Counter(10);
+            var contradiction = t.Graph.DefineRelation("contradiction");
             t.Rules.DefineRule("contradiction at 2", r =>
             {
                 var x = r.Var<long>("x");
                 r.When(t.Num.Of(x), x.Is(2L));
-                r.Then(t.Graph.Contradiction.Of());
+                r.Then(contradiction.Of());
             });
 
-            var stopped = t.Root.Run(Schedule.Saturate(t.Rules), new RunOptions { StopOnContradiction = true });
+            var stopped = t.Root.Run(Schedule.Saturate(Schedule.Until(t.Rules, contradiction.Of())));
 
-            Assert.Equal(RunStopReason.Contradiction, stopped.StopReason);
+            Assert.Equal(RunStopReason.Completed, stopped.StopReason);
+            Assert.Equal(3, stopped.Iterations);
             Assert.False(stopped.Saturated);
-            Assert.True(t.Root.IsContradictory);
-            Assert.False(t.Root.Check(t.Num.Of(5L)));
+            Assert.True(t.Root.Check(contradiction.Of()));
+            Assert.True(t.Root.Check(t.Num.Of(3L)));
+            Assert.False(t.Root.Check(t.Num.Of(4L)));
+
+            var skipped = t.Root.Run(Schedule.Until(t.Rules, contradiction.Of()));
+            Assert.Equal(RunStopReason.Completed, skipped.StopReason);
+            Assert.Equal(0, skipped.Iterations);
 
             var carriedOn = t.Root.Run(Schedule.Saturate(t.Rules));
-            Assert.Equal(RunStopReason.Completed, carriedOn.StopReason);
             Assert.True(carriedOn.Saturated);
             Assert.True(t.Root.Check(t.Num.Of(10L)));
-
-            var refused = t.Root.Run(t.Rules, new RunOptions { StopOnContradiction = true });
-            Assert.Equal(RunStopReason.Contradiction, refused.StopReason);
-            Assert.Equal(0, refused.Iterations);
         }
 
         [Fact]
@@ -530,6 +537,17 @@ namespace Eggnog.Tests.Scheduling
             using var cts = new System.Threading.CancellationTokenSource();
             cts.Cancel();
             Assert.ThrowsAny<OperationCanceledException>(() => t.Root.Run(t.Rules, new RunOptions { IterationLimit = 0 }, cts.Token));
+        }
+
+        /// <summary>
+        /// Each stop reason keeps its number, so a reason stored or sent as an integer reads back as the same reason.
+        /// </summary>
+        [Fact]
+        public void StopReasonsKeepTheirNumbers()
+        {
+            var reasons = Enum.GetValues<RunStopReason>();
+            Assert.Equal(["Completed", "IterationLimit", "TimeLimit", "RowLimit"], reasons.Select(reason => reason.ToString()));
+            Assert.Equal([0, 1, 3, 4], reasons.Select(reason => (int)reason));
         }
 
         [Fact]

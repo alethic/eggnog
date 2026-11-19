@@ -7,9 +7,9 @@ namespace Eggnog.Relations
         /// <summary>
         /// Starts an extraction query, or an extractor's creation, on this context: enters the thread domain of a
         /// context that is not frozen and marks it as running a caller's code (the cost model's functions), then checks
-        /// that the context may be read: not disposed, faulted or stopped, and, with <paramref name="requireClean"/>,
-        /// clean (<see cref="IsClean"/>). A frozen context is entered from any thread and holds nothing. Dispose the
-        /// scope, also when the query throws.
+        /// that the context may be read: not disposed or faulted, and, with <paramref name="requireClean"/>, clean
+        /// (<see cref="IsClean"/>). A frozen context is entered from any thread and holds nothing. Dispose the scope,
+        /// also when the query throws.
         /// </summary>
         /// <remarks>
         /// An extractor is created on a clean context, whose visible rows are canonical, and queried later without
@@ -21,8 +21,8 @@ namespace Eggnog.Relations
         /// <param name="requireClean">Whether the context must be clean: at an extractor's creation.</param>
         /// <returns>The scope to dispose when the query ends.</returns>
         /// <exception cref="System.ObjectDisposedException">The context is disposed.</exception>
-        /// <exception cref="System.InvalidOperationException">The context is faulted or stopped, or not clean when that is
-        /// required; or its domain is held by another thread.</exception>
+        /// <exception cref="System.InvalidOperationException">The context is faulted, or not clean when that is required;
+        /// or its domain is held by another thread.</exception>
         internal ExtractionQueryScope EnterExtraction(bool requireClean)
         {
             if (context.IsFrozen)
@@ -61,7 +61,6 @@ namespace Eggnog.Relations
 
             context.ThrowIfDisposed();
             context.ThrowIfFaulted();
-            context.ThrowIfContradicted();
         }
 
     }

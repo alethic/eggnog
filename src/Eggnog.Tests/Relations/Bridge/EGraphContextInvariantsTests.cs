@@ -13,8 +13,8 @@ namespace Eggnog.Relations.Tests
     /// <summary>
     /// <see cref="EGraphContext.CheckInvariants"/>: it passes on consistent contexts at every level, and catches
     /// deliberate corruptions of the bridge's parts with <see cref="ContextInvariantException"/>, each reported under
-    /// the name of the part it breaks: rule progress, frozen state, the stop flag and the tree (the link between bridge
-    /// and storage contexts).
+    /// the name of the part it breaks: rule progress, frozen state and the tree (the link between bridge and storage
+    /// contexts).
     /// </summary>
     public class EGraphContextInvariantsTests
     {
@@ -100,21 +100,6 @@ namespace Eggnog.Relations.Tests
             database.RecordFailure(state);
             var error = Assert.Throws<ContextInvariantException>(() => g.Root.CheckInvariants());
             Assert.Contains(error.Violations, v => v.StartsWith("frozen state:"));
-        }
-
-        /// <summary>
-        /// The stop flag: a stopped context that sees no contradiction row.
-        /// </summary>
-        [Fact]
-        public void AStopWithoutAContradictionIsReported()
-        {
-            var g = new ContextGraph();
-            g.EGraph.DesignateContradiction(g.Bottom);
-            g.Root.Freeze();
-            using var child = g.Root.CreateChild();
-            child.Context.MarkContradicted();
-            var error = Assert.Throws<ContextInvariantException>(() => child.CheckInvariants());
-            Assert.Contains(error.Violations, v => v.StartsWith("stop flag:"));
         }
 
         /// <summary>

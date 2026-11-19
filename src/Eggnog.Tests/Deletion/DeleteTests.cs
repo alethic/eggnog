@@ -420,17 +420,6 @@ namespace Eggnog.Tests.Deletion
 
             Assert.False(child.Check(big.Of(5L)));
         }
-
-        [Fact]
-        public void TheContradictionIsNotDeleted()
-        {
-            var t = new NodeTheory();
-            t.Root.Assume(t.Graph.Contradiction.Of());
-
-            Assert.Throws<ArgumentException>(() => t.Root.Delete(t.Graph.Contradiction.Of()));
-            Assert.Throws<RuleDefinitionException>(() => t.Rules.DefineRule("undo", r => r.Delete(t.Graph.Contradiction.Of())));
-            Assert.True(t.Root.Check(t.Graph.Contradiction.Of()));
-        }
     }
 
 }

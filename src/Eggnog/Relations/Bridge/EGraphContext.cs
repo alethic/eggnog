@@ -102,8 +102,8 @@ namespace Eggnog.Relations
         public ParallelHeuristics Parallelism => context.Database.Parallelism;
 
         /// <summary>
-        /// Gets the context's change stamp: it moves when a merge adds or removes rows, a clear empties a table, a hide
-        /// is added or a contradiction stops the context, and not for no-ops or redundant unions.
+        /// Gets the context's change stamp: it moves when a merge adds or removes rows, a clear empties a table or a hide
+        /// is added, and not for no-ops or redundant unions.
         /// </summary>
         public long Version => context.Version;
 
@@ -133,12 +133,6 @@ namespace Eggnog.Relations
         /// <see cref="Dispose"/> is then allowed. Never true at the root.
         /// </summary>
         public bool IsFaulted => context.IsFaulted;
-
-        /// <summary>
-        /// Gets whether a contradiction stopped the context (only with
-        /// <see cref="ContextOptions.StopOnContradiction"/>): it then answers only <see cref="IsContradictory"/>.
-        /// </summary>
-        public bool IsStopped => context.IsContradicted;
 
         /// <summary>
         /// Gets the number of rows the context stores itself (what the rule layer's row limit counts): its database's
@@ -184,15 +178,14 @@ namespace Eggnog.Relations
         /// <param name="options">The child's options; <see cref="ContextOptions.Default"/> if <c>null</c>.</param>
         /// <returns>The child.</returns>
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
-        /// <exception cref="InvalidOperationException">The context is faulted or stopped; the call comes from inside another
-        /// operation of the same thread domain; or the domain is held by another thread.</exception>
+        /// <exception cref="InvalidOperationException">The context is faulted; the call comes from inside another operation
+        /// of the same thread domain; or the domain is held by another thread.</exception>
         /// <exception cref="PanicException">A failure was recorded on this context (by the flush, the rebuild or the
         /// settle, or before the call).</exception>
         public EGraphContext CreateChild(ContextOptions? options = null)
         {
             context.ThrowIfDisposed();
             context.ThrowIfFaulted();
-            context.ThrowIfContradicted();
             if (context.IsFrozen == false)
             {
                 ThrowIfReentrant(nameof(CreateChild));
@@ -227,7 +220,7 @@ namespace Eggnog.Relations
         }
 
         /// <inheritdoc />
-        public override string ToString() => $"context at depth {Depth}{(IsFrozen ? ", frozen" : "")}{(IsStopped ? ", stopped" : "")}{(IsFaulted ? ", faulted" : "")}{(IsDisposed ? ", disposed" : "")}";
+        public override string ToString() => $"context at depth {Depth}{(IsFrozen ? ", frozen" : "")}{(IsFaulted ? ", faulted" : "")}{(IsDisposed ? ", disposed" : "")}";
 
         /// <summary>
         /// Takes the failure recorded on this context, if any: at the root, the e-graph's panic (its side channel, or the
@@ -246,8 +239,7 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Throws unless the context may be written, a stopped context aside (its writes and runs are no-ops): not
-        /// disposed, frozen or faulted.
+        /// Throws unless the context may be written: not disposed, frozen or faulted.
         /// </summary>
         void ThrowIfUnwritable()
         {
@@ -259,8 +251,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Throws unless the context may be read: disposed → <see cref="ObjectDisposedException"/>; faulted or
-        /// stopped → <see cref="InvalidOperationException"/>; not clean (<see cref="IsClean"/>) →
+        /// Throws unless the context may be read: disposed → <see cref="ObjectDisposedException"/>; faulted →
+        /// <see cref="InvalidOperationException"/>; not clean (<see cref="IsClean"/>) →
         /// <see cref="InvalidOperationException"/> naming <see cref="EnsureClean"/>. Call inside the domain of a context
         /// that is not frozen.
         /// </summary>
@@ -268,7 +260,6 @@ namespace Eggnog.Relations
         {
             context.ThrowIfDisposed();
             context.ThrowIfFaulted();
-            context.ThrowIfContradicted();
             if (IsClean == false)
                 ThrowNotClean();
         }

@@ -56,8 +56,7 @@ namespace Eggnog
         internal long Number { get; }
 
         /// <summary>
-        /// Initializes an empty graph: its value types, its root (tagged <see cref="RootTag"/>), and its
-        /// <see cref="Contradiction"/> relation, designated as the engine's contradiction function.
+        /// Initializes an empty graph: its value types and its root (tagged <see cref="RootTag"/>).
         /// </summary>
         /// <param name="options">The graph's options; <c>null</c> for <see cref="EGraphOptions.Default"/>.</param>
         /// <exception cref="ArgumentOutOfRangeException"><see cref="EGraphOptions.DegreeOfParallelism"/> is
@@ -91,8 +90,6 @@ namespace Eggnog
             RootOrigin = new ScopeOrigin(this, null, "root", false);
             Root = new Scope(this);
             Values.RegisterBuiltInSets();
-            Contradiction = DefineContradiction();
-            Engine.DesignateContradiction(Contradiction.Function);
         }
 
         /// <summary>
@@ -106,16 +103,7 @@ namespace Eggnog
         public Scope Root { get; }
 
         /// <summary>
-        /// Gets the built-in nullary relation "this scope has no model", an addition egglog lacks, named
-        /// <c>$contradiction</c>: a fact table like any other, which <see cref="Scope.IsContradictory"/> reads and
-        /// <see cref="RunOptions.StopOnContradiction"/> obeys. It takes no name of the user's, so an egglog program may
-        /// name its own tables <c>contradiction</c> or <c>$contradiction</c>; those are other tables, and this one is
-        /// told apart by reference.
-        /// </summary>
-        public Relation Contradiction { get; }
-
-        /// <summary>
-        /// Gets every table, in declaration order (a snapshot); <see cref="Contradiction"/> is the first.
+        /// Gets every table, in declaration order (a snapshot).
         /// </summary>
         public IReadOnlyList<TableHandle> Tables => Volatile.Read(ref tablesView);
 

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Threading;
 
 namespace Eggnog
@@ -18,12 +17,6 @@ namespace Eggnog
         /// <summary>
         /// Runs a schedule in this scope.
         /// </summary>
-        /// <remarks>
-        /// On a scope whose contradiction stopped it, or a scope under one, the run returns at once, with no iteration
-        /// and <see cref="RunStopReason.Contradiction"/>; no scope the library makes stops. A run that stops on
-        /// contradiction (<see cref="RunOptions.StopOnContradiction"/>) skips its steps once the scope is contradictory,
-        /// and leaves the scope usable.
-        /// </remarks>
         /// <param name="schedule">The schedule.</param>
         /// <param name="options">The run's options; <c>null</c> for <see cref="RunOptions.Default"/>.</param>
         /// <param name="cancellationToken">Cancels the run between iterations; an iteration already started runs to its
@@ -68,10 +61,6 @@ namespace Eggnog
             EnterWrite();
             try
             {
-                // A stopped scope, or a scope under one, has no model: nothing runs in it.
-                if (IsStopped)
-                    return new ScheduleExecutor(this, options, cancellationToken).Complete(RunStopReason.Contradiction, Stopwatch.StartNew());
-
                 // Everything the schedule reaches is checked before any work: a condition that fails only when its
                 // Until node executes would leave the earlier steps' writes behind and lose the run's report.
                 var rulesets = new HashSet<Ruleset>(ReferenceEqualityComparer.Instance);
@@ -114,7 +103,7 @@ namespace Eggnog
                 try
                 {
                     schedule.Execute(executor, this);
-                    reason = executor.Statistics.StopReason;
+                    reason = RunStopReason.Completed;
                 }
                 catch (ScheduleStopException stop)
                 {
@@ -150,15 +139,12 @@ namespace Eggnog
         /// <exception cref="ArgumentException">The cost model names a constructor or column type of another graph.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
-        /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction, or lies under a
-        /// stopped scope; no scope the library makes stops.</exception>
         public Extractor CreateExtractor(CostModel? costs = null)
         {
             costs ??= CostModel.Default;
             var held = EnterRead();
             try
             {
-                ThrowIfStopped();
                 var schema = Graph.Extraction.SchemaFor(costs);
                 var engineCosts = Graph.Extraction.EngineCosts(costs);
                 return new Extractor(this, costs, Engine.CreateExtractor(schema, engineCosts));
@@ -184,8 +170,6 @@ namespace Eggnog
         /// the class value is not usable in this scope.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
-        /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction, or lies under a
-        /// stopped scope; no scope the library makes stops.</exception>
         public ExtractedTerm Extract<TSort>(TSort root, CostModel? costs = null) where TSort : struct, ISort<TSort> =>
             CreateExtractor(costs).Extract(root);
 
@@ -208,8 +192,6 @@ namespace Eggnog
         /// the class value is not usable in this scope.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
-        /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction, or lies under a
-        /// stopped scope; no scope the library makes stops.</exception>
         public IReadOnlyList<ExtractedTerm> ExtractVariants<TSort>(TSort root, int count, CostModel? costs = null) where TSort : struct, ISort<TSort>
         {
             ArgumentOutOfRangeException.ThrowIfNegative(count);

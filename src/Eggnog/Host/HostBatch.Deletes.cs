@@ -58,9 +58,6 @@ namespace Eggnog
                 RebuildFor(shape.Table!, shape.Arguments, deletes: true);
                 do
                 {
-                    if (stopped)
-                        return;
-
                     PlanDelete(shape.Table!, shape.Arguments, nameof(term));
                 }
                 while (EndFact() == false);
@@ -97,9 +94,6 @@ namespace Eggnog
                 RebuildFor(relation.Table, relation.Arguments, deletes: true);
                 do
                 {
-                    if (stopped)
-                        return;
-
                     PlanDelete(relation.Table, relation.Arguments, nameof(fact));
                 }
                 while (EndFact() == false);
@@ -323,14 +317,10 @@ namespace Eggnog
         /// <summary>
         /// Checks that the scope may delete rows of <paramref name="table"/>.
         /// </summary>
-        /// <exception cref="ArgumentException">The table is the graph's contradiction.</exception>
         /// <exception cref="InvalidOperationException">The scope has live descendants or a writable parent, or the table
         /// is a function with a merge that is not a lattice and the scope is not the root.</exception>
         void CheckDeletable(TableHandle table)
         {
-            if (ReferenceEquals(table, graph.Contradiction))
-                throw new ArgumentException($"'{table.Name}' is the graph's contradiction, which a deletion does not undo.");
-
             if (engine.RetractionRefusal is { } why)
                 throw new InvalidOperationException($"Scope '{scope.Path}' may not delete rows of '{table.Name}': {why}.");
 

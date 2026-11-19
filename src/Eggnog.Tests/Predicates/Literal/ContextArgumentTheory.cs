@@ -14,8 +14,9 @@ namespace Eggnog.Tests.Predicates.Literal
     /// <remarks>
     /// The order in which tables are defined is part of the theory: extraction breaks ties in cost by function id,
     /// which is declaration order, so reordering the definitions can change which of two equal-cost predicates is
-    /// extracted. A context's contradiction is <see cref="Contradicts"/>, named <c>contradicts</c>, because the
-    /// graph's own nullary <see cref="EGraph.Contradiction"/> owns the name <c>contradiction</c>.
+    /// extracted. A context's contradiction is <see cref="Contradicts"/>, named <c>contradicts</c>: a relation over
+    /// contexts, where <see cref="Scoped.PredicateTheory"/>'s is a nullary relation that holds in a scope
+    /// (<see cref="Scoped.PredicateTheory.Contradiction"/>).
     /// </remarks>
     public sealed class ContextArgumentTheory
     {

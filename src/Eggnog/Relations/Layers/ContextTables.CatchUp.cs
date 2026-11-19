@@ -279,12 +279,10 @@ namespace Eggnog.Relations
         /// key.</description></item>
         /// </list>
         /// <para>
-        /// A visible contradiction row stops a context created with <see cref="ContextOptions.StopOnContradiction"/>
-        /// the copies staged so far are then dropped unflushed, and the context answers only
-        /// <see cref="Context.IsContradictory"/>. Ancestor tombstones need no work: a replaced row reappears as an
-        /// append. Before reading, every layer the cursors have seen is checked to be in the same generation: a layer
-        /// that compacted or was cleared under a live descendant would renumber the rows the cursors and hidden sets
-        /// name, so the catch-up throws, which faults the context.
+        /// Ancestor tombstones need no work: a replaced row reappears as an append. Before reading, every layer the
+        /// cursors have seen is checked to be in the same generation: a layer that compacted or was cleared under a live
+        /// descendant would renumber the rows the cursors and hidden sets name, so the catch-up throws, which faults the
+        /// context.
         /// </para>
         /// <para>
         /// What was read is recorded in the cursors as pending, and <see cref="CommitCursors"/> publishes it after the
@@ -324,8 +322,7 @@ namespace Eggnog.Relations
                     if (from >= version.Minor || a < ClearedFloor(table))
                         continue;
 
-                    if (CatchUpLayer(ref state, s, layer, a, from, version.Minor, floor, epoch))
-                        return true;
+                    CatchUpLayer(ref state, s, layer, a, from, version.Minor, floor, epoch);
                 }
 
                 cursor.SetPendingStamp(stamp);
@@ -366,8 +363,7 @@ namespace Eggnog.Relations
         /// Reads the rows <c>[from, to)</c> of the ancestor layer at depth <paramref name="a"/>; see
         /// <see cref="CatchUpRows"/>.
         /// </summary>
-        /// <returns><c>true</c> if a contradiction stopped the context, which ends the catch-up.</returns>
-        bool CatchUpLayer(ref ExecutionState? state, LayeredTableSchema s, SortedWritesTable layer, int a, int from, int to, uint floor, uint epoch)
+        void CatchUpLayer(ref ExecutionState? state, LayeredTableSchema s, SortedWritesTable layer, int a, int from, int to, uint floor, uint epoch)
         {
             var table = s.Id;
             var find = owner.UnionFind;
@@ -383,13 +379,6 @@ namespace Eggnog.Relations
                 var offset = r * arity;
                 if (data[offset] == Value.StaleRep || HiddenBetween(table, a, r))
                     continue;
-
-                if (s.IsContradiction)
-                {
-                    SetContradicted();
-                    if (owner.IsContradicted)
-                        return true;
-                }
 
                 var stale = false;
                 foreach (var column in columns)
@@ -421,8 +410,6 @@ namespace Eggnog.Relations
 #endif
                 }
             }
-
-            return false;
         }
 
         /// <summary>

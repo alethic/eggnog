@@ -275,26 +275,6 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Only a registered zero-key table can be designated the contradiction table, and only once.
-        /// </summary>
-        [Fact]
-        public void TheContradictionTableIsANullaryRelationDesignatedOnce()
-        {
-            var store = new Store();
-            var f = store.AddTable(Function(store), name: "f");
-            var bottom = store.AddTable(new SortedWritesTable(0, 1, new ColumnId(0), [], new KeepCurrentMerge(), ParallelHeuristics.Serial), name: "bottom");
-            Assert.Null(store.Schema.Contradiction);
-
-            Assert.Throws<ArgumentException>(() => store.DesignateContradiction(f));
-            Assert.Throws<KeyNotFoundException>(() => store.DesignateContradiction(new TableId(7)));
-            store.DesignateContradiction(bottom);
-            Assert.Equal(bottom, store.Schema.Contradiction);
-            Assert.True(store.Schema[bottom]!.IsContradiction);
-            Assert.False(store.Schema[f]!.IsContradiction);
-            Assert.Throws<InvalidOperationException>(() => store.DesignateContradiction(bottom));
-        }
-
-        /// <summary>
         /// A table added while the root freezes on another thread is frozen with the root, or refused.
         /// <see cref="Store.AddTable"/> reads the root's frozen flag again once it holds the root's domain, so a freeze
         /// that completes between the first read and the enter cannot leave the table unfrozen and unsealed in a frozen

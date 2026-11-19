@@ -62,6 +62,7 @@ namespace Eggnog.Tests.Rendering
         public void MakesRewritesAndNaiveRulesRender()
         {
             var t = new NodeTheory();
+            var flag = t.Graph.DefineRelation("flag");
             var make = t.Rules.DefineRule("make", r =>
             {
                 var x = r.Var<long>("x");
@@ -81,9 +82,9 @@ namespace Eggnog.Tests.Rendering
             var naive = t.Rules.DefineRule("naive", r =>
             {
                 r.Naive();
-                r.Then(t.Num.Of(1L), t.Graph.Contradiction.Of());
+                r.Then(t.Num.Of(1L), flag.Of());
             });
-            Assert.Equal("(rule () ((num 1) ($contradiction)) :ruleset rules :naive)", naive.ToString());
+            Assert.Equal("(rule () ((num 1) (flag)) :ruleset rules :naive)", naive.ToString());
         }
 
         [Fact]
@@ -143,13 +144,14 @@ namespace Eggnog.Tests.Rendering
             var present = t.Graph.DefineRelation<string>("present");
             var dom = t.Graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
             var strEq = t.Graph.DefineConstructor<string, string, Node>("StrEq");
+            var flag = t.Graph.DefineRelation("flag");
             t.Root.Assume(present.Of("kind"), dom.Of("kind").Is(Set.Of(["b", "a"])));
             var made = t.Root.Make(strEq.Of("kind", "a"));
 
             Assert.Equal("(present \"kind\")", t.Root.Rows(present)[0].ToString());
             Assert.Equal("(dom \"kind\") = (set-of \"a\" \"b\")", t.Root.Rows(dom)[0].ToString());
             Assert.Equal($"(StrEq \"kind\" \"a\") = {made.Id}", t.Root.Rows(strEq)[0].ToString());
-            Assert.Equal("($contradiction)", RowOf(t, t.Graph.Contradiction));
+            Assert.Equal("(flag)", RowOf(t, flag));
         }
 
         [Fact]
@@ -184,8 +186,8 @@ namespace Eggnog.Tests.Rendering
         }
 
         /// <summary>
-        /// Rows of a nullary function, of the contradiction relation, and of a set-valued function keyed by an enum
-        /// render as s-expressions.
+        /// Rows of a nullary function, of a nullary relation, and of a set-valued function keyed by an enum render as
+        /// s-expressions.
         /// </summary>
         [Fact]
         public void RowsOfNullaryTablesSetsAndEnumsRender()
@@ -194,10 +196,11 @@ namespace Eggnog.Tests.Rendering
             t.Graph.Values.RegisterEnum<Shade>();
             var f = t.Graph.DefineFunction<long>("f");
             var dom = t.Graph.DefineFunction<Shade, Set<string>>("dom", ValueLattice.Intersect<string>());
-            t.Root.Assume(f.Of().Is(5L), t.Graph.Contradiction.Of(), dom.Of(default(Shade)).Is(Set.Of(["b", "a"])));
+            var flag = t.Graph.DefineRelation("flag");
+            t.Root.Assume(f.Of().Is(5L), flag.Of(), dom.Of(default(Shade)).Is(Set.Of(["b", "a"])));
 
             Assert.Equal("(f) = 5", t.Root.Rows(f).Single().ToString());
-            Assert.Equal("($contradiction)", t.Root.Rows(t.Graph.Contradiction).Single().ToString());
+            Assert.Equal("(flag)", t.Root.Rows(flag).Single().ToString());
             Assert.Equal(string.Create(CultureInfo.InvariantCulture, $"(dom {default(Shade)}) = (set-of \"a\" \"b\")"), t.Root.Rows(dom).Single().ToString());
         }
 

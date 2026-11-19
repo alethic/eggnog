@@ -62,7 +62,7 @@ because several engine and library types share simple names.
 
 | Path | Contents |
 |---|---|
-| `src/Eggnog` | The library (folders `Graph`, `Tables`, `Terms`, `Rules`, `Scheduling`, `Scopes`, `Cases`, `Host`, `Values`, `Extraction`, `Diagnostics`, `Rendering`) and the engine (`Relations/`) |
+| `src/Eggnog` | The library (folders `Graph`, `Tables`, `Terms`, `Rules`, `Scheduling`, `Scopes`, `Host`, `Values`, `Extraction`, `Diagnostics`, `Rendering`) and the engine (`Relations/`) |
 | `src/Eggnog.Tests` | The library's tests (namespaces `Eggnog.Tests.*`) and, under `Relations/`, the engine's (namespace `Eggnog.Relations.Tests`) |
 | `src/Eggnog.Benchmarks` | BenchmarkDotNet benchmarks, run in process; the engine's are under `Relations/` |
 | `src/Eggnog.AotCheck` | A small app, never packed, that CI publishes with NativeAOT to check the library stays trimming and AOT compatible |
@@ -405,18 +405,16 @@ constructor's role is always `Term`, and its cost is not an option but a paramet
 default 1). `RelationOptions` and `ConstructorOptions` also set whether the rows may be subsumed (`Subsumable`, section
 2.5); `FunctionOptions` has no such setting, since no function can be.
 
-`EGraph.Contradiction` is a built-in nullary relation, an addition egglog lacks, named `$contradiction`. A rule that
-derives it says the scope has no model. It is an ordinary fact; a run that asks to stop on it
-(`RunOptions.StopOnContradiction`) skips its later steps, and the scope stays usable.
+A theory that needs a contradiction, a fact that says a scope has no model, defines a nullary relation of its own, as an
+egglog program would: a rule derives it, `Check` reads it, and `Schedule.Until` stops a schedule on it (section 2.6).
+It is an ordinary fact, and the scope that holds it stays usable.
 
 A table's name is any non-empty string unique among the user's tables, `@` and a leading `$` included, as in egglog. The
-tables the library makes for itself take no name of the user's: the built-in contradiction relation is not among the
-names a definition checks, so a user's table may also be named `contradiction` or `$contradiction`, and is another table
-(the built-in is told apart by reference); a mirror table (section 2.8) is named `T @tag` and a scheduler's worklist
-`$worklist ...`, names with a space, which no egglog symbol holds. A scoped read renders, and is named in diagnostics,
-as its mirror is, `T @tag`, apart from a user's table named `T@tag`. A rule or diagnostic names the built-in relation and
-a user's `$contradiction` alike, and, since the C# API takes any non-empty name, a scoped read and a user's table named
-`T @tag` alike; each pair is still two tables, told apart by reference.
+tables the library makes for itself take no name of the user's: a mirror table (section 2.8) is named `T @tag` and a
+scheduler's worklist `$worklist ...`, names with a space, which no egglog symbol holds. A scoped read renders, and is
+named in diagnostics, as its mirror is, `T @tag`, apart from a user's table named `T@tag`. Since the C# API takes any
+non-empty name, a rule or diagnostic names a scoped read and a user's table named `T @tag` alike; the two are still two
+tables, told apart by reference.
 
 ### 2.4 Terms and facts
 
@@ -501,7 +499,7 @@ rules.DefineRule("a singleton domain makes a path present", r =>
   deletes a row and writes it back settles. A scope deletes only when the engine's retraction guard lets it (section
   3.8): not with live descendants, which would not see the deletion, and not under a writable parent. `Run` refuses,
   before any work, a rule that deletes where the scope may not; one defined on another thread during the run takes part
-  only in the iterations where it may run. `graph.Contradiction` is not deleted.
+  only in the iterations where it may run.
 - **Heads never read tables**, but in a full rule callback (`ThenCallFull`) or a primitive of full access, a function
   value's application among them, whose rule is naive. A function's output used
   in a head must be matched in the body. This keeps every match a function of the body alone, which is what lets a
@@ -821,11 +819,9 @@ lists:
    (tag (Num 4)) (W (Num 4))`, the run fails in both, and `(check (= (Num 4) (W (Num 4))))` passes here, and in egglog
    only after another command's union.
 
-Kept by choice, and not a departure to remove: the built-in `EGraph.Contradiction` is named `$contradiction`, a name
-an egglog program may also give a table of its own (section 2.3); the two are different tables, told apart by
-reference, but render alike. And there is no `.egg` front end. Programs are written in C#, egglog's
-`push` and `pop` become child scopes, and egglog's tests are ported to the C# API, their answers checked against the
-egglog binary (the roadmap's "Closed").
+Kept by choice, and not a departure to remove: there is no `.egg` front end. Programs are written in C#, egglog's `push`
+and `pop` become child scopes, and egglog's tests are ported to the C# API, their answers checked against the egglog
+binary (the roadmap's "Closed").
 
 ---
 
@@ -939,11 +935,11 @@ the atoms after it every row. Each new match is then found exactly once per iter
 over every row.
 
 `RunRules` is one iteration: build the rule set, run it, merge, rebuild, and report (`IterationReport`: whether the
-rules changed anything, whether the rebuild did, whether a contradiction stopped the context, and the timings). Every
-row written in a run, a flush or a rebuild pass is stamped with the clock's value when it started, and the clock
-advances after it. A conflict in a function without a lattice, a failed lookup, or a failing primitive calls a panic
-function, which records the failure and stops the run early; the context then throws `PanicException` after merging what
-it wrote. A rule's progress is committed only after a run that recorded no failure.
+rules changed anything, whether the rebuild did and in how many passes, and the timings). Every row written in a run, a
+flush or a rebuild pass is stamped with the clock's value when it started, and the clock advances after it. A conflict
+in a function without a lattice, a failed lookup, or a failing primitive calls a panic function, which records the
+failure and stops the run early; the context then throws `PanicException` after merging what it wrote. A rule's progress
+is committed only after a run that recorded no failure.
 
 ### 3.7 Extraction
 
@@ -1260,14 +1256,6 @@ delete its own rows and hide visible ancestor rows. A merge that is not a lattic
 The library's deletion (section 2.5) is the engine's, and the library refuses before any work what the guard would
 refuse. Subsumption is not a retraction: a sticky value change of the row's subsumption cell, merged like an output
 (decision 1).
-
-**Contradiction.** A context created with `ContextOptions.StopOnContradiction` stops when the contradiction relation
-gets a row: its stop flag is set when a merge applies the row (the merge after an iteration's search, or a write's
-flush) or the row becomes visible from an ancestor (at the context's creation, in a catch-up, or when its parent stops),
-the rebuild loop checks it, and the stopped context then answers only whether it is contradictory, until it is disposed.
-A rule's write of the row is an ordinary write, so the search that derives it runs in full, and what that search interns
-and the ids it reserves stay in the store's pools and id counter after the context is disposed. The library creates no
-such context: for it a contradiction is an ordinary fact (section 2.3).
 
 **What the root pays.** A few per-call, per-batch, per-probe and per-refinement branches, freeze-time and child-creation
 work (each child, a query's transient child included, also allocates its empty container layers, one small object), one

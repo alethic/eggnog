@@ -7,8 +7,7 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// The store-wide schema every context reads instead of the root database's table map: one
-    /// <see cref="LayeredTableSchema"/> per function table, the union-find's id, and the designated contradiction
-    /// table.
+    /// <see cref="LayeredTableSchema"/> per function table, and the union-find's id.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -49,11 +48,6 @@ namespace Eggnog.Relations
         TableView?[] rootViews;
 
         /// <summary>
-        /// The index of the contradiction table, or −1.
-        /// </summary>
-        volatile int contradiction = -1;
-
-        /// <summary>
         /// Initializes the schema of <paramref name="store"/>, whose union-find is already its table 0.
         /// </summary>
         /// <param name="store">The store.</param>
@@ -82,11 +76,6 @@ namespace Eggnog.Relations
         /// Gets the union-find table's id, <see cref="Store.UnionFindTable"/>.
         /// </summary>
         public TableId UnionFind => store.UnionFindTable;
-
-        /// <summary>
-        /// Gets the designated contradiction table, a nullary relation, or <c>null</c>.
-        /// </summary>
-        public TableId? Contradiction => contradiction is var c and >= 0 ? new TableId(c) : null;
 
         /// <summary>
         /// Gets the number of table ids: one more than the largest registered id, the union-find included.
@@ -272,30 +261,6 @@ namespace Eggnog.Relations
         static TableView BuildRootView(LayeredTableSchema schema, bool isFrozen)
         {
             return new TableView(schema.Id, schema.Spec, [new LayerView(0, schema.RootInfo, HiddenRows.None, isFrozen)]);
-        }
-
-        /// <summary>
-        /// Designates table <paramref name="id"/> as the store's contradiction table: a registered nullary relation
-        /// (no key columns). Once per store.
-        /// </summary>
-        /// <param name="id">The table id.</param>
-        /// <exception cref="InvalidOperationException">A contradiction table is designated already.</exception>
-        /// <exception cref="KeyNotFoundException">The table is not registered.</exception>
-        /// <exception cref="ArgumentException">The table has key columns.</exception>
-        internal void DesignateContradiction(TableId id)
-        {
-            lock (sync)
-            {
-                if (contradiction >= 0)
-                    throw new InvalidOperationException($"Table {new TableId(contradiction)} is already the store's contradiction table.");
-
-                var schema = Require(id);
-                if (schema.KeyCount != 0)
-                    throw new ArgumentException($"The contradiction table must be a nullary relation; table {id} has {schema.KeyCount} key columns.", nameof(id));
-
-                schema.MarkContradiction();
-                contradiction = id.Index;
-            }
         }
 
         /// <summary>

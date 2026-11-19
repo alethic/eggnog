@@ -67,15 +67,11 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Starts the plan of a fact again, which takes the results its first plan computed (<see cref="computed"/>);
-        /// a stopped scope plans it no more.
+        /// Starts the plan of a fact again, which takes the results its first plan computed (<see cref="computed"/>).
         /// </summary>
         void ReplayComputed()
         {
-            if (stopped)
-                ForgetComputed();
-            else
-                replayAt = 0;
+            replayAt = 0;
         }
 
         /// <summary>
@@ -302,8 +298,7 @@ namespace Eggnog
         /// <summary>
         /// Checks that a primitive of a host write may delete a row of a table, as <see cref="CheckDeletable"/> does.
         /// </summary>
-        /// <exception cref="ArgumentException">The table is not of the batch's graph, is a scoped view, or is the graph's
-        /// contradiction.</exception>
+        /// <exception cref="ArgumentException">The table is not of the batch's graph, or is a scoped view.</exception>
         /// <exception cref="InvalidOperationException">The scope may not delete.</exception>
         internal void CheckRemovableForPrimitive(TableHandle table)
         {

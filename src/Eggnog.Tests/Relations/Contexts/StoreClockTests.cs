@@ -63,9 +63,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The same epoch stamped into a zero-key table whose sort column is its first cell (the store's own nullary
-        /// contradiction shape, <see cref="StoreTests"/>) writes <see cref="Value.StaleRep"/> into cell 0, the
-        /// deleted-row marker: the row must still be visible.
+        /// The same epoch stamped into a zero-key table whose sort column is its first cell (a nullary relation's shape)
+        /// writes <see cref="Value.StaleRep"/> into cell 0, the deleted-row marker: the row must still be visible.
         /// </summary>
         [Fact]
         public void ARowStampedWithAnEpochTheStoreHandsOutIsVisible()

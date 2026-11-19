@@ -45,7 +45,6 @@ namespace Eggnog.Relations.Tests
             Assert.Throws<ObjectDisposedException>(() => Insert(child, f, a, 2, 0));
             Assert.Throws<ObjectDisposedException>(() => child.ClearTable(f));
             Assert.Throws<ObjectDisposedException>(() => child.NewId());
-            Assert.Throws<ObjectDisposedException>(() => child.IsContradictory);
             Assert.Throws<ObjectDisposedException>(() => child.CheckInvariants());
         }
 

@@ -785,9 +785,6 @@ namespace Eggnog
 
             CheckTable(table);
             CheckWritable(table);
-            if (ReferenceEquals(table, graph.Contradiction))
-                throw Error($"'{table.Name}' is the graph's contradiction, which a deletion does not undo");
-
             var inputs = new Operand[arguments.Length];
             for (var i = 0; i < inputs.Length; i++)
                 inputs[i] = EvalHead(arguments[i]);

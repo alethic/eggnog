@@ -31,7 +31,6 @@ namespace Eggnog.Tests.Concurrency
             Assert.Contains("in use on another thread", Assert.Throws<InvalidOperationException>(() => root.Check(run.Seed.Of(1L))).Message);
             Assert.Throws<InvalidOperationException>(() => root.Assume(run.Seed.Of(2L)));
             Assert.Throws<InvalidOperationException>(() => root.Run(run.Rules));
-            Assert.Throws<InvalidOperationException>(() => _ = root.IsContradictory);
             Assert.Throws<InvalidOperationException>(() => root.CreateExtractor());
             Assert.Equal("root", root.Path);
 

@@ -148,9 +148,8 @@ namespace Eggnog.Relations
         internal int CompactionsBlockedAtFreeze => Volatile.Read(ref compactionsBlockedAtFreeze);
 
         /// <summary>
-        /// Gets the change stamp: moved by merges that add or remove rows, by clears that empty a table, by hides and
-        /// by the contradiction stop; no-ops and redundant unions leave it alone. <see cref="Context.Version"/> reads
-        /// it.
+        /// Gets the change stamp: moved by merges that add or remove rows, by clears that empty a table and by hides;
+        /// no-ops and redundant unions leave it alone. <see cref="Context.Version"/> reads it.
         /// </summary>
         internal long ChangeStamp => Interlocked.Read(ref changeStamp);
 
@@ -271,8 +270,7 @@ namespace Eggnog.Relations
         internal bool IsTakenOut(TableId table) => layers?.TryGetLayer(table) is { IsAdopted: true } && tables.ContainsKey(table) == false;
 
         /// <summary>
-        /// Moves the change stamp for a change of a child's layering that no merge reports: a hide, the contradiction
-        /// stop.
+        /// Moves the change stamp for a change of a child's layering that no merge reports: a hide.
         /// </summary>
         internal void NoteLayerChange() => BumpChangeStamp();
 

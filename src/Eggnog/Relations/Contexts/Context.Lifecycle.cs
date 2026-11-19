@@ -25,9 +25,8 @@ namespace Eggnog.Relations
         /// they start at its end. The first child seals the store's counters.
         /// </para>
         /// <para>
-        /// A child created with <see cref="ContextOptions.StopOnContradiction"/> where a contradiction row is already
-        /// visible starts stopped. DEBUG builds check that a root that is not frozen is settled (every root row
-        /// canonical in the root's view) before the child is created.
+        /// DEBUG builds check that a root that is not frozen is settled (every root row canonical in the root's view)
+        /// before the child is created.
         /// </para>
         /// <para>
         /// A context that is not frozen also brings its rebuild indexes, and those of its ancestors that are not
@@ -45,14 +44,12 @@ namespace Eggnog.Relations
         /// <param name="options">The child's options; <see cref="ContextOptions.Default"/> if <c>null</c>.</param>
         /// <returns>The child.</returns>
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
-        /// <exception cref="InvalidOperationException">The context is faulted or contradicted; its parent (or an ancestor
-        /// that is not frozen) was stopped by a contradiction; the call comes from inside another operation of the same
-        /// thread domain; or the domain is held by another thread.</exception>
+        /// <exception cref="InvalidOperationException">The context is faulted; the call comes from inside another
+        /// operation of the same thread domain; or the domain is held by another thread.</exception>
         public Context CreateChild(ContextOptions? options = null)
         {
             ThrowIfDisposed();
             ThrowIfFaulted();
-            ThrowIfContradicted();
             var current = Domain;
             if (current.Depth > 0)
                 ThrowReentrant(nameof(CreateChild));
@@ -173,7 +170,7 @@ namespace Eggnog.Relations
         /// it rewrites the own rows that name an id displaced since the last pass, hides and copies the ancestor rows
         /// that name the child's own new losers or a container its pass changed in place, and merges
         /// (<see cref="ContextTables.RebuildPass"/>): containers first, as egglog's rebuild loop runs them
-        /// (egglog-bridge/src/lib.rs:666-681). A contradiction that stops the child ends the loop at once.
+        /// (egglog-bridge/src/lib.rs:666-681).
         /// </para>
         /// <para>
         /// The loop ends by committing the child's cursors, sealing its hidden sets and, when it caught up with an
@@ -185,21 +182,18 @@ namespace Eggnog.Relations
         /// invariants at the end, and after a clock that ran out if the context is clean (<see cref="CheckInvariants"/>).
         /// </para>
         /// <para>
-        /// Before any pass, a child refuses to catch up with a parent that a contradiction stopped: such a parent is
-        /// never clean again. A child that stops on contradictions stops too; any other child is refused, unfaulted
-        /// (<see cref="StopIfParentStopped"/>). And when the container log of an unsettled ancestor gained an eq-sort
-        /// container since the child last read it, the pre-loop scan runs, even when nothing else is to be done: it
-        /// consumes the containers that do not concern the child and keeps the others for the first pass's catch-up
+        /// Before any pass, when the container log of an unsettled ancestor gained an eq-sort container since the child
+        /// last read it, the pre-loop scan runs, even when nothing else is to be done: it consumes the containers that do
+        /// not concern the child and keeps the others for the first pass's catch-up
         /// (<see cref="ContainerLayers.ScanAdds"/>), so a child that no new container concerns stays clean and takes no
         /// epoch.
         /// </para>
         /// </remarks>
-        /// <returns>Whether any pass changed anything; <c>false</c> for a frozen, contradicted or clean context.</returns>
+        /// <returns>Whether any pass changed anything; <c>false</c> for a frozen or clean context.</returns>
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
-        /// <exception cref="InvalidOperationException">The context is faulted; its domain is held by another thread;
-        /// its parent (or an ancestor that is not frozen) was stopped by a contradiction and it does not stop on
-        /// contradictions; or it (or a parent that is not frozen) has work to do and the call comes from inside a write
-        /// batch's action or a visitor of the same domain, where a rebuild with nothing to do is allowed.</exception>
+        /// <exception cref="InvalidOperationException">The context is faulted; its domain is held by another thread; or
+        /// it (or a parent that is not frozen) has work to do and the call comes from inside a write batch's action or a
+        /// visitor of the same domain, where a rebuild with nothing to do is allowed.</exception>
         /// <exception cref="OverflowException">The store's clock has run out (<see cref="Store.ReadClock"/>); the
         /// context is not faulted.</exception>
         public bool Rebuild() => RebuildCore(ancestorsCurrent: false);
@@ -261,15 +255,7 @@ namespace Eggnog.Relations
 
             // The parent's rebuild ends at its clean test when it is clean, and nothing below changes the parent, so
             // the clean test here need not test the parent's chain again: a chain's rebuild tests each level once.
-            var parentClean = false;
-            if (parent is { IsFrozen: false } p)
-            {
-                parentClean = p.foundClean;
-                StopIfParentStopped(p);
-            }
-
-            if (contradicted)
-                return false;
+            var parentClean = parent is { IsFrozen: false } p && p.foundClean;
 
             // An unsettled ancestor's container log gained an eq-sort container since the child last read it; the scan
             // changes nothing a reader sees, so it runs even inside a callback, before the clean test it is part of.
@@ -303,7 +289,7 @@ namespace Eggnog.Relations
                 {
                     EndPasses(caughtUp);
 #if DEBUG
-                    if (contradicted == false && IsClean)
+                    if (IsClean)
                         CheckInvariants();
 #endif
                     throw;
@@ -325,7 +311,7 @@ namespace Eggnog.Relations
                         // The containers of classes the ancestors gained: collisions settle now, and their unions merge
                         // before the container pass, which claims and adopts what the catch-up queued. Only the
                         // union-find merges here (see RebuildContainerLayers).
-                        if (contradicted == false && containerLayers!.CatchUp(epoch, parent.DisplacedIds.Slice(importFrom, unionFindCursor - importFrom)))
+                        if (containerLayers!.CatchUp(epoch, parent.DisplacedIds.Slice(importFrom, unionFindCursor - importFrom)))
                         {
                             database.MergeTable(store.UnionFindTable, epoch);
                             pass = true;
@@ -356,7 +342,7 @@ namespace Eggnog.Relations
                 changed |= pass;
                 first = false;
                 lastRebuildPasses++;
-                if (pass == false || contradicted)
+                if (pass == false)
                     break;
             }
 
@@ -364,9 +350,7 @@ namespace Eggnog.Relations
             EndPasses(caughtUp);
 
 #if DEBUG
-            // A contradiction stopped the merge with writes pending: the context answers only IsContradictory.
-            if (contradicted == false)
-                CheckInvariants();
+            CheckInvariants();
 #endif
             return changed;
         }
@@ -389,8 +373,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets the number of passes the context's last <see cref="Rebuild"/> ran: 0 when it found nothing to do (or
-        /// the context is frozen or stopped), otherwise every pass, the last one, which changed nothing, included. The
-        /// bridge reports it as <c>IterationReport.RebuildPasses</c>. Domain thread only.
+        /// the context is frozen), otherwise every pass, the last one, which changed nothing, included. The bridge
+        /// reports it as <c>IterationReport.RebuildPasses</c>. Domain thread only.
         /// </summary>
         internal int LastRebuildPasses => lastRebuildPasses;
 
@@ -417,16 +401,15 @@ namespace Eggnog.Relations
         /// An exception escaping a child's rebuild or freeze proper faults it, except a clock that has run out before a
         /// rebuild pass changed anything (<see cref="Rebuild"/>). A failure recorded and not taken, before
         /// the call or by its own rebuild or settle, refuses the freeze without faulting: the context stays consistent
-        /// and unfrozen, and its caller may take the failure and freeze again. So does a contradiction its rebuild
-        /// found.
+        /// and unfrozen, and its caller may take the failure and freeze again.
         /// </para>
         /// </remarks>
         /// <param name="warmup">The cached indexes to build before the context is shared, or <c>null</c>.</param>
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
-        /// <exception cref="InvalidOperationException">The parent is not frozen; the context is faulted or contradicted
-        /// (or its rebuild stopped it); a failure was recorded and not taken, before the call or by its rebuild or
-        /// settle; writes are staged in it and were never notified for merging; the call comes from inside another
-        /// operation of the same thread domain; or the domain is held by another thread.</exception>
+        /// <exception cref="InvalidOperationException">The parent is not frozen; the context is faulted; a failure was
+        /// recorded and not taken, before the call or by its rebuild or settle; writes are staged in it and were never
+        /// notified for merging; the call comes from inside another operation of the same thread domain; or the domain
+        /// is held by another thread.</exception>
         /// <exception cref="OverflowException">The store's clock has run out; the context is not faulted.</exception>
         public void Freeze(FreezeWarmup? warmup = null)
         {
@@ -445,7 +428,6 @@ namespace Eggnog.Relations
 
                 ThrowIfDisposed();
                 ThrowIfFaulted();
-                ThrowIfContradicted();
                 if (parent is { IsFrozen: false })
                     throw new InvalidOperationException("A context can be frozen only once its parent is.");
 
@@ -464,9 +446,7 @@ namespace Eggnog.Relations
 
                 // The same for a failure the rebuild or the settle just recorded (a merge conflict found by a copy, a
                 // fold or a rewrite): the bridge orders it so too (rebuild, check the failure, freeze). A recorded
-                // failure is not an exception: the context stays consistent and unfrozen, and is not faulted. A
-                // contradiction the rebuild found stops the context, which is then not frozen either.
-                ThrowIfContradicted();
+                // failure is not an exception: the context stays consistent and unfrozen, and is not faulted.
                 ThrowIfFailureNotTaken();
 
                 try
@@ -553,30 +533,6 @@ namespace Eggnog.Relations
 
             // The settle's merge may have staged unions (congruence among rewritten rows).
             Rebuild();
-        }
-
-        /// <summary>
-        /// Called by a child after it rebuilt <paramref name="p"/>, its parent that is not frozen: refuses to catch up
-        /// with a parent a contradiction stopped. Such a parent answers only <c>IsContradictory</c> and may have
-        /// stopped its merge with writes pending, so it is neither clean nor ever will be, and a child catches up only
-        /// with a frozen or clean parent. A child that stops on contradictions stops too: the contradiction row is
-        /// visible in its parent, so in it. Any other child is refused, without faulting; it can only be disposed.
-        /// </summary>
-        /// <param name="p">The parent, just rebuilt.</param>
-        /// <exception cref="InvalidOperationException">The parent is stopped and this context does not stop on
-        /// contradictions.</exception>
-        void StopIfParentStopped(Context p)
-        {
-            if (p.contradicted == false || contradicted)
-                return;
-
-            if (options.StopOnContradiction)
-            {
-                tables!.SetContradicted();
-                return;
-            }
-
-            throw new InvalidOperationException("The parent context was stopped by a contradiction and answers only IsContradictory, so this context cannot catch up with it; dispose it.");
         }
 
         /// <summary>

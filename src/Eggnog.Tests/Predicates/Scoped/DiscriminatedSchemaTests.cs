@@ -215,7 +215,7 @@ namespace Eggnog.Tests.Predicates.Scoped
             var (query, q) = AskWithCases(c, schema, c.StrEq.Of("status", "purged"));
             using (query)
             {
-                Assert.True(query.IsContradictory);
+                Assert.True(c.IsContradictory(query));
                 Assert.True(query.AreEqual(q, c.PFalse.Of()));
                 var best = query.Extract(q);
                 Assert.Equal("(PFalse)", best.ToString());

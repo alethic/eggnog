@@ -6,8 +6,7 @@ namespace Eggnog
 
     /// <summary>
     /// One step of a ruleset under a scheduler (<see cref="Schedule.RunWith"/>): egglog's
-    /// <c>step_rules_with_scheduler</c>. Skipped on a contradictory scope when the run stops on contradiction, as a
-    /// <see cref="RunSchedule"/> is.
+    /// <c>step_rules_with_scheduler</c>.
     /// </summary>
     internal sealed class RunWithSchedule : Schedule
     {
@@ -34,16 +33,7 @@ namespace Eggnog
         public Ruleset Ruleset { get; }
 
         /// <inheritdoc />
-        internal override bool Execute(ScheduleExecutor executor, Scope scope)
-        {
-            if (executor.Options.StopOnContradiction && RunSchedule.IsContradictory(scope.Engine))
-            {
-                executor.Statistics.StopReason = RunStopReason.Contradiction;
-                return false;
-            }
-
-            return executor.RunSchedulerStep(scope, Scheduler, Ruleset);
-        }
+        internal override bool Execute(ScheduleExecutor executor, Scope scope) => executor.RunSchedulerStep(scope, Scheduler, Ruleset);
 
         /// <inheritdoc />
         internal override void Collect(ISet<Ruleset> rulesets, ICollection<Fact> conditions) => rulesets.Add(Ruleset);

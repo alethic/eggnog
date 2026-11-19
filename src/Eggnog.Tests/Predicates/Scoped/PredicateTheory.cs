@@ -7,10 +7,11 @@ namespace Eggnog.Tests.Predicates.Scoped
     /// A theory of predicates over document paths, in which scopes are the contexts. Its facts are claims about a path:
     /// presence, stored forms, refused values, string domains, JSON types, numeric bounds and integer domains. Its
     /// terms are predicates (<see cref="Pred"/>) over paths. Its rules derive what a predicate's conjuncts claim,
-    /// settle the lattices, report a contradiction when no document can satisfy the claims, reason by the cases of a
-    /// discriminator's domain over set lattices, lower costly comparisons and simplify the predicate. A schema scope
-    /// (<see cref="Schema"/>) holds what every document satisfies; a query scope (<see cref="Query"/>) under it adds
-    /// one predicate. Contexts carry no data argument and facts flow to a child by scope inheritance.
+    /// settle the lattices, derive a contradiction (<see cref="Contradiction"/>) when no document can satisfy the
+    /// claims, reason by the cases of a discriminator's domain over set lattices, lower costly comparisons and simplify
+    /// the predicate. A schema scope (<see cref="Schema"/>) holds what every document satisfies; a query scope
+    /// (<see cref="Query"/>) under it adds one predicate. Contexts carry no data argument and facts flow to a child by
+    /// scope inheritance.
     /// <see cref="Literal.ContextArgumentTheory"/> is the same theory with both written out, but for its cases: it opens
     /// a context per value of a discriminator and runs the whole theory there, where this theory's case rules read only
     /// what each value's branch declares, and so derive less (<see cref="DefineCaseRules"/>). The theory is defined once
@@ -36,6 +37,9 @@ namespace Eggnog.Tests.Predicates.Scoped
             // The graph's own tags (a tag belongs to the graph that defines it): a schema scope, and a query scope.
             Schema = graph.DefineScopeTag("schema");
             Query = graph.DefineScopeTag("query");
+
+            // A nullary fact: no document satisfies the scope's claims.
+            Contradiction = graph.DefineRelation("contradiction");
 
             // Claims about a path. Value-only, so a query can read the schema's view of each: a scoped read may name
             // only a value-only table, which it reads through a mirror.
@@ -96,6 +100,13 @@ namespace Eggnog.Tests.Predicates.Scoped
 
         /// <summary>Gets the tag of a query scope: its schema plus one predicate's claims.</summary>
         public ScopeTag Query { get; }
+
+        /// <summary>
+        /// Gets the nullary relation "no document satisfies the scope's claims": the lattice rules derive it where a
+        /// present path can hold no value, and a rewrite then makes the query's predicate false. Read it with
+        /// <see cref="IsContradictory"/>.
+        /// </summary>
+        public Relation Contradiction { get; }
 
         /// <summary>Gets the relation "the path is present".</summary>
         public Relation<string> Present { get; }
@@ -249,6 +260,13 @@ namespace Eggnog.Tests.Predicates.Scoped
             return rule;
         }
 
+        /// <summary>
+        /// Gets whether <see cref="Contradiction"/> holds in a scope: no document satisfies its claims.
+        /// </summary>
+        /// <param name="scope">A scope of the theory's graph.</param>
+        /// <returns>Whether the scope is contradictory.</returns>
+        public bool IsContradictory(Scope scope) => scope.Check(Contradiction.Of());
+
         void DefineHorn()
         {
             Horn.DefineRule("a where clause is a conjunct", r =>
@@ -374,28 +392,28 @@ namespace Eggnog.Tests.Predicates.Scoped
                 var (p, d) = r.Vars<string, Set<string>>("p", "d");
                 r.When(Present.Of(p), d.Is(Dom.Of(p)));
                 r.Where(Primitives.SetIsEmpty<string>().Of(d));
-                r.Then(Graph.Contradiction.Of());
+                r.Then(Contradiction.Of());
             });
             Lattice.DefineRule("an empty integer domain", r =>
             {
                 var (p, d) = r.Vars<string, Set<long>>("p", "d");
                 r.When(Present.Of(p), d.Is(IDom.Of(p)));
                 r.Where(Primitives.SetIsEmpty<long>().Of(d));
-                r.Then(Graph.Contradiction.Of());
+                r.Then(Contradiction.Of());
             });
             Lattice.DefineRule("no possible type", r =>
             {
                 var (p, t) = r.Vars<string, Set<string>>("p", "t");
                 r.When(Present.Of(p), t.Is(Types.Of(p)));
                 r.Where(Primitives.SetIsEmpty<string>().Of(t));
-                r.Then(Graph.Contradiction.Of());
+                r.Then(Contradiction.Of());
             });
             Lattice.DefineRule("crossed bounds", r =>
             {
                 var (p, l, h) = r.Vars<string, long, long>("p", "l", "h");
                 r.When(Present.Of(p), l.Is(Lo.Of(p)), h.Is(Hi.Of(p)));
                 r.Where(Int64Primitives.Greater.Of(l, h));
-                r.Then(Graph.Contradiction.Of());
+                r.Then(Contradiction.Of());
             });
         }
 
@@ -420,7 +438,7 @@ namespace Eggnog.Tests.Predicates.Scoped
             {
                 var e = r.Var<Pred>("e");
                 r.ReadsOwnFacts("a query with no documents makes every predicate equivalent to false");
-                r.When(WhereClause.Of(e), Graph.Contradiction.Of());
+                r.When(WhereClause.Of(e), Contradiction.Of());
                 r.Then(e.Is(PFalse.Of()));
             });
             // Not(IsString p) admits nothing a present string-or-null path holds: it is Not(IsDefined p).

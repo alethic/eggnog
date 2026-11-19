@@ -32,12 +32,6 @@ namespace Eggnog
         public bool HeldBack;
 
         /// <summary>
-        /// The stop reason a run step recorded: <see cref="RunStopReason.Completed"/> unless a run step met a
-        /// contradiction.
-        /// </summary>
-        public RunStopReason StopReason;
-
-        /// <summary>
         /// The statistics of every rule that ran, each updated in place through a reference to its value.
         /// </summary>
         public Dictionary<Rule, RuleStatisticsBuilder> Rules = new();

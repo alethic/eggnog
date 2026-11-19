@@ -160,9 +160,9 @@ namespace Eggnog.Tests.Scopes
         }
 
         /// <summary>
-        /// An extractor query catches its writable scope up before its stop check. When that catch-up runs a lattice
-        /// merge that throws, the query throws <see cref="RuleEvaluationException"/> and the scope is faulted, as at
-        /// the other entry points that catch up; the engine's own panic never escapes, and no term is returned.
+        /// An extractor query catches its writable scope up first. When that catch-up runs a lattice merge that throws,
+        /// the query throws <see cref="RuleEvaluationException"/> and the scope is faulted, as at the other entry
+        /// points that catch up; the engine's own panic never escapes, and no term is returned.
         /// </summary>
         [Fact]
         public void AnExtractionWhoseCatchUpMergeThrowsIsAnEvaluationFailure()
@@ -291,14 +291,14 @@ namespace Eggnog.Tests.Scopes
         }
 
         /// <summary>
-        /// The structural entry points <c>CreateChild</c>, <c>DefineRule</c> and <c>Freeze</c> each report a catch-up
-        /// failure as <see cref="RuleEvaluationException"/>, fault the scope, and leave nothing behind: no child, no
-        /// rule, and no freeze.
+        /// The structural entry points <c>CreateChild</c>, <c>DefineRule</c>, <c>DefineBiRewrite</c> and <c>Freeze</c>
+        /// each report a catch-up failure as <see cref="RuleEvaluationException"/>, fault the scope, and leave nothing
+        /// behind: no child, no rule, and no freeze.
         /// </summary>
         [Fact]
         public void StructuralCallsReportACatchUpFailureAndLeaveNothingBehind()
         {
-            for (var call = 0; call < 3; call++)
+            for (var call = 0; call < 4; call++)
             {
                 var w = new World();
                 var rules = w.Graph.DefineRuleset("rules");
@@ -313,6 +313,7 @@ namespace Eggnog.Tests.Scopes
                 {
                     0 => () => child.CreateChild(),
                     1 => () => child.DefineRule(rules, "late", r => { r.When(w.Tag.Of(r.Var<Node>("n"))); r.Then(w.Tag.Of(r.Var<Node>("n"))); }),
+                    2 => () => child.DefineBiRewrite<Node>(rules, "late", r => (w.A.Of(), w.A.Of())),
                     _ => () => child.Freeze(),
                 };
 
@@ -356,25 +357,6 @@ namespace Eggnog.Tests.Scopes
                 Assert.Same(failure, child.Failure);
                 Assert.False(below.IsFaulted);
             }
-        }
-
-        /// <summary>
-        /// <see cref="Scope.IsContradictory"/> catches the scope up as every read does, so a catch-up failure throws
-        /// <see cref="RuleEvaluationException"/> and faults the scope.
-        /// </summary>
-        [Fact]
-        public void IsContradictoryReportsItsCatchUpFailure()
-        {
-            var w = new World();
-            w.Graph.Root.Freeze();
-            var parent = w.Graph.Root.CreateChild();
-            var child = parent.CreateChild();
-            child.Assume(w.F.Of("x").Is(1L));
-            parent.Assume(w.F.Of("x").Is(2L));
-            w.Arm();
-
-            Assert.Throws<RuleEvaluationException>(() => child.IsContradictory);
-            Assert.True(child.IsFaulted);
         }
 
     }

@@ -131,8 +131,7 @@ namespace Eggnog.Relations
         /// <remarks>
         /// In a child context's database: strata always merge serially (a layer's merge creates layers and hides rows
         /// on the domain thread); every round starts by adopting the layers created during a search
-        /// (<see cref="TakeRound"/>); the loop stops before a round once a contradiction stopped the context, leaving
-        /// the remaining writes pending; and the epilogue seals every hidden set the merge touched and drops the views
+        /// (<see cref="TakeRound"/>); and the epilogue seals every hidden set the merge touched and drops the views
         /// whose structure changed (<see cref="ContextTables.AfterMerge"/>). At the root each costs one null test.
         /// </remarks>
         bool MergeAllCore(uint timestamp)
@@ -154,7 +153,7 @@ namespace Eggnog.Relations
             var count = 0;
             try
             {
-                while (layers?.Owner.IsContradicted != true && (count = TakeRound()) > 0)
+                while ((count = TakeRound()) > 0)
                 {
                     everChanged |= MergeRound(count, parallel, timestamp);
                     count = 0;

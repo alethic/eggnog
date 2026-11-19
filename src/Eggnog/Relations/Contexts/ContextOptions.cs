@@ -8,17 +8,10 @@ namespace Eggnog.Relations
     {
 
         /// <summary>
-        /// The options of an ordinary child: contradiction is an ordinary fact, parallelism follows the default
-        /// described on <see cref="Parallelism"/>, and watermarks may be inherited.
+        /// The options of an ordinary child: parallelism follows the default described on <see cref="Parallelism"/>,
+        /// and watermarks may be inherited.
         /// </summary>
         public static ContextOptions Default { get; } = new();
-
-        /// <summary>
-        /// Gets whether a row of the store's designated contradiction table stops the context when it merges into the
-        /// context or becomes visible in it from an ancestor; a stopped context answers only whether it is
-        /// contradictory. Default <c>false</c>: a contradiction is then an ordinary fact.
-        /// </summary>
-        public bool StopOnContradiction { get; init; }
 
         /// <summary>
         /// Gets the parallelism of the context's database, or <c>null</c> for the default: a child of a frozen context

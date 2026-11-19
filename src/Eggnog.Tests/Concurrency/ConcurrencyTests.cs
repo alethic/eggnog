@@ -62,7 +62,7 @@ namespace Eggnog.Tests.Concurrency
         {
             var best = query.Extract(q);
             var forms = string.Join(",", query.Rows(c.Form).Select(r => r.ToString()));
-            return $"{best} cost {best.Cost} contradictory {query.IsContradictory} forms {forms}";
+            return $"{best} cost {best.Cost} contradictory {c.IsContradictory(query)} forms {forms}";
         }
 
         [Fact]
@@ -362,7 +362,7 @@ namespace Eggnog.Tests.Concurrency
                 Assert.Empty(query.Children);
                 var best = query.Extract(q);
                 var forms = string.Join(",", query.Rows(c.Form).Select(r => r.ToString()));
-                return $"{best} cost {best.Cost} stop {report.StopReason} contradictory {query.IsContradictory} forms {forms}";
+                return $"{best} cost {best.Cost} stop {report.StopReason} contradictory {c.IsContradictory(query)} forms {forms}";
             }
 
             var serial = new PredicateTheory(new EGraph());
@@ -492,7 +492,7 @@ namespace Eggnog.Tests.Concurrency
                 Assert.Empty(query.Children);
                 var best = query.Extract(q);
                 var term = parallel ? "" : best.ToString();
-                return $"{term} cost {best.Cost} stop {report.StopReason} contradictory {query.IsContradictory}{Environment.NewLine}{string.Join(Environment.NewLine, ScopeFacts.Of(query))}";
+                return $"{term} cost {best.Cost} stop {report.StopReason} contradictory {c.IsContradictory(query)}{Environment.NewLine}{string.Join(Environment.NewLine, ScopeFacts.Of(query))}";
             }
 
             var expected = Enumerable.Range(0, queries).Select(Ask).ToArray();

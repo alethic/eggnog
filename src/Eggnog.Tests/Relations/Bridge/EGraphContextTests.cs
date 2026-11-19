@@ -250,7 +250,7 @@ namespace Eggnog.Relations.Tests
         public void TheLifecycleFollowsStorage()
         {
             var g = new ContextGraph();
-            var options = new ContextOptions { StopOnContradiction = true };
+            var options = new ContextOptions { InheritWatermarks = false };
             var child = g.Root.CreateChild(options);
             Assert.Same(options, child.Options);
             Assert.Same(g.Root, child.Parent);
@@ -334,14 +334,14 @@ namespace Eggnog.Relations.Tests
 
             g.Root.FlushUpdates();
             var limited = g.Root.Saturate([start, step], 2);
-            Assert.Equal(new SaturateReport(2, false, true), limited);
+            Assert.Equal(new SaturateReport(2, true), limited);
             Assert.False(limited.Saturated);
 
             var report = g.Root.Saturate([start, step], 100);
             Assert.True(report.Saturated);
             Assert.True(report.Iterations < 10);
             Assert.Equal(15, g.Root.TableSize(g.Path));
-            Assert.Equal(new SaturateReport(0, false, true), g.Root.Saturate([start, step], 0));
+            Assert.Equal(new SaturateReport(0, true), g.Root.Saturate([start, step], 0));
             Assert.Throws<ArgumentOutOfRangeException>(() => g.Root.Saturate([start], -1));
         }
 
@@ -376,34 +376,6 @@ namespace Eggnog.Relations.Tests
             var counts = new int[8];
             Parallel.For(0, counts.Length, i => counts[i] = g.Root.TableSize(g.Mark));
             Assert.All(counts, n => Assert.Equal(1, n));
-        }
-
-        /// <summary>
-        /// A stopped context's writes and runs are no-ops, and its reads but
-        /// <see cref="EGraphContext.IsContradictory"/> are refused: a contradicted context has no model. A row staged
-        /// in it is dropped at once, so it stays clean.
-        /// </summary>
-        [Fact]
-        public void AStoppedContextIgnoresWritesAndRuns()
-        {
-            var g = new ContextGraph();
-            g.EGraph.DesignateContradiction(g.Bottom);
-            g.Root.Freeze();
-            using var stopping = g.Root.CreateChild(new ContextOptions { StopOnContradiction = true });
-            var a = stopping.FreshId();
-            stopping.StageRow(g.Bottom, [g.Unit]);
-            Assert.True(stopping.FlushUpdates());
-            Assert.True(stopping.IsStopped);
-            Assert.True(stopping.IsContradictory);
-            Assert.True(stopping.IsClean);
-            g.Assert(stopping, g.Mark, a);
-            Assert.True(stopping.IsClean, "the row staged in the stopped context was dropped");
-            Assert.False(stopping.FlushUpdates());
-            Assert.True(stopping.RunRules(g.EdgeToPath()).Stopped);
-            Assert.Throws<InvalidOperationException>(() => stopping.TableSize(g.Mark));
-            Assert.Throws<InvalidOperationException>(() => stopping.CreateChild());
-            Assert.Throws<InvalidOperationException>(() => stopping.FreshId());
-            stopping.CheckInvariants();
         }
 
     }

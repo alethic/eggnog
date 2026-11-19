@@ -185,7 +185,6 @@ sealed class Eggnog.EGraph
     IReadOnlyList<ScopeTag> ScopeTags { get }
     IReadOnlyList<TableHandle> Tables { get }
     Query DefineQuery(String name, Action<QueryBuilder> define)
-    Relation Contradiction { get }
     Relation DefineRelation(String name, RelationOptions options = null)
     Relation<T1, T2, T3, T4> DefineRelation<T1, T2, T3, T4>(String name, RelationOptions options = null)
     Relation<T1, T2, T3> DefineRelation<T1, T2, T3>(String name, RelationOptions options = null)
@@ -676,7 +675,6 @@ sealed class Eggnog.RulesetOptions
 sealed class Eggnog.RunOptions
     Action<RunStep> Observer { get; init }
     Boolean RecordSteps { get; init }
-    Boolean StopOnContradiction { get; init }
     Int32 IterationLimit { get; init }
     Int64? RowLimit { get; init }
     TimeSpan? TimeLimit { get; init }
@@ -710,7 +708,6 @@ enum Eggnog.RunStepKind
 enum Eggnog.RunStopReason
     Completed
     IterationLimit
-    Contradiction
     TimeLimit
     RowLimit
 abstract class Eggnog.Schedule
@@ -726,7 +723,6 @@ sealed class Eggnog.Scope : IDisposable
     Boolean AreEqual<TSort : struct, ISort<TSort>>(TSort a, TSort b)
     Boolean AreEqual<TSort : struct, ISort<TSort>>(TSort a, Term<TSort> b)
     Boolean Check(params ReadOnlySpan<Fact> facts)
-    Boolean IsContradictory { get }
     Boolean IsDisposed { get }
     Boolean IsFaulted { get }
     Boolean IsFrozen { get }
@@ -766,9 +762,6 @@ sealed class Eggnog.Scope : IDisposable
     Void Subsume<TSort : struct, ISort<TSort>>(ConstructorTerm<TSort> term)
     Void Write(Action<ScopeWriter> write)
     override String ToString()
-sealed class Eggnog.ScopeContradictedException : InvalidOperationException
-    String ScopePath { get }
-    ctor(String scopePath)
 sealed class Eggnog.ScopeOptions
     Int32? DegreeOfParallelism { get; init }
     ctor()
