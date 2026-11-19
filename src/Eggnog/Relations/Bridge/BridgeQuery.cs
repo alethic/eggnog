@@ -13,7 +13,7 @@ namespace Eggnog.Relations
     /// </summary>
     /// <remarks>
     /// <para>
-    /// One e-graph rule becomes one core rule, planned once (<see cref="BuildCachedPlan(Database, string, ValueTuple{TableId, ExternalFunctionId}?)"/>), which every run instantiates
+    /// One e-graph rule becomes one core rule, planned once (<see cref="BuildCachedPlan(Database, string)"/>), which every run instantiates
     /// as several core rules, its semi-naive variants (<see cref="AddRulesFromCached(RuleSetBuilder, uint, CachedPlanInfo, uint[])"/>): each variant constrains the
     /// timestamp columns of some atoms, so that together they visit exactly the matches that involve at least one row
     /// new since the rule's last run.
@@ -192,35 +192,24 @@ namespace Eggnog.Relations
         /// <c>build_cached_plan</c> (egglog-bridge/src/rule.rs:719-771).
         /// </summary>
         /// <remarks>
+        /// <para>
         /// One core variable per rule variable, named alike; each atom over the same table with its entries translated
         /// (constants become equality constraints in the core); then the right-hand side: first a read of the timestamp
         /// counter, the variable every write is stamped with, then every action in order. The core plans the query once;
         /// the plan is never revisited. O(rule size) plus planning.
-        /// </remarks>
-        /// <param name="db">The database.</param>
-        /// <param name="description">The rule's description.</param>
-        /// <returns>The plan.</returns>
-        /// <exception cref="QueryException">The core rejects the rule.</exception>
-        public CachedPlanInfo BuildCachedPlan(Database db, string description) => BuildCachedPlan(db, description, null);
-
-        /// <summary>
-        /// <see cref="BuildCachedPlan(Database, string)"/>, with the contradiction early stop: when
-        /// <paramref name="stopOnContradiction"/> is given, every head write into its table (the e-graph's contradiction
-        /// function) is followed by a call to its function (<see cref="StopOnContradictionFunction"/>).
-        /// </summary>
-        /// <remarks>
+        /// </para>
+        /// <para>
         /// Constants of table columns are e-class ids exactly where the column is one, which the core reads from the
         /// table; constants without a column (external arguments, comparisons) written as ids are lowered through
         /// <see cref="QueryEntry.IdConst"/> (<see cref="RuleBindings.ConvertLoose"/>). A store-backed context runs
         /// every one of them in its canonical form.
+        /// </para>
         /// </remarks>
         /// <param name="db">The database.</param>
         /// <param name="description">The rule's description.</param>
-        /// <param name="stopOnContradiction">The contradiction function's table and the early-stop function, or
-        /// <c>null</c>.</param>
         /// <returns>The plan.</returns>
         /// <exception cref="QueryException">The core rejects the rule.</exception>
-        public CachedPlanInfo BuildCachedPlan(Database db, string description, (TableId Table, ExternalFunctionId Stop)? stopOnContradiction)
+        public CachedPlanInfo BuildCachedPlan(Database db, string description)
         {
             ArgumentNullException.ThrowIfNull(db);
             ArgumentNullException.ThrowIfNull(description);
@@ -234,9 +223,6 @@ namespace Eggnog.Relations
             var bindings = new RuleBindings(vars.Count);
             for (var i = 0; i < vars.Count; i++)
                 bindings.Bind(new VariableId(i), query.NewVariable(vars[i].Name));
-
-            if (stopOnContradiction is { } stop)
-                bindings.SetStopOnContradiction(stop.Table, stop.Stop);
 
             var atomMapping = new AtomId[atoms.Count];
             for (var i = 0; i < atoms.Count; i++)

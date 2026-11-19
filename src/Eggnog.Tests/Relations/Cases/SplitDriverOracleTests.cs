@@ -28,7 +28,7 @@ namespace Eggnog.Relations.Tests
             SplitDriver? driver = null;
             var report = new SplitReport();
             var schedule = new RecordingSchedule((@case, depth, allowSplits) => allowSplits && driver!.Step(@case, depth, report));
-            driver = new SplitDriver([w.BooleanOfB(0), nested], schedule, null, w.Spec, new SplitOptions { DepthLimit = 3 });
+            driver = new SplitDriver([w.BooleanOfB(0), nested], schedule, w.Spec, new SplitOptions { DepthLimit = 3 });
 
             Assert.True(driver.Step(g.Root, 0, report));
             Assert.Equal(6, report.CasesOpened);
@@ -52,7 +52,7 @@ namespace Eggnog.Relations.Tests
             using var scope = g.Root.CreateChild(ContextOptions.Case);
             var dead = new TestSplitSource(0, _ => [([w.D.Rep], 2)], (@case, _, _) => @case.StageRow(g.Bottom, [g.Unit]));
             var schedule = new RecordingSchedule();
-            var driver = new SplitDriver([dead, w.BooleanOfB(1)], schedule, null, w.Spec, SplitOptions.Default);
+            var driver = new SplitDriver([dead, w.BooleanOfB(1)], schedule, w.Spec, SplitOptions.Default);
             var report = new SplitReport();
 
             Assert.True(driver.Step(scope, 0, report));
@@ -86,7 +86,7 @@ namespace Eggnog.Relations.Tests
 
                 return false;
             });
-            var driver = new SplitDriver([w.BooleanOfB(0)], schedule, null, w.Spec, new SplitOptions { DepthLimit = 1 });
+            var driver = new SplitDriver([w.BooleanOfB(0)], schedule, w.Spec, new SplitOptions { DepthLimit = 1 });
 
             Assert.True(driver.Step(g.Root, 0, new SplitReport()));
             Assert.Equal(2, schedule.Calls.Count);
@@ -115,7 +115,7 @@ namespace Eggnog.Relations.Tests
                 if (i == 1)
                     throw new InvalidOperationException("assume failed");
             });
-            var driver = new SplitDriver([failing], new RecordingSchedule(), null, w.Spec, SplitOptions.Default);
+            var driver = new SplitDriver([failing], new RecordingSchedule(), w.Spec, SplitOptions.Default);
 
             Assert.Throws<InvalidOperationException>(() => driver.Step(g.Root, 0, new SplitReport()));
             Assert.Equal(1, g.Root.SplitRecordCount);

@@ -12,9 +12,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Contradiction in the bridge: designating the contradiction function (atomically with child creation), the early
-    /// stop of a case's search, the stop flag a run reports, and contradiction as an ordinary fact elsewhere. Named
-    /// apart from the storage <c>ContradictionTests</c>.
+    /// Contradiction in the bridge: designating the contradiction function (atomically with child creation), a case
+    /// that stops at the merge after its whole search, the stop flag a run reports, and contradiction as an ordinary
+    /// fact elsewhere. Named apart from the storage <c>ContradictionTests</c>.
     /// </summary>
     public class BridgeContradictionTests
     {
@@ -24,13 +24,11 @@ namespace Eggnog.Relations.Tests
         {
             var g = new ContextGraph();
             Assert.Null(g.EGraph.Contradiction);
-            Assert.Null(g.EGraph.StopOnContradiction);
             Assert.Throws<ArgumentException>(() => g.EGraph.DesignateContradiction(g.Mark));
             Assert.Throws<ArgumentException>(() => g.EGraph.DesignateContradiction(new FunctionId(99)));
             g.EGraph.DesignateContradiction(g.Bottom);
             Assert.Equal(g.Bottom, g.EGraph.Contradiction);
             Assert.Equal(g.EGraph.GetTable(g.Bottom), g.EGraph.Store.Schema.Contradiction);
-            Assert.IsType<StopOnContradictionFunction>(g.EGraph.Database.GetExternalFunction(g.EGraph.StopOnContradiction!.Value));
             Assert.Throws<InvalidOperationException>(() => g.EGraph.DesignateContradiction(g.Bottom));
 
             var late = new ContextGraph();
@@ -67,11 +65,12 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The early stop: the insert into the contradiction function stops a case's search, so the rules after it
-        /// match nothing, while in an ordinary child the contradiction is a fact like any other and every rule runs.
+        /// A case stops at the merge, after its whole search: the insert into the contradiction function is an ordinary
+        /// write, so every rule of the run matches in full before the merge that applies the row stops the case, while
+        /// in an ordinary child the contradiction is a fact like any other and the child goes on.
         /// </summary>
         [Fact]
-        public void TheEarlyStopCutsACasesSearchShort()
+        public void ACasesSearchRunsInFullBeforeTheMergeStopsIt()
         {
             var g = new ContextGraph();
             g.EGraph.DesignateContradiction(g.Bottom);
@@ -87,8 +86,8 @@ namespace Eggnog.Relations.Tests
             using var @case = g.Root.CreateChild(ContextOptions.Case);
             using var plain = g.Root.CreateChild();
 
-            // More marks than one action batch (Bindings.DefaultBatchSize): the first full batch runs the insert and
-            // its early stop while the search is still going.
+            // More marks than one action batch (Bindings.DefaultBatchSize): the batches after the one that first writes
+            // the contradiction still run.
             const int Marks = 3 * Bindings.DefaultBatchSize;
             for (var i = 0; i < Marks; i++)
             {
@@ -101,8 +100,9 @@ namespace Eggnog.Relations.Tests
 
             var stopped = @case.RunRules(bottom, copy);
             Assert.True(stopped.Stopped);
-            Assert.True(stopped.RuleSetReport.NumMatches("mark-bottom") < Marks);
-            Assert.Equal(0, stopped.RuleSetReport.NumMatches("edge-path"));
+            Assert.True(@case.IsStopped);
+            Assert.Equal(Marks, stopped.RuleSetReport.NumMatches("mark-bottom"));
+            Assert.Equal(9, stopped.RuleSetReport.NumMatches("edge-path"));
 
             var ordinary = plain.RunRules(bottom, copy);
             Assert.False(ordinary.Stopped);
@@ -115,8 +115,7 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// At the root a contradiction is an ordinary fact: the early-stop function does nothing there, and runs
-        /// continue.
+        /// At the root a contradiction is an ordinary fact: runs continue.
         /// </summary>
         [Fact]
         public void TheRootNeverStops()
@@ -216,11 +215,11 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A rule planned before the designation keeps its plan without the early stop: the case still stops when the
-        /// contradiction row merges, but the rest of the search runs.
+        /// A plan does not depend on the designation: a rule planned before it stops a case as one planned after does,
+        /// when the contradiction row merges, after the whole search.
         /// </summary>
         [Fact]
-        public void ARulePlannedBeforeTheDesignationStopsOnlyAtTheMerge()
+        public void ARulePlannedBeforeTheDesignationStopsACaseAlike()
         {
             var g = new ContextGraph();
             var bottom = g.MarkIsBottom();

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 
 using Xunit;
 
@@ -13,9 +14,9 @@ namespace Eggnog.Relations.Tests
     /// pass <see cref="ParallelHeuristics.DbLevelThreshold"/>, and the layers its parallel action tasks create are
     /// created safely. Exercised through the bridge's <see cref="EGraphContext.Saturate"/>: with the child's rule sets
     /// forced parallel (<see cref="Database.ParallelRuleSetsOverride"/>), so that the test need not grow a child past
-    /// the threshold; and in children past the threshold run under <see cref="ConcurrentChildren"/>, whose rule sets go
-    /// parallel by the heuristics inside a leased body. Each child must end equal to a serial run of its program and
-    /// pass its invariant checks. That a child given the force runs its rules on two threads at once is checked by
+    /// the threshold; and in children past the threshold that run concurrently, each on a task of its own, whose rule
+    /// sets go parallel by the heuristics. Each child must end equal to a serial run of its program and pass its
+    /// invariant checks. That a child given the force runs its rules on two threads at once is checked by
     /// <see cref="ChildForcedParallelRuleSetTests"/>.
     /// </summary>
     public class ChildParallelRuleSetTests
@@ -74,8 +75,8 @@ namespace Eggnog.Relations.Tests
         const int Children = 4;
 
         /// <summary>
-        /// Four children of a frozen root, each with four threads (two run at a time under a budget of eight), each
-        /// asserts 11,000 edges of its own and saturates <c>edge → path</c> and the transitive rule.
+        /// Four children of a frozen root, each with four threads and on a task of its own, each asserts 11,000 edges of
+        /// its own and saturates <c>edge → path</c> and the transitive rule.
         /// </summary>
         [Fact]
         public void ParallelRuleSetsInConcurrentChildrenEqualSerialReplays()
@@ -110,7 +111,7 @@ namespace Eggnog.Relations.Tests
             try
             {
                 Assert.All(children, c => Assert.Equal(4, c.Parallelism.DegreeOfParallelism));
-                ConcurrentChildren.Run(children, (child, i) => Program(child, i));
+                Task.WaitAll(children.Select((child, i) => Task.Run(() => Program(child, i))).ToArray());
                 for (var i = 0; i < Children; i++)
                 {
                     children[i].CheckInvariants();

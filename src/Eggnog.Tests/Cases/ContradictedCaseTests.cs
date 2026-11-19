@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 
 using Eggnog.Tests.Support;
 
@@ -12,7 +13,10 @@ namespace Eggnog.Tests.Cases
     /// and its identity, does nothing on <c>Assume</c>, returns <c>false</c> from <c>Union</c>, returns at once from
     /// <c>Run</c>, may be disposed, and refuses every other read and write with
     /// <see cref="ScopeContradictedException"/>. Scopes under a stopped case answer as it does, and a case its parent's
-    /// contradiction reached stops when it catches up. Any other contradictory scope stays fully usable.
+    /// contradiction reached stops when it catches up. Any other contradictory scope stays fully usable. A case stops at
+    /// the merge of the iteration that contradicts it, after that iteration's whole search, and what the search wrote
+    /// and drew from the graph stays: its rows count against a split run's row limit until the lift, and the values it
+    /// interned and the ids it reserved stay for every scope.
     /// </summary>
     public sealed class ContradictedCaseTests
     {
@@ -638,12 +642,13 @@ namespace Eggnog.Tests.Cases
         }
 
         /// <summary>
-        /// A rule that derives <c>graph.Contradiction</c> in a case cuts the case's search short once its first batch of
-        /// matches runs, although the rule layer writes the relation through a lookup-or-insert; in a plain child the
-        /// contradiction is an ordinary fact and the search runs in full.
+        /// A rule that derives <c>graph.Contradiction</c> in a case stops the case at the iteration's merge, after the
+        /// iteration's search has run in full: the batches of matches after the one that first writes the relation still
+        /// run, and so do the rules after it and the user code they call, as in a plain child, where the contradiction is
+        /// an ordinary fact.
         /// </summary>
         [Fact]
-        public void ARuleThatDerivesTheContradictionCutsACasesSearchShort()
+        public void ARuleThatDerivesTheContradictionStopsACaseAfterItsSearch()
         {
             var t = new NodeTheory();
             var parent = t.Root.CreateChild();
@@ -651,7 +656,7 @@ namespace Eggnog.Tests.Cases
             var @case = cases.Add();
             var plain = parent.CreateChild();
 
-            // More facts than one action batch: the first batch's write of the contradiction stops the search.
+            // More facts than one action batch, so the search goes on past the batch that writes the contradiction.
             const int Facts = 3 * Relations.Bindings.DefaultBatchSize;
             for (var i = 0; i < Facts; i++)
             {
@@ -659,15 +664,157 @@ namespace Eggnog.Tests.Cases
                 plain.Assume(t.Num.Of((long)i));
             }
 
+            var calls = 0;
             var rule = t.Rules.DefineRule("num contradicts", r => { var n = r.Var<long>("n"); r.When(t.Num.Of(n)); r.Then(t.Graph.Contradiction.Of()); });
+            var later = t.Rules.DefineRule("num is counted", r => { var n = r.Var<long>("n"); r.When(t.Num.Of(n)); r.ThenCall(_ => Interlocked.Increment(ref calls)); });
 
             var stopped = @case.Run(t.Rules);
+            Assert.True(@case.Engine.IsStopped);
             Assert.True(@case.IsContradictory);
-            Assert.True(stopped.Rules[rule].Matches < Facts);
+            Assert.Equal(Facts, stopped.Rules[rule].Matches);
+            Assert.Equal(Facts, stopped.Rules[later].Matches);
+            Assert.Equal(Facts, calls);
 
             var ordinary = plain.Run(t.Rules);
             Assert.True(plain.IsContradictory);
             Assert.Equal(Facts, ordinary.Rules[rule].Matches);
+            Assert.Equal(Facts, ordinary.Rules[later].Matches);
+            Assert.Equal(2 * Facts, calls);
+        }
+
+        /// <summary>
+        /// A failure in the iteration that contradicts a case, in a match after the batch that writes the relation,
+        /// throws from the case's run as a failure in any run does; the iteration's merge still stops the case, which is
+        /// not faulted, and the lift drops it as vacuous.
+        /// </summary>
+        [Fact]
+        public void AFailureInTheIterationThatContradictsACaseIsThrown()
+        {
+            var t = new NodeTheory();
+            var parent = t.Root.CreateChild();
+            using var cases = parent.OpenCases();
+            var @case = cases.Add();
+            const int Facts = 3 * Relations.Bindings.DefaultBatchSize;
+            for (var i = 0; i < Facts; i++)
+                @case.Assume(t.Num.Of((long)i));
+
+            t.Rules.DefineRule("num contradicts", r => { var n = r.Var<long>("n"); r.When(t.Num.Of(n)); r.Then(t.Graph.Contradiction.Of()); });
+            t.Rules.DefineRule("the last num fails", r =>
+            {
+                var n = r.Var<long>("n");
+                r.When(t.Num.Of(n));
+                r.ThenCall(c =>
+                {
+                    if (c.Get(n) == Facts - 1)
+                        throw new InvalidOperationException("the last num");
+                });
+            });
+
+            var failure = Assert.Throws<RuleEvaluationException>(() => @case.Run(t.Rules));
+            Assert.IsType<InvalidOperationException>(failure.InnerException);
+            Assert.True(@case.IsContradictory);
+            Assert.False(@case.IsFaulted);
+            Assert.True(cases.Lift().ParentContradicted);
+            Assert.True(@case.IsDisposed);
+        }
+
+        /// <summary>
+        /// What a split's case writes in the iteration that contradicts it stays in the case until the split step's lift
+        /// drops it, and counts against the run's row limit while the step's other cases run: here it exceeds the limit,
+        /// so the run stops before the other case derives its fact and before the lift, and the split scope gets
+        /// nothing. Without the limit the same run lifts the other case's fact.
+        /// </summary>
+        [Fact]
+        public void AStoppedCasesRowsCountAgainstTheRowLimitUntilTheLift()
+        {
+            const int Facts = 3 * Relations.Bindings.DefaultBatchSize;
+            static (ChooseSplitTheory T, Relation<long> Derived, Scope Scope) Split()
+            {
+                // The case for "a" contradicts and copies every num; the case for "b" derives one fact. The nums live in
+                // the root, so the scope and the cases own few rows besides what the cases derive.
+                var t = new ChooseSplitTheory();
+                var num = t.Graph.DefineRelation<long>("num");
+                var seen = t.Graph.DefineRelation<long>("seen");
+                var derived = t.Graph.DefineRelation<long>("derived");
+                t.Rules.DefineRule("a contradicts", r => { var (p, n) = r.Vars<string, long>("p", "n"); r.When(t.Chosen.Of(p, "a"), num.Of(n)); r.Then(t.Graph.Contradiction.Of()); });
+                t.Rules.DefineRule("a copies", r => { var (p, n) = r.Vars<string, long>("p", "n"); r.When(t.Chosen.Of(p, "a"), num.Of(n)); r.Then(seen.Of(n)); });
+                t.Rules.DefineRule("b derives", r => { var p = r.Var<string>("p"); r.When(t.Chosen.Of(p, "b")); r.Then(derived.Of(1L)); });
+                for (var i = 0; i < Facts; i++)
+                    t.Graph.Root.Assume(num.Of((long)i));
+
+                var scope = t.Graph.Root.CreateChild();
+                scope.Assume(t.Dom.Of("kind").Is(Set.Of(["a", "b"])));
+                return (t, derived, scope);
+            }
+
+            // Far above what the scope and the cases hold before the case for "a" runs, far below what it then holds.
+            var (t, derived, scope) = Split();
+            var limited = scope.Run(Schedule.Split(t.Split, Schedule.Saturate(t.Rules)), new RunOptions { RowLimit = 50 });
+            Assert.Equal(RunStopReason.RowLimit, limited.StopReason);
+            Assert.Equal(2, limited.CasesOpened);
+            Assert.Equal(0, limited.Lifts);
+            Assert.False(scope.Check(derived.Of(1L)));
+            Assert.False(scope.Check(t.Chosen.Of("kind", "b")));
+            Assert.Empty(scope.Children);
+
+            (t, derived, scope) = Split();
+            var unlimited = scope.Run(Schedule.Split(t.Split, Schedule.Saturate(t.Rules)));
+            Assert.Equal(RunStopReason.Completed, unlimited.StopReason);
+            Assert.Equal(1, unlimited.Lifts);
+            Assert.True(scope.Check(derived.Of(1L)));
+            Assert.True(scope.Check(t.Chosen.Of("kind", "b")));
+        }
+
+        /// <summary>
+        /// What the iteration that contradicts a case draws from the graph stays after the case is disposed: the ids of
+        /// the terms a later rule of the iteration makes count in the graph's usage, and the strings another computes
+        /// keep the cells they were interned with in the graph's one pool. So <c>ordering-min</c> in the parent, which
+        /// compares cells, takes <c>"s2"</c> for the lesser of <c>"s1"</c> and <c>"s2"</c>, as the case interned them,
+        /// though the parent writes <c>"s1"</c> first.
+        /// </summary>
+        [Fact]
+        public void WhatTheIterationThatContradictsACaseDrawsFromTheGraphStays()
+        {
+            const int Facts = 3 * Relations.Bindings.DefaultBatchSize;
+            var t = new NodeTheory();
+            var name = t.Graph.DefineRelation<string>("name");
+            var pick = t.Graph.DefineRelation<string>("pick");
+            t.Rules.DefineRule("num contradicts", r => { var n = r.Var<long>("n"); r.When(t.Num.Of(n)); r.Then(t.Graph.Contradiction.Of()); });
+
+            // Intern "s383" to "s0" in that order, and make a term per num, after the batch that writes the contradiction.
+            t.Rules.DefineRule("num is named", r => { var n = r.Var<long>("n"); r.When(t.Num.Of(n)); r.Then(name.Of(Compute.Of(n, v => "s" + (Facts - 1 - v)))); });
+            t.Rules.DefineRule("num is a literal", r => { var n = r.Var<long>("n"); r.When(t.Num.Of(n)); r.Make("m", t.Lit.Of(n)); });
+            var lesser = t.Graph.DefineRuleset("lesser");
+            lesser.DefineRule("the lesser name", r =>
+            {
+                var (a, b) = r.Vars<string, string>("a", "b");
+                r.When(name.Of(a), name.Of(b));
+                r.Where(a, b, (x, y) => x != y);
+                r.Then(pick.Of(Primitives.OrderingMin<string>().Of(a, b)));
+            });
+
+            var parent = t.Root.CreateChild();
+            var before = t.Graph.Usage;
+            using (var cases = parent.OpenCases())
+            {
+                var @case = cases.Add();
+                for (var i = 0; i < Facts; i++)
+                    @case.Assume(t.Num.Of((long)i));
+
+                @case.Run(t.Rules);
+                Assert.True(@case.IsContradictory);
+            }
+
+            var after = t.Graph.Usage;
+            Assert.Equal(before.InternedValues + Facts, after.InternedValues);
+            Assert.True(after.IdsReserved >= before.IdsReserved + Facts, $"{after.IdsReserved - before.IdsReserved} ids reserved");
+
+            parent.Assume(name.Of("s1"));
+            parent.Assume(name.Of("s2"));
+            parent.Run(lesser);
+            Assert.True(parent.Check(pick.Of("s2")));
+            Assert.False(parent.Check(pick.Of("s1")));
+            Assert.Equal(after.InternedValues, t.Graph.Usage.InternedValues);
         }
 
     }

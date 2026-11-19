@@ -27,8 +27,8 @@ namespace Eggnog.Relations.Tests
             var shared = w.BooleanOfB(0);
             var scheduleA = new RecordingSchedule();
             var scheduleB = new RecordingSchedule();
-            var driverA = new SplitDriver([shared], scheduleA, null, w.Spec, SplitOptions.Default);
-            var driverB = new SplitDriver([shared], scheduleB, null, w.Spec, SplitOptions.Default);
+            var driverA = new SplitDriver([shared], scheduleA, w.Spec, SplitOptions.Default);
+            var driverB = new SplitDriver([shared], scheduleB, w.Spec, SplitOptions.Default);
 
             try
             {
@@ -81,8 +81,8 @@ namespace Eggnog.Relations.Tests
             var sourceB = new TestSplitSource(0, _ => [([w.D.Rep], 2)], (@case, i, _) => @case.StageUnion(w.D, i == 0 ? w.T : w.F));
             var scheduleA = new RecordingSchedule();
             var scheduleB = new RecordingSchedule();
-            var driverA = new SplitDriver([sourceA], scheduleA, null, w.Spec, SplitOptions.Default);
-            var driverB = new SplitDriver([sourceB], scheduleB, null, w.Spec, SplitOptions.Default);
+            var driverA = new SplitDriver([sourceA], scheduleA, w.Spec, SplitOptions.Default);
+            var driverB = new SplitDriver([sourceB], scheduleB, w.Spec, SplitOptions.Default);
 
             try
             {
@@ -116,8 +116,8 @@ namespace Eggnog.Relations.Tests
             var root = w.G.Root;
             var sourceA = w.BooleanOfB(0);
             var sourceB = new TestSplitSource(0, _ => [([w.B.Rep], 2)], (@case, i, _) => @case.StageUnion(w.B, i == 0 ? w.C : w.D));
-            var driverA = new SplitDriver([sourceA], new RecordingSchedule(), null, w.Spec, SplitOptions.Default);
-            var driverB = new SplitDriver([sourceB], new RecordingSchedule(), null, w.Spec, SplitOptions.Default);
+            var driverA = new SplitDriver([sourceA], new RecordingSchedule(), w.Spec, SplitOptions.Default);
+            var driverB = new SplitDriver([sourceB], new RecordingSchedule(), w.Spec, SplitOptions.Default);
 
             try
             {

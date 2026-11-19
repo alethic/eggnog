@@ -111,9 +111,7 @@ namespace Eggnog.Relations
         /// </summary>
         /// <remarks>
         /// Computes <see cref="AllowInheritance"/> with the plan, from the plan's lowered actions and the store's schema
-        /// (<see cref="ActionReadAnalysis"/>); a rule planned on a database without a store never inherits. When the
-        /// e-graph has a contradiction function, a head write into it is followed by the early-stop call
-        /// (<see cref="StopOnContradictionFunction"/>). Cold path.
+        /// (<see cref="ActionReadAnalysis"/>); a rule planned on a database without a store never inherits. Cold path.
         /// </remarks>
         /// <param name="database">The database of the context that plans the rule; its views must be current in a
         /// child.</param>
@@ -130,7 +128,7 @@ namespace Eggnog.Relations
                 if (cachedPlan is { } planned)
                     return planned;
 
-                var plan = Query.BuildCachedPlan(database, Description, owner?.ContradictionHook);
+                var plan = Query.BuildCachedPlan(database, Description);
                 var inherit = Query.SemiNaive
                     && database.Owner is { } context
                     && ActionReadAnalysis.IsQueryDetermined(plan.Plan.Actions, context.Store.Schema, database.ExternalFunctions);

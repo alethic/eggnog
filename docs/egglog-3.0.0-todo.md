@@ -42,7 +42,7 @@ nothing new to evaluate:
   `concurrency/src/threadpool/mod.rs`, `egglog-bridge/src/lib.rs:143-274`, `core-relations/src/parallel.rs`. Eggnog:
   the engine's `Relations/Bridge/EGraph.cs` defaults to every processor (`ParallelHeuristics.Default`); the library's
   `EGraphOptions.DegreeOfParallelism` defaults to 1, as upstream now does. Parallel work runs on the .NET pool
-  (`Parallel.For`, `Relations/Execution/WorkScope.cs`, `Relations/Concurrency/ParallelismBudget.cs`).
+  (`Parallel.For`, `Relations/Execution/WorkScope.cs`).
 - [ ] **Join-index key order** (#948, *behaviour*). A trie node's index over its subset is now a sorted array, so
   `Prober::for_each` yields keys in ascending value order; at the pin, a subset under 512 rows yielded them in order of
   first appearance. The matches are the same, but they reach the actions in another order, so fresh ids and

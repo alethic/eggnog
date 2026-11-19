@@ -98,7 +98,7 @@ namespace Eggnog.Relations.Tests
                 Assert.Equal(0, Restamped(@case));
                 return changed;
             });
-            driver = new SplitDriver([w.BooleanOfB(0), w.SplitOfD(1)], schedule, null, w.Spec, new SplitOptions { DepthLimit = 3 });
+            driver = new SplitDriver([w.BooleanOfB(0), w.SplitOfD(1)], schedule, w.Spec, new SplitOptions { DepthLimit = 3 });
             try
             {
                 Assert.True(driver.Step(scope, 0, report));

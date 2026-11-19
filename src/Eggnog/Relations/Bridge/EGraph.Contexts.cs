@@ -13,12 +13,6 @@ namespace Eggnog.Relations
         int contradiction;
 
         /// <summary>
-        /// The early-stop function (<see cref="StopOnContradictionFunction"/>), registered with the contradiction
-        /// function.
-        /// </summary>
-        ExternalFunctionId stopOnContradiction;
-
-        /// <summary>
         /// The number of context-local slots made so far (<see cref="NewLocalSlot{T}"/>).
         /// </summary>
         int localSlotCount;
@@ -28,26 +22,6 @@ namespace Eggnog.Relations
         /// (<see cref="DesignateContradiction"/>).
         /// </summary>
         internal FunctionId? Contradiction => Volatile.Read(ref contradiction) is var c and > 0 ? new FunctionId(c - 1) : null;
-
-        /// <summary>
-        /// Gets the early-stop function, or <c>null</c> when no contradiction function is designated.
-        /// </summary>
-        internal ExternalFunctionId? StopOnContradiction => Contradiction is null ? null : stopOnContradiction;
-
-        /// <summary>
-        /// Gets the contradiction function's table and the early-stop function, which rule lowering appends after every
-        /// head write into that table (an insert or a lookup-or-insert); <c>null</c> when no contradiction function is
-        /// designated.
-        /// </summary>
-        internal (TableId Table, ExternalFunctionId Stop)? ContradictionHook => Contradiction is { } c ? (GetTable(c), stopOnContradiction) : null;
-
-        /// <summary>
-        /// Gets the threads that concurrent children lease from: as many as the degree of parallelism the e-graph was
-        /// built with (<see cref="ParallelHeuristics.DegreeOfParallelism"/> of the root's heuristics).
-        /// <see cref="ConcurrentChildren"/> runs each child's body under a lease of the child's own degree of
-        /// parallelism, so children running side by side never use more threads than the root alone may.
-        /// </summary>
-        internal ParallelismBudget ParallelismBudget => parallelismBudget;
 
         /// <summary>
         /// Gets the number of context-local slots made so far.
@@ -62,16 +36,13 @@ namespace Eggnog.Relations
         /// </summary>
         /// <remarks>
         /// <para>
-        /// Rules planned after the designation follow every head write into the function (an insert or a
-        /// lookup-or-insert) with the early-stop call (<see cref="StopOnContradictionFunction"/>), which cuts a stopping
-        /// case's search short; a rule planned
-        /// before the designation keeps its plan, so its write only sets the stop flag when it merges. The rule layer
-        /// designates its contradiction relation when it builds the graph, before any rule runs.
+        /// A rule's head write into the function (an insert or a lookup-or-insert) is an ordinary write: the row stops
+        /// the context when the merge after the rule set's run applies it, and the run itself is not cut short. The rule
+        /// layer designates its contradiction relation when it builds the graph, before any rule runs.
         /// </para>
         /// <para>
         /// Refused once the store has had a child: a child created before the designation would have missed the check
-        /// made at its creation (whether its parent's view holds a contradiction row), and plans run in it would lack
-        /// the early stop.
+        /// made at its creation (whether its parent's view holds a contradiction row).
         /// </para>
         /// </remarks>
         /// <param name="function">A function with no key columns: the schema is its output alone (the rule layer's
@@ -101,7 +72,6 @@ namespace Eggnog.Relations
                     store.DesignateContradiction(info.Table);
                 }
 
-                stopOnContradiction = RegisterExternalFunction(new StopOnContradictionFunction());
                 Volatile.Write(ref contradiction, function.Index + 1);
             }
         }

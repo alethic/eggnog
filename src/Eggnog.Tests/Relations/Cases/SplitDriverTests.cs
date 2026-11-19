@@ -8,9 +8,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The split driver: lift before deepening, demand before any case exists, keys covered by live records in the
-    /// scope or an ancestor, limits, depth-first disposal, vacuous cases dropped, exceptions that leave the records for
-    /// disposal, and the domain never held while sources and schedules run.
+    /// The split driver: lift before deepening, keys covered by live records in the scope or an ancestor, limits,
+    /// depth-first disposal, vacuous cases dropped, exceptions that leave the records for disposal, and the domain never
+    /// held while sources and schedules run.
     /// </summary>
     public class SplitDriverTests
     {
@@ -45,7 +45,7 @@ namespace Eggnog.Relations.Tests
 
                 return changed;
             }) { Log = log };
-            driver = new SplitDriver(sources, schedule, null, w.Spec, new SplitOptions { DepthLimit = 3 });
+            driver = new SplitDriver(sources, schedule, w.Spec, new SplitOptions { DepthLimit = 3 });
 
             Assert.True(driver.Step(g.Root, 0, report));
 
@@ -74,37 +74,6 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Demand-driven splitting: a request the demand rejects opens no case; the demand is asked before any case
-        /// exists.
-        /// </summary>
-        [Fact]
-        public void TheDemandFiltersBeforeAnyCaseExists()
-        {
-            var w = new SplitWorld();
-            var g = w.G;
-            var demand = new TestSplitDemand(r =>
-            {
-                Assert.Empty(g.Root.Context.SnapshotChildren());
-                return r.Key.Source == 1;
-            });
-            var ofD = new TestSplitSource(1, _ => [([w.D.Rep], 2)], (@case, _, _) => g.Assert(@case, g.Mark, w.D));
-            var driver = new SplitDriver([w.BooleanOfB(0), ofD], new RecordingSchedule(), demand, w.Spec, SplitOptions.Default);
-            var report = new SplitReport();
-            Assert.True(driver.Step(g.Root, 0, report));
-            Assert.Equal(2, demand.Calls);
-            Assert.Equal(1, report.SplitsSkipped);
-            Assert.Equal(2, report.CasesOpened);
-            Assert.Equal(1, g.Root.SplitRecordCount);
-            SplitDriver.DisposeRecords(g.Root);
-
-            var none = new SplitDriver([w.BooleanOfB(0)], new RecordingSchedule(), new TestSplitDemand(_ => false), w.Spec, SplitOptions.Default);
-            var skipped = new SplitReport();
-            Assert.False(none.Step(g.Root, 0, skipped));
-            Assert.Equal(1, skipped.SplitsSkipped);
-            Assert.Empty(g.Root.Context.SnapshotChildren());
-        }
-
-        /// <summary>
         /// A key covered by a live record in the scope or any ancestor is skipped, so a split already open is not
         /// opened again; a second request for one key in a step is skipped too; once the records are disposed the key
         /// is split again.
@@ -115,7 +84,7 @@ namespace Eggnog.Relations.Tests
             var w = new SplitWorld();
             var g = w.G;
             var twice = new TestSplitSource(0, _ => [([w.B.Rep], 2), ([w.B.Rep], 2)], (@case, i, _) => @case.StageUnion(w.B, i == 0 ? w.T : w.F));
-            var driver = new SplitDriver([twice], new RecordingSchedule(), null, w.Spec, SplitOptions.Default);
+            var driver = new SplitDriver([twice], new RecordingSchedule(), w.Spec, SplitOptions.Default);
             var report = new SplitReport();
             Assert.True(driver.Step(g.Root, 0, report));
             Assert.Equal(1, report.SplitsSkipped);
@@ -130,7 +99,7 @@ namespace Eggnog.Relations.Tests
 
             // A source that declines a request counts it itself.
             var declining = new TestSplitSource(0, _ => [([w.D.Rep], 0)], (_, _, _) => { });
-            var other = new SplitDriver([declining], new RecordingSchedule(), null, w.Spec, SplitOptions.Default);
+            var other = new SplitDriver([declining], new RecordingSchedule(), w.Spec, SplitOptions.Default);
             Assert.False(other.Step(g.Root, 0, report));
             Assert.Equal(6, report.SplitsSkipped);
 
@@ -151,7 +120,7 @@ namespace Eggnog.Relations.Tests
             var g = w.G;
             var wide = new TestSplitSource(0, _ => [([w.B.Rep], 3), ([w.D.Rep], 2)], (@case, i, key) => g.Assert(@case, g.Mark, new Value(key[0])));
             var schedule = new RecordingSchedule();
-            var driver = new SplitDriver([wide], schedule, null, w.Spec, new SplitOptions { CaseLimit = 2, DepthLimit = 1 });
+            var driver = new SplitDriver([wide], schedule, w.Spec, new SplitOptions { CaseLimit = 2, DepthLimit = 1 });
             var report = new SplitReport();
             Assert.True(driver.Step(g.Root, 0, report));
             Assert.Equal(1, report.SplitsSkipped);
@@ -190,7 +159,7 @@ namespace Eggnog.Relations.Tests
                 all.Add(@case);
                 return allowSplits && driver!.Step(@case, depth, report);
             });
-            driver = new SplitDriver([w.BooleanOfB(0), w.SplitOfD(1)], schedule, null, w.Spec, new SplitOptions { DepthLimit = 2 });
+            driver = new SplitDriver([w.BooleanOfB(0), w.SplitOfD(1)], schedule, w.Spec, new SplitOptions { DepthLimit = 2 });
             Assert.True(driver.Step(g.Root, 0, report));
             Assert.Equal(6, report.CasesOpened);
             Assert.Contains(all, c => c.Depth == 2);
@@ -221,7 +190,7 @@ namespace Eggnog.Relations.Tests
                     g.Assert(@case, g.Mark, w.B);
             });
             var schedule = new RecordingSchedule();
-            var driver = new SplitDriver([source], schedule, null, w.Spec, SplitOptions.Default);
+            var driver = new SplitDriver([source], schedule, w.Spec, SplitOptions.Default);
             Assert.True(driver.Step(g.Root, 0, new SplitReport()));
             Assert.Equal(2, schedule.Calls.Count(c => c.AllowSplits == false));
             Assert.True(g.Root.ContainsKey(g.Mark, [w.B]));
@@ -233,7 +202,7 @@ namespace Eggnog.Relations.Tests
             w.G.Root.Freeze();
             using var scope = g.Root.CreateChild(ContextOptions.Case);
             var dead = new TestSplitSource(0, _ => [([w.D.Rep], 2)], (@case, _, _) => @case.StageRow(g.Bottom, [g.Unit]));
-            var deadDriver = new SplitDriver([dead], new RecordingSchedule(), null, w.Spec, SplitOptions.Default);
+            var deadDriver = new SplitDriver([dead], new RecordingSchedule(), w.Spec, SplitOptions.Default);
             Assert.True(deadDriver.Step(scope, 0, new SplitReport()));
             Assert.True(scope.IsStopped);
             Assert.False(deadDriver.Step(scope, 0, new SplitReport()));
@@ -250,7 +219,7 @@ namespace Eggnog.Relations.Tests
             var w = new SplitWorld();
             var g = w.G;
             var schedule = new RecordingSchedule((_, _, _) => throw new OperationCanceledException());
-            var driver = new SplitDriver([w.BooleanOfB(0)], schedule, null, w.Spec, SplitOptions.Default);
+            var driver = new SplitDriver([w.BooleanOfB(0)], schedule, w.Spec, SplitOptions.Default);
             Assert.Throws<OperationCanceledException>(() => driver.Step(g.Root, 0, new SplitReport()));
             Assert.Equal(1, g.Root.SplitRecordCount);
             Assert.Equal(2, g.Root.Context.SnapshotChildren().Length);
@@ -265,12 +234,12 @@ namespace Eggnog.Relations.Tests
             var w = new SplitWorld();
             var g = w.G;
             var bad = new TestSplitSource(3, _ => [([w.B.Rep], 2)], (_, _, _) => { });
-            var driver = new SplitDriver([bad], new RecordingSchedule(), null, w.Spec, SplitOptions.Default);
+            var driver = new SplitDriver([bad], new RecordingSchedule(), w.Spec, SplitOptions.Default);
             Assert.Throws<InvalidOperationException>(() => driver.Step(g.Root, 0, new SplitReport()));
-            Assert.Throws<ArgumentException>(() => new SplitDriver([null!], new RecordingSchedule(), null, w.Spec, SplitOptions.Default));
+            Assert.Throws<ArgumentException>(() => new SplitDriver([null!], new RecordingSchedule(), w.Spec, SplitOptions.Default));
 
             g.Root.Freeze();
-            var good = new SplitDriver([w.BooleanOfB(0)], new RecordingSchedule(), null, w.Spec, SplitOptions.Default);
+            var good = new SplitDriver([w.BooleanOfB(0)], new RecordingSchedule(), w.Spec, SplitOptions.Default);
             Assert.Throws<InvalidOperationException>(() => good.Step(g.Root, 0, new SplitReport()));
         }
 

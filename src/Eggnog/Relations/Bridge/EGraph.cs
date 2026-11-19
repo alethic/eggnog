@@ -49,9 +49,10 @@ namespace Eggnog.Relations
     /// <see cref="RegisterExternalFunction"/>, <see cref="NewLocalSlot{T}"/>,
     /// <see cref="RegisterContainerType{TContainer}"/>) may be made from any thread (a table or a container type, once
     /// the root is frozen or while no other thread uses it): they publish copy-on-write. A context and every descendant
-    /// created under it while it is not frozen form one thread domain; children of a frozen context may run concurrently
-    /// (<see cref="ConcurrentChildren"/>, within <see cref="ParallelismBudget"/>). The parallelism of a single operation
-    /// is inside the database's operations.
+    /// created under it while it is not frozen form one thread domain; children of a frozen context have domains of
+    /// their own and may run concurrently, one host thread each, serially inside unless their options say otherwise
+    /// (<see cref="ContextOptions.Parallelism"/>). The parallelism of a single operation is inside the database's
+    /// operations.
     /// </para>
     /// </remarks>
     internal sealed partial class EGraph
@@ -84,7 +85,6 @@ namespace Eggnog.Relations
         readonly ActionRegistry actionRegistry;
         readonly UnionContainerMerge containerMerge;
         readonly EGraphContext root;
-        readonly ParallelismBudget parallelismBudget;
 
         /// <summary>
         /// Serializes definitions: functions and the contradiction function.
@@ -123,7 +123,6 @@ namespace Eggnog.Relations
             // The store lays out the union-find and the two counters (lib.rs:140-152): table 0, counter 0 for ids,
             // counter 1 for timestamps, started at 1 so that a rule's initial last run, 0, sees every row.
             store = new Store(parallelism);
-            parallelismBudget = new ParallelismBudget(parallelism.DegreeOfParallelism);
             db = store.Root.Database;
             ufTable = store.UnionFindTable;
             unionFind = store.RootUnionFind;

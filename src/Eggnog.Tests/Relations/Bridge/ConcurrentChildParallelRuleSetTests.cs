@@ -1,4 +1,5 @@
 using System.Linq;
+using System.Threading.Tasks;
 
 using Xunit;
 
@@ -6,9 +7,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// A child's internal parallel rule set under <see cref="ConcurrentChildren"/>, with more than
+    /// A child's internal parallel rule set while sibling children run on tasks of their own, with more than
     /// <see cref="ParallelHeuristics.DbLevelThreshold"/> rows of its own, so that the child's rule sets go parallel by
-    /// the heuristics (not forced, as in <see cref="ChildParallelRuleSetTests"/>) while sibling children run on other
+    /// the heuristics (not forced, as in <see cref="ChildParallelRuleSetTests"/>) while its siblings run on other
     /// threads. Each child must equal a serial replay of its program in a fresh serial child of the same frozen root,
     /// and pass its invariant checks.
     /// </summary>
@@ -35,7 +36,7 @@ namespace Eggnog.Relations.Tests
             var paths = new string[Children][];
             try
             {
-                ConcurrentChildren.Run(children, (child, i) =>
+                Task.WaitAll(children.Select((child, i) => Task.Run(() =>
                 {
                     Program(g, child, ids, i);
                     var report = child.Saturate(rules, 16);
@@ -43,7 +44,7 @@ namespace Eggnog.Relations.Tests
                     sizes[i] = child.Context.Database.TotalSizeEstimate;
                     child.CheckInvariants();
                     paths[i] = ContextGraph.Keys(child, g.Path);
-                });
+                })).ToArray());
 
                 for (var i = 0; i < Children; i++)
                 {

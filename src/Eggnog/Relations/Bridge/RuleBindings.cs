@@ -22,9 +22,6 @@ namespace Eggnog.Relations
         readonly FixedBitSet grounded;
         QueryEntry nextTimestamp;
         bool hasNextTimestamp;
-        TableId stopTable;
-        ExternalFunctionId stopFunction;
-        bool hasStop;
 
         /// <summary>
         /// Initializes an environment for a rule with <paramref name="variableCount"/> variables, all unmapped.
@@ -74,32 +71,6 @@ namespace Eggnog.Relations
         /// </summary>
         /// <param name="variable">The rule variable.</param>
         public void Ground(VariableId variable) => grounded.Insert(variable.Index);
-
-        /// <summary>
-        /// Sets the contradiction early stop: every head write into <paramref name="table"/>, the e-graph's
-        /// contradiction function, is followed by a call to <paramref name="stop"/>
-        /// (<see cref="StopOnContradictionFunction"/>, <see cref="TryGetStop"/>).
-        /// </summary>
-        /// <param name="table">The contradiction function's table.</param>
-        /// <param name="stop">The early-stop function.</param>
-        public void SetStopOnContradiction(TableId table, ExternalFunctionId stop)
-        {
-            stopTable = table;
-            stopFunction = stop;
-            hasStop = true;
-        }
-
-        /// <summary>
-        /// Gets the early-stop function to call after a head write into <paramref name="table"/>.
-        /// </summary>
-        /// <param name="table">The table written into.</param>
-        /// <param name="stop">The early-stop function.</param>
-        /// <returns><c>true</c> if <paramref name="table"/> is the contradiction function's table.</returns>
-        public bool TryGetStop(TableId table, out ExternalFunctionId stop)
-        {
-            stop = stopFunction;
-            return hasStop && table == stopTable;
-        }
 
         /// <summary>
         /// Translates <paramref name="entry"/> into a core entry for a table column. egglog's <c>convert</c>.
