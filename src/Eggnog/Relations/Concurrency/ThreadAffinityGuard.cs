@@ -64,9 +64,13 @@ namespace Eggnog.Relations
         public bool IsHeld => Volatile.Read(ref owner) != 0;
 
         /// <summary>
-        /// Gets whether the calling thread holds the guard and is running a caller's code inside one of the domain's
-        /// operations (a write batch's action, a <c>ScanMerges</c> visitor). Operations that change a context of the
-        /// domain refuse to run while this is true. <c>false</c> on a thread that does not hold the guard.
+        /// Gets whether the calling thread holds the guard and is running a caller's code that one of the domain's
+        /// operations marks as a callback (<see cref="EnterCallback"/>): a write batch's or raw escape's action, a row
+        /// visitor, an extraction's cost functions, or a child's rule search with the user code it calls. Operations
+        /// that change a context of the domain refuse to run while this is true. Merge functions and the root's rule
+        /// search run unmarked, with the guard held, so a write from them is not refused as one from a callback; the
+        /// structural operations still refuse there, as they refuse any call from inside another operation of the
+        /// domain (<see cref="Depth"/>). <c>false</c> on a thread that does not hold the guard.
         /// </summary>
         public bool InCallback
         {

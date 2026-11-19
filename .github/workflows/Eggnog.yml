@@ -11,10 +11,8 @@ on:
     branches:
     - main
     - develop
+  # Every pull request, whatever its base, so a pull request stacked on another's branch is checked too.
   pull_request:
-    branches:
-    - main
-    - develop
   # A release publishes when it is published: GitHub sends no event when a draft is created. Its tag must be the
   # version GitVersion computes for the tagged commit (its semVer, exactly, with no 'v' prefix); the build refuses any
   # other tag, so the release, its tag and the package always carry one version.

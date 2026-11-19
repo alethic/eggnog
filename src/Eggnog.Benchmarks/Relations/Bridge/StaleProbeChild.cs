@@ -20,7 +20,7 @@ namespace Eggnog.Relations.Benchmarks
 
         /// <summary>
         /// One child of the root, created before the first iteration and caught up after every iteration: its cursors
-        /// move the way a split step moves a case's, but it hides nothing.
+        /// follow the root, but it hides nothing.
         /// </summary>
         CaughtUp,
 

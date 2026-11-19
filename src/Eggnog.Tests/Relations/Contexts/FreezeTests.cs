@@ -16,8 +16,8 @@ namespace Eggnog.Relations.Tests
     /// databases refuse writes, warm-up builds indexes, catalogs refresh serially, compaction at freeze respects the
     /// gate, frozen views fold every hide, and a table added after a freeze is answered through the frozen contexts'
     /// parents, also from concurrent children; and the full freeze: finds on frozen contexts write nothing, from many
-    /// threads at once, children working on local ids never write the frozen root's union-find, and no failure nobody
-    /// took is frozen into a context.
+    /// threads at once, children working on local ids never write the frozen root's union-find, no failure nobody took
+    /// is frozen into a context, and a freeze from inside a write batch is refused.
     /// </summary>
     public class FreezeTests
     {
@@ -324,9 +324,17 @@ namespace Eggnog.Relations.Tests
             grandchild.Rebuild();
             grandchild.Freeze();
 
+            // An overlay's classes slot by slot (canonical and members in order), its member count, and the journal.
+            static (string Classes, int MemberCount, uint[] Journal) Snapshot(Context context)
+            {
+                var overlay = context.Overlay!;
+                var classes = string.Join(" ", Enumerable.Range(0, overlay.SlotCount).Select(slot => $"{overlay.CanonicalOf(slot)}:{string.Join(",", overlay.MembersOf(slot).ToArray())}"));
+                return (classes, overlay.MemberCount, context.Journal!.Ids.ToArray());
+            }
+
             // A frozen root is fully compressed, so its parent array is its find.
             var parents = store.RootUnionFind.UnionFind.UnionFind.Parents.ToArray();
-            var overlays = new[] { child, grandchild }.Select(c => (c.Overlay!.Version, c.Overlay.MemberCount, c.Journal!.Ids.ToArray())).ToArray();
+            var overlays = new[] { child, grandchild }.Select(Snapshot).ToArray();
             var expected = Enumerable.Range(0, Ids).Select(i => grandchild.Find((uint)i)).ToArray();
             var expectedChild = Enumerable.Range(0, Ids).Select(i => child.Find((uint)i)).ToArray();
 
@@ -371,12 +379,12 @@ namespace Eggnog.Relations.Tests
 
             Assert.Equal(0, failures);
             Assert.Equal(parents, store.RootUnionFind.UnionFind.UnionFind.Parents.ToArray());
-            var after = new[] { child, grandchild }.Select(c => (c.Overlay!.Version, c.Overlay.MemberCount, c.Journal!.Ids.ToArray())).ToArray();
+            var after = new[] { child, grandchild }.Select(Snapshot).ToArray();
             for (var i = 0; i < overlays.Length; i++)
             {
-                Assert.Equal(overlays[i].Version, after[i].Version);
+                Assert.Equal(overlays[i].Classes, after[i].Classes);
                 Assert.Equal(overlays[i].MemberCount, after[i].MemberCount);
-                Assert.Equal(overlays[i].Item3, after[i].Item3);
+                Assert.Equal(overlays[i].Journal, after[i].Journal);
             }
 
             grandchild.CheckInvariants();
@@ -421,6 +429,39 @@ namespace Eggnog.Relations.Tests
             Assert.Throws<InvalidOperationException>(() => faulted.Freeze());
             Assert.False(faulted.IsFrozen);
             faulted.Dispose();
+        }
+
+        /// <summary>
+        /// A freeze from inside a write batch of the context's thread domain is refused before it changes anything, at
+        /// the root and in a child of a frozen root; the batch completes, and the context freezes once it is done.
+        /// </summary>
+        [Fact]
+        public void AFreezeFromInsideABatchIsRefused()
+        {
+            var store = new Store(ParallelHeuristics.Serial);
+            var f = store.AddTable(MaxFunction(1), name: "f");
+            var root = store.Root;
+            var a = root.NewId();
+            Insert(root, f, a, 1, 0);
+
+            var refused = root.Write(_ => Assert.Throws<InvalidOperationException>(() => root.Freeze()).Message);
+            Assert.Contains("inside another operation", refused);
+            Assert.False(root.IsFrozen);
+            root.Freeze();
+            Assert.True(root.IsFrozen);
+
+            // The child's parent is frozen and its batch stages nothing, so the child is clean inside it: no other
+            // refusal of the freeze applies there.
+            var child = root.CreateChild();
+            refused = child.Write(_ => Assert.Throws<InvalidOperationException>(() => child.Freeze()).Message);
+            Assert.Contains("inside another operation", refused);
+            Assert.False(child.IsFrozen);
+            Assert.False(child.IsFaulted);
+            Assert.True(child.IsClean);
+            child.Freeze();
+            Assert.True(child.IsFrozen);
+            Assert.Equal(1u, Row(child, f, a)![1]);
+            child.CheckInvariants();
         }
 
         /// <summary>

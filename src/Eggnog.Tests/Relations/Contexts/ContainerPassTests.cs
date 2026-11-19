@@ -17,11 +17,11 @@ namespace Eggnog.Relations.Tests
     /// container layers, as egglog rebuilds the copy its push makes: containers that become equal anywhere in the
     /// child's view merge with egglog's tie-break, the smaller id; the rows naming a container the child rebuilt in
     /// place are re-stamped, its own by refresh and the ancestors' by hide and copy, closed over the containers that
-    /// hold it, and its descendants learn of them from its container log. Claimed containers collide and merge as one
-    /// hash-cons does, incrementally over a layer of more than 1000 containers and in full over a smaller one. Siblings
-    /// under a frozen root pass concurrently, and a frozen child's claims are read from any thread. Containers a child
-    /// interned rebuild and merge in its pass as claimed ones do. The probes the expected values come from ran on
-    /// egglog's binary at the engine's pin, <c>5e655cae</c>.
+    /// hold it, and its descendants learn of them from its container log and close them over their own containers.
+    /// Claimed containers collide and merge as one hash-cons does, incrementally over a layer of more than 1000
+    /// containers and in full over a smaller one. Siblings under a frozen root pass concurrently, and a frozen child's
+    /// claims are read from any thread. Containers a child interned rebuild and merge in its pass as claimed ones do.
+    /// The probes the expected values come from ran on egglog's binary at the engine's pin, <c>5e655cae</c>.
     /// </summary>
     public class ContainerPassTests
     {
@@ -332,6 +332,39 @@ namespace Eggnog.Relations.Tests
             grandchild.Dispose();
             Assert.False(log.Active);
             Assert.Equal(0, log.DirtyCount);
+        }
+
+        /// <summary>
+        /// An ancestor's dirty id closes over the child's own containers: the writable root holds <c>inner = [w]</c>,
+        /// and the child interns <c>outer = [inner]</c> under an id local to it and writes a row naming it. The root's
+        /// union of <c>k</c> and <c>w</c> rebuilds <c>inner</c> in place, which its container log records; the child's
+        /// next rebuild reads it there, so <c>outer</c>, which holds <c>inner</c>, is dirty in the child too, and the
+        /// child's row naming it is re-stamped.
+        /// </summary>
+        [Fact]
+        public void AnAncestorsDirtyIdMakesTheChildsOwnContainersHoldingItDirty()
+        {
+            var (store, f, env) = Setup();
+            var root = store.Root;
+            var k = root.NewId();
+            var w = root.NewId();
+            var inner = Intern(root, w);
+            var child = root.CreateChild();
+            var outer = child.Database.WithExecutionState(state => state.Containers.GetOrInsert(new VecContainer(inner), state));
+            Assert.True(child.IsLocalId(outer));
+            Insert(child, f, outer, 5, 0);
+            child.Rebuild();
+            var stamp = Row(child, f, outer)![2];
+
+            root.Union(k, w);
+            root.Rebuild();
+            child.Rebuild();
+            Assert.Equal(new VecContainer(k), ById(child, env, inner));
+            Assert.Equal(new VecContainer(inner), ById(child, env, outer));
+            var row = Row(child, f, outer)!;
+            Assert.Equal(5u, row[1]);
+            Assert.True(row[2] > stamp, "the child's row naming its own container that holds the root's dirty id was re-stamped");
+            child.CheckInvariants();
         }
 
         /// <summary>

@@ -21,9 +21,9 @@ namespace Eggnog.Relations
     /// </para>
     /// <para>
     /// Why a class table: <see cref="Map"/> is one hash probe and one load and never writes, so the context's own rule
-    /// tasks may read it while nothing merges; and re-keying after a parent change (<see cref="Rekey"/>) and the lift's
-    /// member maps need the member lists anyway. Union merges the smaller class into the larger, relinking the
-    /// smaller's members, so a sequence of unions costs O(n log n) in total.
+    /// tasks may read it while nothing merges; and re-keying after a parent change (<see cref="Rekey"/>) needs the
+    /// member lists anyway, as do the flattening of a frozen chain and the invariant checker. Union merges the smaller
+    /// class into the larger, relinking the smaller's members, so a sequence of unions costs O(n log n) in total.
     /// </para>
     /// <para>
     /// Threading: <see cref="Map"/>, <see cref="TryGetClass"/> and the accessors are safe from many threads while no
@@ -67,7 +67,6 @@ namespace Eggnog.Relations
         int freeCount;
         int slotCount;
         int classCount;
-        int version;
         volatile bool frozen;
 
         /// <summary>
@@ -94,12 +93,6 @@ namespace Eggnog.Relations
         /// are free.
         /// </summary>
         public int SlotCount => slotCount;
-
-        /// <summary>
-        /// Gets a counter that moves with every effective <see cref="Union"/> and every <see cref="Rekey"/> that
-        /// changed a class: a cache derived from the classes (the lift's member map) is valid while it is unchanged.
-        /// </summary>
-        public int Version => version;
 
         /// <summary>
         /// Gets whether the overlay is frozen and can no longer change.
@@ -213,7 +206,6 @@ namespace Eggnog.Relations
             else
                 MergeClasses(ka, kb);
 
-            version++;
             return true;
         }
 
@@ -257,7 +249,6 @@ namespace Eggnog.Relations
             var kp = SlotOf(parentCanonical);
             var cdOld = canonicals[kd];
             var cpOld = kp >= 0 ? canonicals[kp] : parentCanonical;
-            version++;
             if (kd == kp)
             {
                 RemoveMember(kd, displaced, out _, out _);

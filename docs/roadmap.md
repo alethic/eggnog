@@ -127,8 +127,6 @@ of them fall on the same side of the gate; otherwise it is inconclusive, up to f
 - **Per-child cost.** Bytes per child are flat as the root grows from 20,000 to 2,000,000 rows (about 96 KB for 100
   unions and a rebuild, 145 KB with a flush and a rule run); time per child must stay flat within 1.5x, or children cost
   more on large graphs.
-- **Case splits against clones.** Time for case splits against full clones, reported beside the byte figures, so that
-  colored contexts are shown to beat clones in time as well as in bytes.
 - **Memory per structure.** Per-child bytes split by structure (layer tables, hidden sets, overlay, cursors, watermarks,
   indexes) from a `dotnet-gcdump` snapshot of 1,000 live children, whose total must agree with `--context-footprint`
   within 5%. It needs no idle machine.
@@ -215,21 +213,22 @@ Considered and not planned. Each line says what would reopen it.
   and a concurrency defect escapes the tests and soaks.
 - Provenance as a library feature (use the first matching step and the observer diff, with re-running without the
   ruleset as the decisive test): for a user debugging a named theory whom these routes cannot help.
-- Case splits, lifts and host-driven cases in the library: a theory reasons by the cases of a domain in its own rules,
-  over set lattices, as the `PredicateTheory` fixture's case rules do. Reopen only by a decision to make reasoning by
-  cases a library feature.
+- Case splits, lifts and host-driven cases, in the library and in the engine: a theory reasons by the cases of a domain
+  in its own rules, over set lattices, as the `PredicateTheory` fixture's case rules do. Reopen only by a decision to
+  make reasoning by cases a library feature.
 - Guarded terms as a feature, a term that differs by case built by the library: for a user who reasons over
   if-then-else guards in volume; the recipe with children is in [`architecture.md`](architecture.md), section 2.8.
 - Pairing a catch-up failure with the run's own in `RunRulesCore`: if an engine caller outside the library appears.
-- Lazy `IndexCatalog` objects: if never-probed catalogs exceed 5% of a lifted case's bytes and the root gate stays
-  within 2%.
+- Lazy `IndexCatalog` objects: if never-probed catalogs exceed 5% of a child's bytes and the root gate stays within
+  2%.
 - `ComputeCostsFromRootSorts` and `FunctionToDag` over a context: when a scope-level "print a table as terms" API is
   scheduled.
 - A remap of descendants' cursors: only as part of the hidden-set remap.
-- Parent-visible ids winning over smaller ids: if terms are lifted in volume.
-- Pruning child rows an ancestor made redundant: if such rows are 25% or more of case bytes and cases live long.
+- Parent-visible ids winning over smaller ids: if a parent that is not frozen makes, in volume, terms its children
+  made first.
+- Pruning child rows an ancestor made redundant: if such rows are 25% or more of a child's bytes and children live
+  long.
 - Flattening hidden sets: if a child hides more than 25% of an ancestor layer of 10,000 rows or more.
-- Shared ids for a term that sibling cases derive: if the term lift is used in volume.
 - Deduplicating driver keys across layer pieces: if such keys are 20% or more of child frames on a workload whose
   children are not small.
 - Per-context replanning, freeze planning control and timing sibling scopes' plans: no plan depends on freeze order, and

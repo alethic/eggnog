@@ -39,11 +39,9 @@ namespace Eggnog.Relations
         readonly UnionFindOverlay overlay;
         readonly DisplacedJournal journal;
         readonly Table parentUnionFind;
-        readonly IdBlockAllocator? localIds;
         readonly LayeredUnionFind finder;
         readonly PendingState pending;
         long ownUnions;
-        long parentIdLosers;
         volatile bool frozen;
 
         /// <summary>
@@ -54,10 +52,8 @@ namespace Eggnog.Relations
         /// <param name="journal">The child's displaced journal.</param>
         /// <param name="parentUnionFind">The parent's union-find table (a <see cref="DisplacedTable"/> or another
         /// <see cref="OverlayDisplacedTable"/>), which answers lookups of ids displaced in an ancestor.</param>
-        /// <param name="localIds">The child's id blocks, to count own losers that are parent ids beaten by a local id
-        /// (<see cref="ParentIdLosers"/>); <c>null</c> to count none.</param>
         /// <exception cref="ArgumentException"><paramref name="parentUnionFind"/> is not a union-find table.</exception>
-        public OverlayDisplacedTable(LayeredUnionFind parentFinder, UnionFindOverlay overlay, DisplacedJournal journal, Table parentUnionFind, IdBlockAllocator? localIds = null)
+        public OverlayDisplacedTable(LayeredUnionFind parentFinder, UnionFindOverlay overlay, DisplacedJournal journal, Table parentUnionFind)
             : base(TableKind.OverlayDisplaced, 3)
         {
             ArgumentNullException.ThrowIfNull(parentFinder);
@@ -71,7 +67,6 @@ namespace Eggnog.Relations
             this.overlay = overlay;
             this.journal = journal;
             this.parentUnionFind = parentUnionFind;
-            this.localIds = localIds;
             finder = parentFinder.Extend(overlay);
             pending = new PendingState(new ShardData(1), lazyQueues: true);
         }
@@ -118,13 +113,6 @@ namespace Eggnog.Relations
         /// Gets the number of effective unions merged into the table (<see cref="UnionFindStatistics.OwnUnions"/>).
         /// </summary>
         public long OwnUnions => Interlocked.Read(ref ownUnions);
-
-        /// <summary>
-        /// Gets the number of own unions whose loser was an id of an ancestor and whose winner an id local to the child
-        /// (<see cref="UnionFindStatistics.ParentIdLosers"/>): what smaller-id-wins costs when a parent that is not
-        /// frozen lifts terms after cases created them.
-        /// </summary>
-        public long ParentIdLosers => Interlocked.Read(ref parentIdLosers);
 
         /// <inheritdoc />
         public override TableSpec Spec => DisplacedTable.DisplacedSpec;
@@ -537,14 +525,11 @@ namespace Eggnog.Relations
             if (journal.Count > 0 && timestamp < journal.LastTimestamp && overlay.Map(a) != overlay.Map(b))
                 ThrowDecreasingTimestamp(timestamp, journal.LastTimestamp);
 
-            if (overlay.Union(a, b, out var winner, out var loser) == false)
+            if (overlay.Union(a, b, out _, out var loser) == false)
                 return false;
 
             journal.Append(loser, timestamp);
             Interlocked.Increment(ref ownUnions);
-            if (localIds is { } ids && ids.Contains(winner) && ids.Contains(loser) == false)
-                Interlocked.Increment(ref parentIdLosers);
-
             return true;
         }
 

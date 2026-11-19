@@ -54,11 +54,10 @@ namespace Eggnog.Relations.Tests
         {
             var h = new OverlayRekeyHarness();
             h.ChildUnion(2, 5);
-            var version = h.Overlay.Version;
             h.ParentUnion(5, 2);
             Assert.Empty(h.CatchUp());
             Assert.True(h.Overlay.IsEmpty);
-            Assert.Equal(version + 1, h.Overlay.Version);
+            Assert.Equal(0, h.Overlay.MemberCount);
             Assert.Equal(2u, h.Find(5));
 
             // 5 was journaled by the child's own union, and is not journaled twice.
@@ -85,14 +84,14 @@ namespace Eggnog.Relations.Tests
         {
             var h = new OverlayRekeyHarness();
             h.ChildUnion(1, 2);
-            var version = h.Overlay.Version;
             h.ParentUnion(9, 4);
             Assert.Equal(new uint[] { 9 }, h.CatchUp());
             Assert.Equal(4u, h.Find(9));
-            Assert.Equal(1, h.Overlay.ClassCount);
 
             // Nothing in the overlay changed.
-            Assert.Equal(version, h.Overlay.Version);
+            Assert.Equal(1, h.Overlay.ClassCount);
+            Assert.Equal(2, h.Overlay.MemberCount);
+            Assert.Equal(new uint[] { 1, 2 }, Class(h, 1));
         }
 
         [Fact]

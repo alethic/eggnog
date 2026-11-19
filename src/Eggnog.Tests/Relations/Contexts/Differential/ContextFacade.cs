@@ -224,9 +224,9 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// Gets the logical rows of <paramref name="table"/> whose <paramref name="column"/> holds
-        /// <paramref name="value"/> (made canonical for an id column). In a child, an id column is answered through the
-        /// lift reads: the own layer's rows (<see cref="Context.ScanOwn{TSink}"/>) and the ancestor rows naming the id
-        /// (<see cref="Context.ScanAncestorsMentioning{TSink}"/>); otherwise by a scan of the view.
+        /// <paramref name="value"/> (made canonical for an id column). In a child, an id column is answered from the
+        /// rows the child stored itself, read from its own layer apart from its view, and the rows its view shows from
+        /// its ancestors' layers; otherwise by a scan of the view.
         /// </summary>
         public List<ulong[]> ScanColumn(LogicalTable table, int column, ulong value)
         {
@@ -243,16 +243,19 @@ namespace Eggnog.Relations.Tests
                 return result;
             }
 
-            var own = new RowCollector();
-            Context.ScanOwn(table.Id, ref own);
-            var ancestors = new RowCollector();
-            Context.ScanAncestorsMentioning(table.Id, (uint)value, ref ancestors);
-            foreach (var (_, cells) in own.Rows)
-                if (cells[column] == value)
-                    result.Add(Logical(table, cells));
+            if (Context.Tables!.TryGetLayer(table.Id)?.Own is { } own)
+            {
+                var rows = new RowCollector();
+                var all = own.All();
+                own.ScanGeneric(all.AsRef(), ref rows);
+                all.Dispose();
+                foreach (var (_, cells) in rows.Rows)
+                    if (cells[column] == value)
+                        result.Add(Logical(table, cells));
+            }
 
-            foreach (var (_, cells) in ancestors.Rows)
-                if (cells[column] == value)
+            foreach (var (layer, _, cells) in LayeredTestUtil.ScanVisible(Context.GetView(table.Id)))
+                if (layer < Context.Depth && cells[column] == value)
                     result.Add(Logical(table, cells));
 
             return result;

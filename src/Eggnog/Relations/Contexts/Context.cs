@@ -26,12 +26,13 @@ namespace Eggnog.Relations
     /// <para>
     /// Lifecycle. <see cref="CreateChild"/> makes a child; children of a context that is not frozen share its thread
     /// domain (<see cref="Domain"/>), so a non-frozen context and everything below it behave as one thread; a second
-    /// thread entering the domain is refused. Inside an operation that runs a caller's code (a write batch's action, a
-    /// <see cref="ScanMerges{TVisitor}"/> visitor), reads are allowed, but writes to a context of the same domain,
+    /// thread entering the domain is refused. Inside an operation that runs a caller's code as a callback of the domain
+    /// (a write batch's action, a child's rule search's calls into user code;
+    /// <see cref="ThreadAffinityGuard.InCallback"/>), reads are allowed, but writes to a context of the same domain,
     /// rebuilds with work to do, <see cref="CreateChild"/>, <see cref="Freeze"/> and <see cref="Dispose"/> are refused
     /// before they change anything. <see cref="Dispose"/> drops a child once it has no live children; the root is never
-    /// disposed. A chain may be any depth, as egglog's stack of pushes may. Every ancestor's <see cref="Gate"/> counts its
-    /// live descendants.
+    /// disposed. A chain may be any depth, as egglog's stack of pushes may. Every ancestor's <see cref="Gate"/> counts
+    /// its live descendants.
     /// </para>
     /// <para>
     /// Union-find. The root's union-find is egglog's <see cref="DisplacedTable"/>; a child's is an
@@ -58,12 +59,6 @@ namespace Eggnog.Relations
     /// </remarks>
     internal sealed partial class Context : IDisposable
     {
-
-        /// <summary>
-        /// The value <see cref="activeScans"/> takes when <see cref="Dispose"/> claims the context: any scan that starts
-        /// afterwards sees a negative count and refuses to run.
-        /// </summary>
-        const int ScansClosed = int.MinValue;
 
         readonly Store store;
         readonly Context? parent;
@@ -145,13 +140,6 @@ namespace Eggnog.Relations
         /// </summary>
         ThreadAffinityGuard domain;
 
-        /// <summary>
-        /// The number of <see cref="ScanMerges{TVisitor}"/> calls running on the context, or <see cref="ScansClosed"/>
-        /// once <see cref="Dispose"/> has claimed it. A frozen context is scanned without its domain, so this, not the
-        /// domain, is what refuses a dispose from inside a visitor or during another thread's scan.
-        /// </summary>
-        int activeScans;
-
         uint semiNaiveFloor;
 
         /// <summary>
@@ -229,7 +217,7 @@ namespace Eggnog.Relations
             parentFinder = parent.FinderForChildren;
             overlay = new UnionFindOverlay();
             journal = new DisplacedJournal();
-            overlayTable = new OverlayDisplacedTable(parentFinder, overlay, journal, parent.UnionFindTable, idBlocks);
+            overlayTable = new OverlayDisplacedTable(parentFinder, overlay, journal, parent.UnionFindTable);
             finder = overlayTable.Finder;
             finderForChildren = finder;
             unionFindCursor = parent.DisplacedCount;
@@ -252,7 +240,7 @@ namespace Eggnog.Relations
             createdAt = store.ReadClock();
             semiNaiveFloor = createdAt;
 
-            // A case created where a contradiction is already visible starts stopped.
+            // A child that stops on contradictions, created where a contradiction is already visible, starts stopped.
             if (options.StopOnContradiction && store.Schema.Contradiction is { } contradiction && tables.GetView(contradiction).FindRow(ReadOnlySpan<uint>.Empty, out _) >= 0)
                 tables.SetContradicted();
         }

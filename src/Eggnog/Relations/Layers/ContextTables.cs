@@ -32,9 +32,7 @@ namespace Eggnog.Relations
     /// Rebuild. <see cref="CatchUpRows"/> absorbs what the context's unsettled ancestors appended since its cursors,
     /// and <see cref="RebuildPass"/> rewrites the context's own rows over the ids displaced since its last pass, hides
     /// and copies the ancestor rows naming its own losers, and merges; both copy through <see cref="StageCopy"/> and
-    /// hide only once the copies are staged. <see cref="ScanOwn{TSink}"/> and
-    /// <see cref="ScanAncestorsMentioning{TSink}"/> are the lift's reads, and <see cref="CheckInvariants"/> is the
-    /// tables part of the context's checker.
+    /// hide only once the copies are staged. <see cref="CheckInvariants"/> is the tables part of the context's checker.
     /// </para>
     /// </remarks>
     internal sealed partial class ContextTables : ILayerViewSource

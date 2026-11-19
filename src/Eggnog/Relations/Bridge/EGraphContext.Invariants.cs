@@ -20,19 +20,16 @@ namespace Eggnog.Relations
         /// state</b> (a frozen context holds no host writes and no failure, its database is frozen, and every rebuild
         /// index of its own tables is current); <b>the stop flag</b> (a stopped context sees a contradiction row, and a
         /// context that stops on contradictions and sees one is stopped); <b>the tree</b> (the storage context's host
-        /// is this context, and each live storage child's host is a bridge child of this one); <b>member maps</b> (in a
-        /// child, a member map built now has exactly the overlay's members that are not local, each in its group root's
-        /// overlay class, canonical in the parent and mapped to its group's root here, and the cached map, when
-        /// current, equals it). Each violation starts with the name of its part: <c>rule progress:</c>, <c>frozen
-        /// state:</c>, <c>stop flag:</c>, <c>tree:</c> or <c>member maps:</c>; the storage checker's container-layers
-        /// part reports a child's view of containers of classes under <c>container view:</c>.
+        /// is this context, and each live storage child's host is a bridge child of this one). Each violation starts
+        /// with the name of its part: <c>rule progress:</c>, <c>frozen state:</c>, <c>stop flag:</c> or <c>tree:</c>;
+        /// the storage checker's container-layers part reports a child's view of containers of classes under
+        /// <c>container view:</c>.
         /// </para>
         /// <para>
         /// A stopped context answers only <see cref="IsContradictory"/> and may have stopped its merge with writes
         /// pending: only the stop flag and the tree are checked on it. Any other context must be clean
         /// (<see cref="IsClean"/>), except that host writes held by a frozen context are reported as a frozen-state
-        /// violation. Cost: the storage checker's, plus O(rules × constants × depth), plus O(overlay members × depth)
-        /// for the member maps.
+        /// violation. Cost: the storage checker's, plus O(rules × constants × depth).
         /// </para>
         /// </remarks>
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
@@ -61,7 +58,6 @@ namespace Eggnog.Relations
                 CheckProgress(violations);
                 CheckFrozenState(violations);
                 CheckStop(violations);
-                CheckMemberMaps(violations);
                 CheckTree(violations);
             }
 

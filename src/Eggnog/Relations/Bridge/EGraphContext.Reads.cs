@@ -30,6 +30,18 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
+        /// Gets whether <paramref name="id"/> was minted in this child: it lies in one of the child's id blocks. Every
+        /// term mint in a child is local, and so is the id of a container of classes the child interns; a container of
+        /// values is interned on the store's shared counter and never is.
+        /// Lock-free, O(log blocks).
+        /// </summary>
+        /// <param name="id">The id.</param>
+        /// <returns><c>true</c> if the id is local to this context.</returns>
+        /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
+        /// <exception cref="InvalidOperationException">The context is the root, which has no local ids.</exception>
+        public bool IsLocalId(Value id) => context.IsLocalId(id.Rep);
+
+        /// <summary>
         /// Looks up the output of <paramref name="function"/> for <paramref name="key"/> in this context's view: the
         /// key's id cells are canonicalized here first, then the row the context sees for it is read (the root's table
         /// at the root; the child's layers through its view, hidden rows filtered, where the topmost layer holding the

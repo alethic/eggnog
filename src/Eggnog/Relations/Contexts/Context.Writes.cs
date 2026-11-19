@@ -42,8 +42,8 @@ namespace Eggnog.Relations
         /// <returns>The action's result.</returns>
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
         /// <exception cref="InvalidOperationException">The context is frozen, faulted or contradicted; its domain is held
-        /// by another thread; or the call comes from inside a write batch's action or a <c>ScanMerges</c> visitor of the
-        /// same domain.</exception>
+        /// by another thread; or the call comes from inside a write batch's action or another callback of the same
+        /// domain (<see cref="ThreadAffinityGuard.InCallback"/>).</exception>
         public TResult Write<TResult>(Func<ExecutionState, TResult> action)
         {
             ArgumentNullException.ThrowIfNull(action);
@@ -143,8 +143,8 @@ namespace Eggnog.Relations
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
         /// <exception cref="InvalidOperationException">The context is frozen, faulted or contradicted; the clear is
         /// refused (by the retraction guard, or because the table's merge is not a lattice merge, which only the root
-        /// may write); the domain is held by another thread; or the call comes from inside a write batch's action or a
-        /// <c>ScanMerges</c> visitor of the same domain.</exception>
+        /// may write); the domain is held by another thread; or the call comes from inside a write batch's action or
+        /// another callback of the same domain (<see cref="ThreadAffinityGuard.InCallback"/>).</exception>
         public void ClearTable(TableId table)
         {
             ThrowIfNotWritable();

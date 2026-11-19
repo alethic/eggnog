@@ -13,8 +13,9 @@ namespace Eggnog.Relations.Tests
     /// <see cref="ContainerView"/>): containers a test places in a layer
     /// (<see cref="ContainerLayers.Place{TContainer}"/>) resolve by id and by content in the child and its descendants,
     /// an ancestor's entry under a shadowed id hidden; ids may be shared; a read by id skips every level that cannot
-    /// own the id without touching it; a frozen context's layers never change and are read without locks, while a
-    /// writable one's are read under their shard locks; equal containers a child interns at once get one id.
+    /// own the id without touching it; a frozen context's layers never change and are read without locks, by views and
+    /// by its descendants' container passes, while a writable one's are read under their shard locks; equal containers
+    /// a child interns at once get one id.
     /// </summary>
     public class ContainerLayersTests
     {
@@ -124,10 +125,6 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(new VecContainer(b), found);
             Assert.True(childView.TryGetId(new VecContainer(b, b), out var foundId));
             Assert.Equal(local, foundId);
-            Assert.True(childView.IsContainerId(local));
-            Assert.True(childView.IsContainerId(x));
-            Assert.False(rootView.IsContainerId(local));
-            Assert.False(childView.IsContainerId(a));
 
             // The root's environment is untouched, and the layer obeys the ownership rule.
             Assert.Equal(2, env.Count);
@@ -302,7 +299,8 @@ namespace Eggnog.Relations.Tests
             Assert.Throws<InvalidOperationException>(() => layers.GetOrCreateLayer(other.GetEnvironment<SetContainer>()));
 
             // With every lock of the frozen layer held elsewhere, readers of the frozen child and of its children read it
-            // by id and by content.
+            // by id and by content, and the layer answers which ids it holds a container under, as it does for its
+            // descendants' container passes and for the checker.
             var leaf = middle.CreateChild();
             var (holder, release) = Hold(layer.Own.ShardLocks);
             try
@@ -319,10 +317,16 @@ namespace Eggnog.Relations.Tests
                             Assert.Equal(x, ByContent(view, env, new VecContainer(b)));
                             Assert.Equal(local, ByContent(view, env, new VecContainer(b, b)));
                             Assert.Null(ByContent(view, env, new VecContainer(a)));
-                            Assert.True(view.IsContainerId(local));
                         }
                     }));
                 }
+
+                reads.Add(Task.Run(() =>
+                {
+                    Assert.True(layer.ContainsId(local, frozen: true));
+                    Assert.True(layer.ContainsId(x, frozen: true));
+                    Assert.False(layer.ContainsId(a, frozen: true));
+                }));
 
                 Assert.True(Task.WaitAll(reads.ToArray(), Patience), "a frozen layer was read under its locks");
             }
@@ -336,6 +340,52 @@ namespace Eggnog.Relations.Tests
             Assert.True(layer.Own.TryInsertNew(new VecContainer(a, b), new VecContainer(a, b).ComputeHash(), local));
             var error = Assert.Throws<InvalidOperationException>(() => middle.CheckInvariants());
             Assert.Contains("when the context froze", error.Message);
+        }
+
+        [Fact]
+        public void ADescendantsContainerPassReadsAFrozenLayerWithoutItsLocks()
+        {
+            var (store, env) = Setup();
+            var root = store.Root;
+            var a = root.NewId();
+            var b = root.NewId();
+            var z = root.NewId();
+            var vz = Intern(root, new VecContainer(z));
+            root.Freeze();
+
+            // The middle interns [a, b], which no ancestor holds, under an id local to it, and freezes.
+            var middle = root.CreateChild();
+            var vl = middle.Database.WithExecutionState(state => state.Containers.GetOrInsert(new VecContainer(a, b), state));
+            middle.Rebuild();
+            middle.Freeze();
+            Assert.True(middle.IsLocalId(vl));
+            Assert.True(vz < vl);
+
+            // With every lock of the middle's layer held elsewhere, the leaf's union of vl with the root's vz, the
+            // smaller id, and its rebuild complete: the leaf's container pass finds vl in the frozen layer, and the
+            // container under it, without the layer's locks, and moves [a, b] to vz.
+            var leaf = middle.CreateChild();
+            var (holder, release) = Hold(middle.ContainerLayers!.LayerOf(env)!.Own.ShardLocks);
+            try
+            {
+                var pass = Task.Run(() =>
+                {
+                    leaf.Union(vl, vz);
+                    leaf.Rebuild();
+                });
+                Assert.True(pass.Wait(Patience), "a frozen layer was read under its locks");
+            }
+            finally
+            {
+                release.Set();
+                holder.Join();
+            }
+
+            var view = ContainerView.Of(leaf.Database);
+            Assert.Equal(vz, leaf.Find(vl));
+            Assert.Null(ById(view, env, vl));
+            Assert.Equal(vz, ByContent(view, env, new VecContainer(a, b)));
+            leaf.CheckInvariants();
         }
 
         [Fact]

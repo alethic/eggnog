@@ -24,8 +24,8 @@ namespace Eggnog.Relations.Tests
     /// <c>a</c>-th of the classes, vectors and sets; and <c>w</c>, the write <c>c(a) = b</c> of the constructor over
     /// classes, which unions <c>b</c> with the value the key has, if any; and, in a small world, <c>r</c>, the
     /// ancestor's repeat of the <c>a</c>-th of the unions of classes or container ids its descendants made so far, if
-    /// any, as a case split's parent learns what a case knew. The actor rebuilds before and after its step,
-    /// but a step of the child or the grandchild with <c>defer</c> set leaves out the rebuild after it, so its unions
+    /// any, so that the ancestor learns what a descendant knew. The actor rebuilds before and after its step, but a
+    /// step of the child or the grandchild with <c>defer</c> set leaves out the rebuild after it, so its unions
     /// wait in its journal, ahead of its container pass, while the steps that follow run, the ancestor's writes among
     /// them, until the descendant's next rebuild, its own or a descendant's, catches up with both at once. A step with
     /// <c>check</c> set is followed by a comparison of the child and the grandchild with their oracles. The

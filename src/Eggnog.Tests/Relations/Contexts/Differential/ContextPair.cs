@@ -311,9 +311,10 @@ namespace Eggnog.Relations.Tests
                     }
                 }
 
-                // Column scans (the lift reads in a child) return exactly the visible rows holding the value: none
-                // missed (completeness) and none extra, so a hidden, stale or tombstoned row delivered by ScanOwn or
-                // ScanAncestorsMentioning is caught (soundness).
+                // Column scans return exactly the visible rows holding the value: none missed (completeness) and none
+                // extra (soundness). In a child an id column is scanned from its own layer, read apart from its view,
+                // and from its view's ancestor layers, so an own row the view misses, or one it shows that the own
+                // layer does not hold live, is caught.
                 var visible = Facade.Rows(table);
                 for (var column = 0; column < table.Arity; column++)
                 {

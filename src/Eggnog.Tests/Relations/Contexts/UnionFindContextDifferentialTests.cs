@@ -11,7 +11,7 @@ namespace Eggnog.Relations.Tests
     /// The union-find context differential: random programs of id mints, unions, rebuilds, child creation (three deep),
     /// random freezes and disposal, with ancestors changing after their children exist, run on the engine and on an
     /// oracle at once (<see cref="UnionFindContextPair"/>): the naive <see cref="ReferenceUnionFindContext"/>, for
-    /// exact canonical ids, <see cref="Context.ScanMerges{TVisitor}"/>, <see cref="Context.IsLocalId"/>, journal
+    /// exact canonical ids, the merges a child made over its parent's ids, <see cref="Context.IsLocalId"/>, journal
     /// completeness and own displacements. The engine's invariant checker runs at every check.
     /// </summary>
     /// <remarks>

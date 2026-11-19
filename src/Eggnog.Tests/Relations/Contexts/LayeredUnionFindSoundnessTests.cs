@@ -9,56 +9,12 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Soundness tests for the layered union-find: structural calls from inside a visitor of a frozen context, the
-    /// precondition that the root's displaced ids only grow while it has live descendants, and random programs run
-    /// concurrently under a frozen chain against the naive model.
+    /// Soundness tests for the layered union-find: the precondition that the root's displaced ids only grow while it
+    /// has live descendants, a nested rebuild inside a write batch, random programs run concurrently under a frozen
+    /// chain against the naive model, and the checker of a frozen context while its children come and go.
     /// </summary>
     public class LayeredUnionFindSoundnessTests
     {
-
-        /// <summary>
-        /// CreateChild, Freeze and Dispose throw <see cref="InvalidOperationException"/> from inside a ScanMerges
-        /// visitor of the context. A frozen context's ScanMerges takes no domain, so disposing the context from inside
-        /// its own visitor must still be refused; otherwise the scan runs on over a released overlay and returns a
-        /// partial result without any error.
-        /// </summary>
-        [Fact]
-        public void DisposingAFrozenContextFromInsideItsOwnScanMergesIsRefused()
-        {
-            var store = new Store();
-            var root = store.Root;
-            var ids = Enumerable.Range(0, 8).Select(_ => root.NewId()).ToArray();
-            var child = root.CreateChild();
-            child.Union(ids[1], ids[0]);
-            child.Union(ids[3], ids[2]);
-            child.Union(ids[5], ids[4]);
-            child.Rebuild();
-            root.Freeze();
-            child.Freeze();
-
-            var all = new MergeCollector();
-            child.ScanMerges(ref all);
-            Assert.Equal(6, all.Pairs.Count);
-
-            Exception? disposeError = null;
-            var first = true;
-            var visitor = new MergeCollector((_, _) =>
-            {
-                if (first == false)
-                    return;
-
-                first = false;
-                disposeError = Record.Exception(() => child.Dispose());
-            });
-
-            var scanError = Record.Exception(() => child.ScanMerges(ref visitor));
-
-            // Either the re-entrant Dispose is refused, or the scan reports that the context went away under it.
-            // Silently returning a partial scan of a context that is now disposed is neither.
-            Assert.True(
-                disposeError is InvalidOperationException || scanError is not null,
-                $"Dispose inside the visitor succeeded (disposed: {child.IsDisposed}) and ScanMerges returned {visitor.Pairs.Count} of {all.Pairs.Count} pairs without an error.");
-        }
 
         /// <summary>
         /// A parent's displaced count only grows while it has live descendants, because a child's cursor indexes the

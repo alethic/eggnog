@@ -16,7 +16,9 @@ namespace Eggnog.Relations.Tests
     /// <c>with_execution_state</c>) and the root's egglog-compatible <see cref="EGraph.AddValues"/> stage into database
     /// buffers, while the context API stages bridge-side (<see cref="HostWrites"/>) until the next flush replays its
     /// rows. Rows and unions staged earlier through the context API are flushed before a raw path stages, so writes
-    /// land in the order the host issued them; under egglog's API alone the root's timestamp sequence is egglog's.
+    /// land in the order the host issued them; under egglog's API alone the root's timestamp sequence is egglog's. Only
+    /// the raw execution-state API marks a store as written raw, the one exemption from the catch-up's re-stamp
+    /// assertion.
     /// </summary>
     public class RawWriteOrderTests
     {
@@ -233,6 +235,41 @@ namespace Eggnog.Relations.Tests
             Assert.True(g.Root.IsClean);
             Assert.Equal(g.Int(newWins ? 2 : 1), g.Root.LookupId(f, [a]));
         }
+
+#if DEBUG
+        /// <summary>
+        /// The re-stamp assertion of a child's catch-up exempts only stores written through the raw execution-state
+        /// API: host writes, rule runs, a child's writes and its catch-up with a root that wrote after it was created
+        /// never mark a store, and the raw API does.
+        /// </summary>
+        [Fact]
+        public void OnlyTheRawApiMarksAStoreAsWrittenRaw()
+        {
+            var g = new ContextGraph();
+            var a = g.Root.FreshId();
+            var b = g.Root.FreshId();
+            var store = g.EGraph.Store;
+            g.Assert(g.Root, g.Edge, a, b);
+            g.Root.FlushUpdates();
+            g.Root.Saturate([g.EdgeToPath()], 4);
+            using (var child = g.Root.CreateChild())
+            {
+                child.StageUnion(a, b);
+                g.Assert(child, g.Mark, a);
+                child.EnsureClean();
+
+                // The root writes after the child exists, and the child catches up with it.
+                g.Assert(g.Root, g.Mark, b);
+                g.Root.FlushUpdates();
+                child.EnsureClean();
+                Assert.True(child.ContainsKey(g.Mark, [b]));
+            }
+
+            Assert.False(store.HasRawWrites);
+            store.Root.Database.WithExecutionState(_ => 0);
+            Assert.True(store.HasRawWrites);
+        }
+#endif
 
     }
 

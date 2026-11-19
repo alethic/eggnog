@@ -167,7 +167,7 @@ namespace Eggnog
                         case HeadOpKind.Collect:
                         {
                             // The collector never fails, so its panic message is never built; the call stages nothing. A
-                            // scheduler's query collects into its rule's slot (the op's target), a query or matcher into -1.
+                            // scheduler's query collects into its rule's slot (the op's target), a query into -1.
                             collector = new MatchCollector(graph, inputs.Length, graph.Unit.Unit, op.Target);
                             var function = engine.RegisterExternalFunction(collector);
                             owned.Add(function);

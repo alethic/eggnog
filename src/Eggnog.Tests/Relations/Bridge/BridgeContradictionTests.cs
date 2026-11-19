@@ -12,9 +12,10 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Contradiction in the bridge: designating the contradiction function (atomically with child creation), a case
-    /// that stops at the merge after its whole search, the stop flag a run reports, and contradiction as an ordinary
-    /// fact elsewhere. Named apart from the storage <c>ContradictionTests</c>.
+    /// Contradiction in the bridge: designating the contradiction function (atomically with child creation), a child
+    /// created to stop on contradictions (<see cref="ContextOptions.StopOnContradiction"/>), which stops at the merge
+    /// after its whole search, or at the catch-up a flush makes before it merges, the stop flag a run reports, and
+    /// contradiction as an ordinary fact elsewhere. Named apart from the storage <c>ContradictionTests</c>.
     /// </summary>
     public class BridgeContradictionTests
     {
@@ -38,39 +39,40 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// In a case, a rule that derives the contradiction stops the context: the run reports it, the context answers
-        /// only whether it is contradictory, and later runs and flushes do nothing.
+        /// In a child that stops on contradictions, a rule that derives the contradiction stops the context: the run
+        /// reports it, the context answers only whether it is contradictory, and later runs and flushes do nothing.
         /// </summary>
         [Fact]
-        public void ACaseStopsWhenARuleDerivesTheContradiction()
+        public void AStoppingChildStopsWhenARuleDerivesTheContradiction()
         {
             var g = new ContextGraph();
             g.EGraph.DesignateContradiction(g.Bottom);
             var rule = g.MarkIsBottom();
             g.Root.Freeze();
 
-            using var @case = g.Root.CreateChild(ContextOptions.Case);
-            g.Assert(@case, g.Mark, @case.FreshId());
-            @case.FlushUpdates();
-            Assert.False(@case.IsStopped);
-            var report = @case.RunRules(rule);
+            using var stopping = g.Root.CreateChild(new ContextOptions { StopOnContradiction = true });
+            g.Assert(stopping, g.Mark, stopping.FreshId());
+            stopping.FlushUpdates();
+            Assert.False(stopping.IsStopped);
+            var report = stopping.RunRules(rule);
             Assert.True(report.Stopped);
             Assert.True(report.Changed);
-            Assert.True(@case.IsStopped);
-            Assert.True(@case.IsContradictory);
-            Assert.Same(IterationReport.WhenStopped, @case.RunRules(rule));
-            Assert.False(@case.FlushUpdates());
-            Assert.Equal(new SaturateReport(1, true, false), @case.Saturate([rule], 10));
-            @case.CheckInvariants();
+            Assert.True(stopping.IsStopped);
+            Assert.True(stopping.IsContradictory);
+            Assert.Same(IterationReport.WhenStopped, stopping.RunRules(rule));
+            Assert.False(stopping.FlushUpdates());
+            Assert.Equal(new SaturateReport(1, true, false), stopping.Saturate([rule], 10));
+            stopping.CheckInvariants();
         }
 
         /// <summary>
-        /// A case stops at the merge, after its whole search: the insert into the contradiction function is an ordinary
-        /// write, so every rule of the run matches in full before the merge that applies the row stops the case, while
-        /// in an ordinary child the contradiction is a fact like any other and the child goes on.
+        /// A child that stops on contradictions stops at the merge, after its whole search: the insert into the
+        /// contradiction function is an ordinary write, so every rule of the run matches in full before the merge that
+        /// applies the row stops the child, while in an ordinary child the contradiction is a fact like any other and
+        /// the child goes on.
         /// </summary>
         [Fact]
-        public void ACasesSearchRunsInFullBeforeTheMergeStopsIt()
+        public void AStoppingChildsSearchRunsInFullBeforeTheMergeStopsIt()
         {
             var g = new ContextGraph();
             g.EGraph.DesignateContradiction(g.Bottom);
@@ -83,7 +85,7 @@ namespace Eggnog.Relations.Tests
             g.Root.FlushUpdates();
             g.Root.Freeze();
 
-            using var @case = g.Root.CreateChild(ContextOptions.Case);
+            using var stopping = g.Root.CreateChild(new ContextOptions { StopOnContradiction = true });
             using var plain = g.Root.CreateChild();
 
             // More marks than one action batch (Bindings.DefaultBatchSize): the batches after the one that first writes
@@ -91,16 +93,16 @@ namespace Eggnog.Relations.Tests
             const int Marks = 3 * Bindings.DefaultBatchSize;
             for (var i = 0; i < Marks; i++)
             {
-                g.Assert(@case, g.Mark, @case.FreshId());
+                g.Assert(stopping, g.Mark, stopping.FreshId());
                 g.Assert(plain, g.Mark, plain.FreshId());
             }
 
-            @case.FlushUpdates();
+            stopping.FlushUpdates();
             plain.FlushUpdates();
 
-            var stopped = @case.RunRules(bottom, copy);
+            var stopped = stopping.RunRules(bottom, copy);
             Assert.True(stopped.Stopped);
-            Assert.True(@case.IsStopped);
+            Assert.True(stopping.IsStopped);
             Assert.Equal(Marks, stopped.RuleSetReport.NumMatches("mark-bottom"));
             Assert.Equal(9, stopped.RuleSetReport.NumMatches("edge-path"));
 
@@ -112,6 +114,28 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(9, ordinary.RuleSetReport.NumMatches("edge-path"));
             Assert.Equal(9, plain.TableSize(g.Path));
             plain.CheckInvariants();
+        }
+
+        /// <summary>
+        /// A child of the writable root, created to stop on contradictions, stages a row, and the root merges the
+        /// contradiction row: the child's flush, which catches up with the root before it stages anything, stops the
+        /// child there and returns without merging, the child stopped and unfaulted.
+        /// </summary>
+        [Fact]
+        public void AStoppingChildStopsWhenItsFlushCatchesUpAContradiction()
+        {
+            var g = new ContextGraph();
+            g.EGraph.DesignateContradiction(g.Bottom);
+            using var stopping = g.Root.CreateChild(new ContextOptions { StopOnContradiction = true });
+            g.Assert(stopping, g.Mark, stopping.FreshId());
+            g.Root.StageRow(g.Bottom, [g.Unit]);
+            g.Root.FlushUpdates();
+
+            Assert.False(stopping.FlushUpdates());
+            Assert.True(stopping.IsStopped);
+            Assert.True(stopping.IsContradictory);
+            Assert.False(stopping.IsFaulted);
+            stopping.CheckInvariants();
         }
 
         /// <summary>
@@ -137,19 +161,20 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A case created where the contradiction is already visible starts stopped, and a case under a stopped
-        /// writable case stops with it, while an ordinary child of a stopped case is refused, unfaulted.
+        /// A child that stops on contradictions, created where the contradiction is already visible, starts stopped,
+        /// and one under a stopped writable child stops with it, while an ordinary child of a stopped context is
+        /// refused, unfaulted.
         /// </summary>
         [Fact]
-        public void CasesUnderAContradictionStop()
+        public void StoppingChildrenUnderAContradictionStop()
         {
             var g = new ContextGraph();
             g.EGraph.DesignateContradiction(g.Bottom);
             var rule = g.MarkIsBottom();
             g.Root.Freeze();
 
-            using var parent = g.Root.CreateChild(ContextOptions.Case);
-            var inner = parent.CreateChild(ContextOptions.Case);
+            using var parent = g.Root.CreateChild(new ContextOptions { StopOnContradiction = true });
+            var inner = parent.CreateChild(new ContextOptions { StopOnContradiction = true });
             var ordinary = parent.CreateChild();
             g.Assert(parent, g.Mark, parent.FreshId());
             parent.FlushUpdates();
@@ -167,19 +192,19 @@ namespace Eggnog.Relations.Tests
             g2.Root.StageRow(g2.Bottom, [g2.Unit]);
             g2.Root.FlushUpdates();
             g2.Root.Freeze();
-            using var born = g2.Root.CreateChild(ContextOptions.Case);
+            using var born = g2.Root.CreateChild(new ContextOptions { StopOnContradiction = true });
             Assert.True(born.IsStopped);
             Assert.True(born.IsContradictory);
             Assert.True(born.RunRules().Stopped);
         }
 
         /// <summary>
-        /// A case stopped second from the top of a 40-deep chain of cases stops every case below it when the deepest is
-        /// brought up to date, level by level from the top, while the case above it stays as it was; an ordinary child at
-        /// the bottom is refused, unfaulted.
+        /// A context stopped second from the top of a 40-deep chain of children that stop on contradictions stops
+        /// every child below it when the deepest is brought up to date, level by level from the top, while the child
+        /// above it stays as it was; an ordinary child at the bottom is refused, unfaulted.
         /// </summary>
         [Fact]
-        public void ACaseStoppedHalfwayUpADeepChainStopsTheCasesBelowIt()
+        public void AChildStoppedHalfwayUpADeepChainStopsTheStoppingChildrenBelowIt()
         {
             const int Depth = 40;
             var g = new ContextGraph();
@@ -187,11 +212,12 @@ namespace Eggnog.Relations.Tests
             var rule = g.MarkIsBottom();
             g.Root.Freeze();
 
+            var stopping = new ContextOptions { StopOnContradiction = true };
             var chain = new List<EGraphContext>();
             var parent = g.Root;
             for (var d = 1; d <= Depth; d++)
             {
-                parent = parent.CreateChild(ContextOptions.Case);
+                parent = parent.CreateChild(stopping);
                 chain.Add(parent);
             }
 
@@ -204,8 +230,8 @@ namespace Eggnog.Relations.Tests
 
             chain[^1].EnsureClean();
             Assert.False(chain[0].IsStopped);
-            Assert.All(chain.Skip(1), @case => Assert.True(@case.IsStopped));
-            Assert.All(chain, @case => Assert.False(@case.IsFaulted));
+            Assert.All(chain.Skip(1), child => Assert.True(child.IsStopped));
+            Assert.All(chain, child => Assert.False(child.IsFaulted));
             Assert.Throws<InvalidOperationException>(ordinary.EnsureClean);
             Assert.False(ordinary.IsFaulted);
 
@@ -215,11 +241,11 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A plan does not depend on the designation: a rule planned before it stops a case as one planned after does,
-        /// when the contradiction row merges, after the whole search.
+        /// A plan does not depend on the designation: a rule planned before it stops a child that stops on
+        /// contradictions as one planned after does, when the contradiction row merges, after the whole search.
         /// </summary>
         [Fact]
-        public void ARulePlannedBeforeTheDesignationStopsACaseAlike()
+        public void ARulePlannedBeforeTheDesignationStopsAChildAlike()
         {
             var g = new ContextGraph();
             var bottom = g.MarkIsBottom();
@@ -230,13 +256,13 @@ namespace Eggnog.Relations.Tests
             g.Root.FlushUpdates();
             g.Root.Freeze();
 
-            using var @case = g.Root.CreateChild(new ContextOptions { IsCase = true, StopOnContradiction = true, InheritWatermarks = false });
+            using var stopping = g.Root.CreateChild(new ContextOptions { StopOnContradiction = true, InheritWatermarks = false });
             const int Marks = 3 * Bindings.DefaultBatchSize;
             for (var i = 0; i < Marks; i++)
-                g.Assert(@case, g.Mark, @case.FreshId());
+                g.Assert(stopping, g.Mark, stopping.FreshId());
 
-            @case.FlushUpdates();
-            var report = @case.RunRules(bottom, copy);
+            stopping.FlushUpdates();
+            var report = stopping.RunRules(bottom, copy);
             Assert.True(report.Stopped);
             Assert.Equal(Marks, report.RuleSetReport.NumMatches("mark-bottom"));
             Assert.Equal(1, report.RuleSetReport.NumMatches("edge-path"));
@@ -245,7 +271,8 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// Designating the contradiction is atomic with child creation: a designation racing the first child of a
         /// frozen root either fails, or lands before the child's creation check, which then sees the contradiction row
-        /// the root holds and stops the case. A designation never succeeds beside a case that missed it.
+        /// the root holds and stops the child, created to stop on contradictions. A designation never succeeds beside
+        /// such a child that missed it.
         /// </summary>
         [Fact]
         public void ADesignationRacingTheFirstChildIsSeenByItOrRefused()
@@ -264,7 +291,7 @@ namespace Eggnog.Relations.Tests
                 var create = Task.Run(() =>
                 {
                     barrier.SignalAndWait();
-                    child = g.Root.CreateChild(ContextOptions.Case);
+                    child = g.Root.CreateChild(new ContextOptions { StopOnContradiction = true });
                 });
                 var designate = Task.Run(() =>
                 {
@@ -287,7 +314,7 @@ namespace Eggnog.Relations.Tests
                     if (won)
                     {
                         designated++;
-                        Assert.True(child!.IsStopped, $"iteration {i}: the designation succeeded, yet the case did not stop");
+                        Assert.True(child!.IsStopped, $"iteration {i}: the designation succeeded, yet the child did not stop");
                     }
                     else
                     {

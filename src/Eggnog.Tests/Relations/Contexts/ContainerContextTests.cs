@@ -594,11 +594,11 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// <see cref="AClaimedMapTheRootRebuildsInPlaceIsHeldByTheChildsCopy"/> under a frozen root and a writable
-        /// parent, a case split's shape: the grandchild's union of a and d makes its copy of x {a: 4, b: 2}, then its
-        /// writable parent's union of a and b claims x and rebuilds its copy to {a: 2, d: 4}, which the parent's
-        /// container log records. No displacement the grandchild imports is x in the parent: the parent's entry is its
-        /// own copy of the content the grandchild copied, which the grandchild's copy stands for, so it adopts nothing,
-        /// and its copy becomes {a: 2}, alone under x.
+        /// parent: the grandchild's union of a and d makes its copy of x {a: 4, b: 2}, then its writable parent's union
+        /// of a and b claims x and rebuilds its copy to {a: 2, d: 4}, which the parent's container log records. No
+        /// displacement the grandchild imports is x in the parent: the parent's entry is its own copy of the content the
+        /// grandchild copied, which the grandchild's copy stands for, so it adopts nothing, and its copy becomes
+        /// {a: 2}, alone under x.
         /// </summary>
         [Fact]
         public void AGrandchildKeepsItsCopyOfAMapItsWritableParentRebuildsLater()

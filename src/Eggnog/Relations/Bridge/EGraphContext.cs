@@ -214,8 +214,7 @@ namespace Eggnog.Relations
         /// writes, progress and locals are released. A second call does nothing.
         /// </summary>
         /// <exception cref="InvalidOperationException">The context is the root; it has live children; the call comes from
-        /// inside another operation of the same thread domain or while a scan of the context runs; or the domain is held
-        /// by another thread.</exception>
+        /// inside another operation of the same thread domain; or the domain is held by another thread.</exception>
         public void Dispose()
         {
             if (context.IsDisposed)

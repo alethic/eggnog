@@ -44,7 +44,7 @@ Eggnog (namespace Eggnog, internal)
       v
 Eggnog.Relations bridge (internal)
   EGraph, EGraphContext, EGraphRuleBuilder, RunRules / IterationReport, Extractor,
-  CaseSet / Lifter / SplitDriver, BaseValues
+  BaseValues
       v
 Eggnog.Relations core (internal)
   Database, SortedWritesTable, DisplacedTable, indexes, Free Join planner and executor,
@@ -939,11 +939,11 @@ the atoms after it every row. Each new match is then found exactly once per iter
 over every row.
 
 `RunRules` is one iteration: build the rule set, run it, merge, rebuild, and report (`IterationReport`: whether the
-rules changed anything, whether the rebuild did, whether a case stopped, and the timings). Every row written in a run,
-a flush or a rebuild pass is stamped with the clock's value when it started, and the clock advances after it. A
-conflict in a function without a lattice, a failed lookup, or a failing primitive calls a panic function, which
-records the failure and stops the run early; the context then throws `PanicException` after merging what it wrote.
-A rule's progress is committed only after a run that recorded no failure.
+rules changed anything, whether the rebuild did, whether a contradiction stopped the context, and the timings). Every
+row written in a run, a flush or a rebuild pass is stamped with the clock's value when it started, and the clock
+advances after it. A conflict in a function without a lattice, a failed lookup, or a failing primitive calls a panic
+function, which records the failure and stops the run early; the context then throws `PanicException` after merging what
+it wrote. A rule's progress is committed only after a run that recorded no failure.
 
 ### 3.7 Extraction
 
@@ -1003,7 +1003,6 @@ rebuilds:
   pass first ends the passes that ran, as its loop ends (cursors committed, hidden sets sealed, views dropped), so the
   context is clean if they left nothing to do, and a later rebuild goes on from the journal mark otherwise;
 - a rule search that runs out of ids discards everything it staged, in the layers it created and the ones it found;
-- a lift round that fails while it stages drops what it staged;
 - a child's constructor reads the clock before it is published.
 
 `Store.IdsReserved` and `Store.EpochsUsed` report the counters, capped at `Store.IdLimit` and `Store.EpochLimit`; the
@@ -1052,18 +1051,17 @@ race to intern one content agree on one id and only the winner mints. Rule actio
 through their execution state (`ContainerEnv.GetOrInsert` redirects a child's state there, one field test at the root),
 the bridge's `EGraphContext.GetContainerValue` through the child's view, and the library's encodes through the scope's
 (`ContainerClasses.Intern`). The id is local to the child, so the layer owns it, no ancestor or sibling sees the
-container, disposing the child drops it with its layers, and a lift drops the rows that name it, as it drops a row
-naming a class the case made (section 3.9). The child's id blocks are reserved on the shared counter after it was
-created, so the local id is larger than every id that existed then, and a container that existed before the child wins
-any later merge with it, as in egglog's push; a container a writable ancestor makes after one of the child's blocks was
-reserved may have the larger id. When a writable ancestor later gains an equal content, the child's catch-up merges the
-two, the smaller id winning ("Catch-up" below), so the child matches a fresh root replaying the same commands up to the
-ids of what it interned. The child's container pass rebuilds what it interned as it rebuilds what it claimed. A frozen
-context interns no new container of classes, nor does a query on a frozen scope, which runs in a transient child but
-uses only what the frozen scope's view holds; a transient child keeps no layer, and in DEBUG the query asserts that no
-cell it returns is an id local to the transient. Interning is immediate and never rolled back, as in egglog. The bridge
-registers a container type from a child as from the root; registration takes the container environments' writer lock, so
-children of a frozen root, each on its own thread domain, may register at once.
+container, and disposing the child drops it with its layers. The child's id blocks are reserved on the shared counter
+after it was created, so the local id is larger than every id that existed then, and a container that existed before the
+child wins any later merge with it, as in egglog's push; a container a writable ancestor makes after one of the child's
+blocks was reserved may have the larger id. When a writable ancestor later gains an equal content, the child's catch-up
+merges the two, the smaller id winning ("Catch-up" below), so the child matches a fresh root replaying the same commands
+up to the ids of what it interned. The child's container pass rebuilds what it interned as it rebuilds what it claimed.
+A frozen context interns no new container of classes, nor does a query on a frozen scope, which runs in a transient
+child but uses only what the frozen scope's view holds; a transient child keeps no layer, and in DEBUG the query asserts
+that no cell it returns is an id local to the transient. Interning is immediate and never rolled back, as in egglog. The
+bridge registers a container type from a child as from the root; registration takes the container environments' writer
+lock, so children of a frozen root, each on its own thread domain, may register at once.
 
 **The container pass.** Each pass of a child's rebuild starts with its container pass (`ContainerLayers.RebuildPass`),
 egglog's `rebuild_containers` over the child's view, before its tables' pass, as egglog's rebuild loop runs containers
@@ -1215,7 +1213,7 @@ entry's id in the parent.
 plan indexes, seals staging, compresses or flattens the union-find, builds every view, and publishes. A context that is
 not frozen shares one thread domain (`ThreadAffinityGuard`) with the descendants created under it; each child of a
 frozen context gets its own. A second thread entering a domain is refused rather than made to wait. Children of frozen
-contexts run side by side, each on the thread its caller drives it from (section 3.10). A chain may be any depth, as
+contexts run side by side, each on the thread its caller drives it from (section 3.9). A chain may be any depth, as
 egglog's stack of pushes may: a `LayeredSubset` keeps a 64-bit mask of its nonempty layers below 64 and finds deeper
 ones by their per-layer entries, and a frame's dense refinement of a layer past 255, which its entry's layer byte does
 not hold, is a node the frame owns. Every walk over the levels of a chain (a rebuild, a clean test, a catch-up, a view
@@ -1237,8 +1235,7 @@ table; context-private tables are never gated. `SortedWritesTable.CompactionsBlo
 when the last descendant is disposed, and the next merge that meets the trigger compacts. A frozen table never changes
 again, so a context frozen with live descendants keeps the tombstones of every gated table that had one;
 `Database.Freeze` counts those tables, which the context reports (`Context.CompactionsBlockedAtFreeze`) and the library
-surfaces as `Scope.CompactionsBlockedAtFreeze`. The cases a `SplitDriver` opens live until it disposes its records, so
-its scope is gated until then.
+surfaces as `Scope.CompactionsBlockedAtFreeze`.
 
 **Queries in a child.** A rule set snapshots the views of the tables it reads when it is built (`ViewSnapshot`), and
 the search reads only that snapshot. An atom's rows are a `LayeredSubset` over the layers of its view; each prober has
@@ -1264,55 +1261,21 @@ The library's deletion (section 2.5) is the engine's, and the library refuses be
 refuse. Subsumption is not a retraction: a sticky value change of the row's subsumption cell, merged like an output
 (decision 1).
 
-**Contradiction.** A context created with `ContextOptions.StopOnContradiction`, as a case's options set it, stops when
-the contradiction relation gets a row: its stop flag is set when a merge applies the row (the merge after an iteration's
-search, or a write's flush) or the row becomes visible from an ancestor (at the context's creation, in a catch-up, or
-when its parent stops), the rebuild loop checks it, and a stopped case is skipped by the lift and disposed. A rule's
-write of the row is an ordinary write, so the search that derives it runs in full, and what that search interns and the
-ids it reserves stay in the store's pools and id counter after the case is disposed.
+**Contradiction.** A context created with `ContextOptions.StopOnContradiction` stops when the contradiction relation
+gets a row: its stop flag is set when a merge applies the row (the merge after an iteration's search, or a write's
+flush) or the row becomes visible from an ancestor (at the context's creation, in a catch-up, or when its parent stops),
+the rebuild loop checks it, and the stopped context then answers only whether it is contradictory, until it is disposed.
+A rule's write of the row is an ordinary write, so the search that derives it runs in full, and what that search interns
+and the ids it reserves stay in the store's pools and id counter after the context is disposed. The library creates no
+such context: for it a contradiction is an ordinary fact (section 2.3).
 
-**What the root pays.** A few per-call, per-batch, per-probe and per-refinement branches, freeze-time and
-child-creation work (each child, a query's transient child and a case included, also allocates its empty container
-layers, one small object), one null test per container read through its view, one small object per extracted term tree,
-shared by its nodes, and one cheap path compression per merge that no result can observe. Nothing is added per scanned
-row, per staged row or per find, and the root's allocation probes pin this.
+**What the root pays.** A few per-call, per-batch, per-probe and per-refinement branches, freeze-time and child-creation
+work (each child, a query's transient child included, also allocates its empty container layers, one small object), one
+null test per container read through its view, one small object per extracted term tree, shared by its nodes, and one
+cheap path compression per merge that no result can observe. Nothing is added per scanned row, per staged row or per
+find, and the root's allocation probes pin this.
 
-### 3.9 Cases and lift
-
-`Relations/Cases` holds the engine's case splits and lift: cases opened under a context, each assuming its part, and a
-lift that writes into the context what holds in every live case. The library opens no case; the engine's own tests and
-benchmarks exercise them.
-
-- `MemberMap`: for a case, each class it merged over its parent's ids (its group root) with those members. Built from
-  the overlay's member lists and cached by the overlay's version.
-- `Lifter`: lifts what holds in every live case into the parent, in rounds. Each round brings the parent and the cases
-  up to date, drops contradictory cases, takes the live case with the fewest groups as the seed, stages the meet of the
-  partitions (the unions every case agrees on) and the facts of every table in the lift spec (`LiftSpec`), and flushes
-  them into the parent at one epoch: of a relation, the rows every live case holds; of a constructor, the terms over the
-  parent's classes every live case holds; of a function, the values every live case holds, joined by the table's case
-  join (`LiftTable`), or written only where the cases agree when it has none. Rounds repeat, since a term lifted in one
-  round can make the next round's facts expressible over the parent's classes, until a round writes nothing or the round
-  limit is reached; when every case is contradictory, the lift writes the contradiction into the parent. A row arrives
-  in the parent not subsumed, unless the parent subsumed it: a case's subsumption stops matching the row under its
-  assumption, which is no fact of the parent. To be complete, it also looks up ancestor rows by each merged class's
-  winner, since with loser-only marking those rows are never copied into a case. An equality of container ids in the
-  parent's view is withheld from the meet, since the cases reach it only by rebuilding the containers' contents equal,
-  which the parent keeps apart, and so is a row of an id output whose only common parent id rests on one. A container of
-  classes a case interned has an id local to the case, which stands for no parent id, so a row that names one is
-  dropped, as a row naming a class the case made is: a container the case's rules, writes or the constants of its
-  split's assumptions made, which the case interned in its own layers. A memo (`LiftSignature`) makes a lift over cases
-  and a parent that have not changed return at once. A lift is sound only when the cases cover the parent, every model
-  of the parent being a model of some case: that is the caller's obligation (a split source's, for `SplitDriver`), and
-  only a vacuous case may be dropped.
-- `CaseSet`: the cases of one split, created as cases, run, lifted and disposed together.
-- `SplitDriver`: one step of a split schedule. It asks its sources (`ISplitSource`) for split requests, skips requests a
-  live record in the scope or an ancestor covers and requests over the limits, opens the cases, runs the in-case
-  schedule (`ICaseSchedule`) in each with nested splits disabled and lifts (phase A), then runs it again with nested
-  splits enabled and lifts again if that changed something (phase B). Records live until the driver disposes them. A
-  later step skips the requests they cover, but runs and lifts again the live records it opened, so that their cases
-  take in the scope's new facts, and a case those facts make vacuous is dropped.
-
-### 3.10 Parallelism
+### 3.9 Parallelism
 
 Parallelism follows egglog's thresholds (table operations above 20,000 rows, rebuilds above 10,000, database-level
 operations above 10,000) with a configurable degree of parallelism in place of rayon's pool (`ParallelHeuristics`),
@@ -1408,7 +1371,6 @@ harnesses shrink it first), and each family's seed count can be raised with an e
 | Containers in contexts (`Relations/Contexts`) | random vectors and sets of classes and of containers, with rows naming them, at a root; batches of row writes and unions in a child and a grandchild | a fresh root replaying the batches, the copy egglog's push makes, exactly: every id's class, every container by id and by content, the containers the view holds (each content once), every row; and a naive partition closed under congruence of the containers and of a constructor |
 | Containers under writing ancestors (`Relations/Contexts`) | the same worlds, with a writable root, or a writable parent of a frozen root, that interns containers (the root), unions classes and container ids and writes rows while a child and a grandchild live, interleaved with their own unions and writes, some left waiting for their container pass while the ancestor writes; and small worlds, a few classes and containers of one or two elements, whose ancestor also repeats its descendants' unions, checked after every step that is not deferred | for each descendant, a fresh root replaying the steps it sees in order, exactly, several contents under one id where a rename put them there; and the naive partition |
 | Rules in contexts (`Relations/Colors`) | random rule programs over context trees | an operational reference of rules in contexts, in lockstep; the *context = copy* property (a context's saturated view equals a fresh root that replays the chain's writes); seeded against unseeded watermarks |
-| Lift (`Relations/Cases`) | random parents and cases (unions, rows, lattice values, terms, rule runs, vacuous cases) | the specification: after a lift the parent holds exactly what held in every live case, no more and no less |
 | Rule layer (`Differential`) | random rule-layer programs with host writes, runs and queries | three ways: semi-naive, naive twins, and a reference interpreter |
 | Scopes (`Differential`) | random scope trees with tags, frozen prefixes, local rules and scoped reads | the same program's literal encoding at one root, with contexts as data |
 | Case rules (`Differential`) | random discriminated schemas of the predicate test fixture and queries over them | a model-based oracle: what `PredicateTheory`'s case rules derive holds in every model of the program |

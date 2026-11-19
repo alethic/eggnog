@@ -21,12 +21,12 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// A root union-find with 4 → 2 and 9 → 7 (at timestamp 1), and a child's table over it.
         /// </summary>
-        static (DisplacedTable Root, OverlayDisplacedTable Child) Setup(IdBlockAllocator? localIds = null)
+        static (DisplacedTable Root, OverlayDisplacedTable Child) Setup()
         {
             var root = new DisplacedTable();
             TableTestUtil.Stage(root, [4, 2, 1], [9, 7, 1]);
             root.Merge(TableTestUtil.EmptyState());
-            var child = new OverlayDisplacedTable(new LayeredUnionFind(root.UnionFind), new UnionFindOverlay(), new DisplacedJournal(), root, localIds);
+            var child = new OverlayDisplacedTable(new LayeredUnionFind(root.UnionFind), new UnionFindOverlay(), new DisplacedJournal(), root);
             return (root, child);
         }
 
@@ -219,23 +219,6 @@ namespace Eggnog.Relations.Tests
             var ids = new RowCollector();
             child.ForEachColumn(child.All().AsRef(), C(0), ref ids);
             Assert.Equal(new uint[] { 21, 22 }, ids.Rows.Select(r => r.Row[0]).ToArray());
-        }
-
-        [Fact]
-        public void ParentIdsBeatenByLocalIdsAreCounted()
-        {
-            // Local ids start at 100; the parent's ids here are above them.
-            var counters = new CounterSet();
-            var ids = counters.Add();
-            counters.IncrementBy(ids, 100);
-            var blocks = new IdBlockAllocator(counters, ids);
-            var (_, child) = Setup(blocks);
-            var local = blocks.Next();
-            Assert.Equal(100u, local);
-            Union(child, 1000, local, 1);
-            Union(child, 1001, 1002, 2);
-            Assert.Equal(2L, child.OwnUnions);
-            Assert.Equal(1L, child.ParentIdLosers);
         }
 
         [Fact]

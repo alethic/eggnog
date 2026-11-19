@@ -392,17 +392,6 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Drops every host write staged here and not flushed: for a caller that stages several writes as one step and
-        /// fails part-way, so that none of the step merges (<see cref="Lifter"/>). Rows staged by rule runs are not host
-        /// writes and stay. O(staged writes).
-        /// </summary>
-        internal void DropHostWrites()
-        {
-            using var scope = context.Domain.Enter();
-            hostWrites.Clear();
-        }
-
-        /// <summary>
         /// The body of <see cref="FlushUpdates"/> and of the e-graph's egglog-compatible <see cref="EGraph.FlushUpdates"/>,
         /// which leaves a failure recorded for the next run (<paramref name="throwOnFailure"/> <c>false</c>).
         /// </summary>

@@ -245,28 +245,6 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets whether <paramref name="id"/> is a container's id in the view, of any registered type: what tells a
-        /// container id from a class's. O(types) probes at the root; in a child, O(types × depth) lock-free tests more
-        /// (<see cref="ContainerLayers.IsContainerId"/>). Thread-safe.
-        /// </summary>
-        /// <param name="id">The id.</param>
-        /// <returns><c>true</c> if a container has the id.</returns>
-        /// <exception cref="InvalidOperationException">The view is the default one.</exception>
-        public bool IsContainerId(uint id)
-        {
-            var all = RequireValues();
-            if (layers is not null)
-                return layers.IsContainerId(all, id);
-
-            var count = all.TypeCount;
-            for (var i = 0; i < count; i++)
-                if (all.GetEnvironment(ContainerTypeId.FromIndex(i)).ContainsId(id))
-                    return true;
-
-            return false;
-        }
-
-        /// <summary>
         /// Adds to <paramref name="holders"/> the ids of the containers of the type of <paramref name="root"/> that the
         /// view sees and that hold one of <paramref name="elements"/>: at the root, those its exact element index lists;
         /// in a child, those its own layer's lists, and those each level below, the root included, lists under an id no
