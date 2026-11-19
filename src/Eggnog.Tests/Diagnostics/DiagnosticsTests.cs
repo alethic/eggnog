@@ -165,6 +165,17 @@ namespace Eggnog.Tests.Diagnostics
             Assert.Empty(t.Root.Run(Schedule.Saturate(t.Rules)).Steps);
         }
 
+        /// <summary>
+        /// Each step kind keeps its number, so a kind stored or sent as an integer reads back as the same kind.
+        /// </summary>
+        [Fact]
+        public void StepKindsKeepTheirNumbers()
+        {
+            var kinds = Enum.GetValues<RunStepKind>();
+            Assert.Equal(["Iteration"], kinds.Select(kind => kind.ToString()));
+            Assert.Equal([0], kinds.Select(kind => (int)kind));
+        }
+
         [Fact]
         public void TheObserverSeesTheSameStepsAndMayOnlyRead()
         {

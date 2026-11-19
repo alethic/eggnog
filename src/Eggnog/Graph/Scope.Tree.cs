@@ -142,10 +142,10 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Freezes the scope: the engine flushes, rebuilds, plans the rules this scope's descendants can run on its
-        /// statistics, and freezes storage. The parent must be frozen. Local rules are fixed from here on, and each
-        /// live child subtree that shared this scope's thread domain gets its own; a child another thread created once
-        /// the scope read as frozen keeps the domain it was given. A second call does nothing.
+        /// Freezes the scope: the engine flushes, rebuilds, below the root plans the rules this scope's descendants can
+        /// run on its statistics, and freezes storage. The parent must be frozen. Local rules are fixed from here on,
+        /// and each live child subtree that shared this scope's thread domain gets its own; a child another thread
+        /// created once the scope read as frozen keeps the domain it was given. A second call does nothing.
         /// </summary>
         /// <remarks>
         /// Freezing compacts the scope's tables, except while the scope has live descendants: those tables keep the rows
@@ -201,7 +201,10 @@ namespace Eggnog
 
                 // The engine freezes under the definition lock: every root definition and registration decides between
                 // its writable path and the frozen root's append by reading Root.IsFrozen under that lock, so the root
-                // cannot freeze between that read and the definition.
+                // cannot freeze between that read and the definition. Below the root, the lock also keeps the
+                // schedulers' rules that the freeze lists to plan registered until the engine has planned them: a
+                // scope's release frees the scheduled forms of its local rules, and a scheduler's removal gives up its
+                // rules, under that lock.
                 lock (Graph.DefinitionLock)
                     FreezeEngine();
 
@@ -558,8 +561,11 @@ namespace Eggnog
         /// rules of this scope and its ancestors, the schedulers' query and action rules, and every live query. Sibling
         /// scopes' local rules are left to be planned on their own statistics. The listed queries are held
         /// (<see cref="CompiledQuery.Acquire"/>) until the engine has frozen, so a query disposed on another thread
-        /// meanwhile cannot free a listed variant; one disposed before the list is built is left out. Global rules and
-        /// ancestors' local rules are never freed while this scope lives.
+        /// meanwhile cannot free a listed variant; one disposed before the list is built is left out. The schedulers'
+        /// rules, the scheduled forms of a sibling's local rules among them, are listed and planned under the
+        /// definition lock the caller holds, under which a scope's release frees the scheduled forms of its local rules
+        /// and a scheduler's removal gives up its rules, so none is freed meanwhile. Global rules and ancestors' local
+        /// rules are never freed while this scope lives.
         /// </summary>
         void FreezeEngine()
         {

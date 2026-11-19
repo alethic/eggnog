@@ -480,9 +480,12 @@ namespace Eggnog.Tests.Rules
             Assert.Throws<ArgumentException>(() => t.Graph.DefineQuery("first", q => q.When(t.Num.Of(1L))));
             Assert.Throws<ArgumentException>(() => t.Graph.DefineQuery("", q => q.When(t.Num.Of(1L))));
             Assert.Throws<ArgumentNullException>(() => t.Graph.DefineQuery("null", null!));
+            var nullFact = Assert.Throws<ArgumentNullException>(() => t.Graph.DefineQuery("null fact", q => q.When(t.Num.Of(1L), null!)));
+            Assert.Equal("facts", nullFact.ParamName);
 
             // A failed definition registers nothing: its name is still free.
             t.Graph.DefineQuery("unbound", q => q.When(t.Num.Of(1L)));
+            t.Graph.DefineQuery("null fact", q => q.When(t.Num.Of(1L)));
         }
 
         [Fact]

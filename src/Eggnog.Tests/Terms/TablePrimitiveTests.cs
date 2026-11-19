@@ -174,6 +174,26 @@ namespace Eggnog.Tests.Terms
         }
 
         [Fact]
+        public void AHostReadsPrimitiveReadsOnlyItsGraphsTables()
+        {
+            // A read primitive in a host read that looks up another graph's table fails the read, as a read of another
+            // graph's table does, rather than read this graph's table of the same engine id.
+            var graph = new EGraph();
+            var other = new EGraph();
+            var f = graph.DefineFunction<long, long>("f");
+            var foreign = other.DefineFunction<long, long>("f");
+            var lookup = LookupOf(foreign);
+            graph.Root.Assume(f.Of(7L).Is(42L));
+            other.Root.Assume(foreign.Of(7L).Is(42L));
+
+            var e = Assert.Throws<RuleEvaluationException>(() => graph.Root.Check(lookup.Of(7L).Is(42L)));
+
+            Assert.StartsWith("primitive 'lookup-f' threw ArgumentException: Table 'f' belongs to another graph.", e.Message,
+                StringComparison.Ordinal);
+            Assert.True(other.Root.Check(lookup.Of(7L).Is(42L)));
+        }
+
+        [Fact]
         public void AFullPrimitiveRunsOnlyWhereReadsAndWritesAre()
         {
             // (let $ff (f-echo 7)) is fine; (check (= (f-echo 1) 1)), a semi-naive rule's body and head refuse it; with
@@ -612,6 +632,56 @@ namespace Eggnog.Tests.Terms
             var rules = graph.DefineRuleset("rules");
             rules.DefineRule("s", b => b.Then(o.Of(1L).Is(sub.Of(5L))));
             Assert.Throws<RuleEvaluationException>(() => graph.Root.Run(rules));
+        }
+
+        [Fact]
+        public void AHostWritesPrimitiveMakesNoWriteTheScopeRefuses()
+        {
+            // A primitive of a host write in a child may not write a function whose merge is not a lattice, which only
+            // the root writes, nor delete a row of one, nor subsume a row of a table that is not subsumable: the write
+            // is refused when the primitive makes it, which fails the fact, nothing is written, and the child is not
+            // faulted.
+            var graph = new EGraph();
+            var latest = graph.DefineFunction<long, long>("latest", FunctionMerge.New<long>());
+            var plain = graph.DefineRelation<long>("plain", new RelationOptions { Subsumable = false });
+            var o = graph.DefineFunction<long, long>("o");
+            var put = Primitive.CreateWrite("put", Long, (ITableWriter tables, ReadOnlySpan<object> args, out long result) =>
+            {
+                tables.Set(latest, [args[0]], (long)args[0]);
+                result = 0;
+                return true;
+            });
+            var drop = Primitive.CreateWrite("drop", Long, (ITableWriter tables, ReadOnlySpan<object> args, out long result) =>
+            {
+                tables.Remove(latest, args[0]);
+                result = 0;
+                return true;
+            });
+            var sub = Primitive.CreateWrite("sub", Long, (ITableWriter tables, ReadOnlySpan<object> args, out long result) =>
+            {
+                tables.Subsume(plain, args[0]);
+                result = 0;
+                return true;
+            });
+            var rows = graph.DefineQuery("plain rows", q => q.When(plain.Of(q.Var<long>("x"))));
+            graph.Root.Assume(latest.Of(1L).Is(1L), plain.Of(1L));
+            graph.Root.Freeze();
+            var child = graph.Root.CreateChild();
+
+            var written = Assert.Throws<RuleEvaluationException>(() => child.Assume(o.Of(0L).Is(put.Of(2L))));
+            var deleted = Assert.Throws<RuleEvaluationException>(() => child.Assume(o.Of(1L).Is(drop.Of(1L))));
+            var subsumed = Assert.Throws<RuleEvaluationException>(() => child.Assume(o.Of(2L).Is(sub.Of(1L))));
+
+            const string RootOnly = "'latest' has the merge 'new', which is not a lattice, so only the root may write it";
+            Assert.StartsWith("primitive 'put' threw ArgumentException: " + RootOnly, written.Message, StringComparison.Ordinal);
+            Assert.StartsWith("primitive 'drop' threw InvalidOperationException: " + RootOnly, deleted.Message, StringComparison.Ordinal);
+            Assert.StartsWith("primitive 'sub' threw ArgumentException: 'plain' is not subsumable", subsumed.Message,
+                StringComparison.Ordinal);
+            Assert.False(child.TryGet(latest.Of(2L), out _));
+            Assert.Equal(1L, child.Get(latest.Of(1L)));
+            Assert.Equal(1, child.Count(rows));
+            Assert.Equal(0, child.CountRows(o));
+            Assert.False(child.IsFaulted);
         }
 
         [Fact]

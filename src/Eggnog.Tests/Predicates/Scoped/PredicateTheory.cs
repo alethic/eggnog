@@ -192,14 +192,16 @@ namespace Eggnog.Tests.Predicates.Scoped
         public Function<Pred, string, Set<string>> Admits { get; }
 
         /// <summary>
-        /// Gets the paths the schema holds present, as a query reads them: <see cref="Present"/> in the schema scope,
-        /// copied by <see cref="Copies"/> once its facts saturate.
+        /// Gets the paths the schema held present when its schedule ran, as a query reads them: <see cref="Present"/>
+        /// in the schema scope, copied by <see cref="Copies"/> once its facts saturate; a copy is never retracted.
         /// </summary>
         public Relation<string> SchemaPresent { get; }
 
         /// <summary>
-        /// Gets the domains the schema holds, as a query reads them: <see cref="Dom"/> in the schema scope, copied by
-        /// <see cref="Copies"/> once its facts saturate.
+        /// Gets the domains the schema held when its schedule ran, as a query reads them: <see cref="Dom"/> in the
+        /// schema scope, copied by <see cref="Copies"/> once its facts saturate. A copy narrows as <see cref="Dom"/>
+        /// does, an intersect lattice, so a schema under a schema narrows the copy it inherits; it never widens, and is
+        /// never retracted.
         /// </summary>
         public Function<string, Set<string>> SchemaDom { get; }
 
@@ -219,8 +221,9 @@ namespace Eggnog.Tests.Predicates.Scoped
         /// <summary>
         /// Gets the rules that copy a schema's <see cref="Present"/> and <see cref="Dom"/> into
         /// <see cref="SchemaPresent"/> and <see cref="SchemaDom"/>. A schema's schedules run them (<see cref="Facts"/> and
-        /// <see cref="PlainFacts"/> end with them), and no query's schedule does, so no rule a query runs writes the
-        /// copies: a query reads in them exactly what its schema held when it was compiled.
+        /// <see cref="PlainFacts"/> end with them, once the schema's facts saturate), and no query's schedule does, so
+        /// no rule a query runs writes the copies: a query reads in them what its schema held when its schedule ran,
+        /// provided the schema deletes no presence or domain and subsumes no presence, since a copy is never retracted.
         /// </summary>
         public Ruleset Copies { get; }
 

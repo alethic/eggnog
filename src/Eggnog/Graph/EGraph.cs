@@ -12,11 +12,11 @@ namespace Eggnog
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Threads: rule, ruleset and query definitions may be made from any thread at any time and take part from the
-    /// next iteration of every run. A table definition may be made from any thread once the root is frozen; while it is
-    /// not, it throws <see cref="InvalidOperationException"/> if another thread is using the root at that moment.
-    /// Sorts and value types may be registered from any thread. User delegates the engine invokes (primitives, lattices,
-    /// filters, cost functions) must not call into a graph.
+    /// Threads: rule, ruleset and query definitions may be made from any thread at any time and take part from the next
+    /// iteration of every run, in the iterations where they may run. A table definition may be made from any thread
+    /// once the root is frozen; while it is not, it throws <see cref="InvalidOperationException"/> if another thread is
+    /// using the root at that moment. Sorts and value types may be registered from any thread. User delegates the
+    /// engine invokes (primitives, lattices, filters, cost functions) must not call into a graph.
     /// </para>
     /// <para>
     /// Every scope is a context of one e-graph, the <see cref="Root"/> included, and a child costs in proportion to
@@ -130,8 +130,10 @@ namespace Eggnog
 
         /// <summary>
         /// Gets the lock of definitions: table, sort, ruleset, query and rule definitions and container type registrations
-        /// take it, and so does a scope's freeze around the engine freeze. Nothing blocks while holding it except engine
-        /// definitions and a freeze's engine work; guards never block.
+        /// take it; so do the schedulers' additions and removals, the building of a rule's scheduled form at its first
+        /// step and its freeing when the scope of a local rule is released; and so does a scope's freeze around the
+        /// engine freeze, which lists the schedulers' rules it plans under it. Nothing blocks while holding it except
+        /// engine definitions and a freeze's engine work; guards never block.
         /// </summary>
         internal object DefinitionLock { get; } = new();
 

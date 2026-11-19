@@ -25,9 +25,10 @@ namespace Eggnog
             (One(graph, name + "=>", define, false), One(graph, name + "<=", define, true));
 
         /// <summary>
-        /// Compiles both drafts so that a refused pair registers nothing: the right-to-left rule is checked first, then
-        /// the left-to-right rule compiles, then the right-to-left one. Should the engine reject the second, the first's
-        /// engine rules are freed. Called under the graph's definition lock.
+        /// Compiles both drafts so that a refused pair registers and interns nothing: the right-to-left rule is checked
+        /// first, short of interning its constants (<see cref="RuleCompiler.Check"/>), then the left-to-right rule
+        /// compiles, interning its constants, then the right-to-left one. Should the engine reject the second, the
+        /// first's engine rules are freed. Called under the graph's definition lock.
         /// </summary>
         /// <param name="graph">The graph.</param>
         /// <param name="forward">The left-to-right draft.</param>

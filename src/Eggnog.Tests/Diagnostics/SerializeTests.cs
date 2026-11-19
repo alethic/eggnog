@@ -249,7 +249,7 @@ namespace Eggnog.Tests.Diagnostics
 
         /// <summary>
         /// A scope serializes its own view: a child that unions two classes of its frozen parent shows one class where the
-        /// parent shows two.
+        /// parent shows two, and a term the child made shows in its serialization and not in its parent's.
         /// </summary>
         [Fact]
         public void AChildSerializesItsOwnView()
@@ -258,6 +258,7 @@ namespace Eggnog.Tests.Diagnostics
             graph.DefineSort<Node>("Node");
             var a = graph.DefineConstructor<Node>("A");
             var b = graph.DefineConstructor<Node>("B");
+            var c = graph.DefineConstructor<Node>("C");
             var x = graph.Root.Make(a.Of());
             var y = graph.Root.Make(b.Of());
             graph.Root.Freeze();
@@ -266,6 +267,10 @@ namespace Eggnog.Tests.Diagnostics
 
             Assert.Equal(2, graph.Root.Serialize().Classes.Count);
             Assert.Single(child.Serialize().Classes);
+
+            child.Make(c.Of());
+            Assert.Contains(child.Serialize().Nodes, n => n.Op == "C");
+            Assert.DoesNotContain(graph.Root.Serialize().Nodes, n => n.Op == "C");
         }
 
         [Fact]

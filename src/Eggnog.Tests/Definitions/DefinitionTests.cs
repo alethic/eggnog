@@ -213,7 +213,9 @@ namespace Eggnog.Tests.Definitions
         {
             var graph = new EGraph();
             var a = graph.DefineRuleset("a");
-            Assert.Throws<ArgumentException>(() => graph.DefineRuleset("a"));
+            var taken = Assert.Throws<ArgumentException>(() => graph.DefineRuleset("a"));
+            Assert.Equal("name", taken.ParamName);
+            Assert.StartsWith("A ruleset named 'a' is already defined.", taken.Message, StringComparison.Ordinal);
             Assert.Throws<ArgumentException>(() => graph.DefineRuleset(""));
             Assert.Equal(new[] { a }, graph.Rulesets);
             Assert.Same(graph, a.Graph);

@@ -11,7 +11,8 @@ namespace Eggnog
     {
 
         /// <summary>
-        /// One engine iteration of a ruleset step's rules in a scope.
+        /// One iteration of a step's rules in a scope: an engine iteration of a ruleset step's rules, or a step of
+        /// <see cref="Schedule.RunWith"/>, whose query and action rules run in two.
         /// </summary>
         Iteration = 0,
 

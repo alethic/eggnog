@@ -12,8 +12,9 @@ namespace Eggnog.Tests.Predicates.Scoped
     /// schema that reasons by the cases of its discriminator are <see cref="DiscriminatedSchema"/>'s. Between them they
     /// exercise stored forms and lowering, discriminated and undiscriminated unions, refused values, numeric bounds,
     /// integer domains, type claims and the deletion of conjuncts the schema implies. Used by the tests that must run
-    /// every query in another setting: two graphs in either order and on parallel threads (GraphIndependenceTests), and a
-    /// degree of parallelism above 1 (ParallelEquivalenceTests).
+    /// every query in another setting: two graphs in either order and on parallel threads (GraphIndependenceTests),
+    /// sibling schemas compiled in either order (SiblingScopePlanOrderTests), and a degree of parallelism above 1
+    /// (ParallelEquivalenceTests).
     /// </summary>
     public static class ScopedQueryCases
     {

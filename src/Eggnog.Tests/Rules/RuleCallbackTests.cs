@@ -11,8 +11,8 @@ namespace Eggnog.Tests.Rules
     /// <summary>
     /// Rule callbacks (<see cref="RuleBuilder.ThenCall"/>, <see cref="RuleBuilder.ThenCallFull"/>), egglog's
     /// <c>rust_rule</c> and <c>rust_rule_full</c>: what a callback sees and writes, reads from a full callback in a naive
-    /// rule, terms and unions, deletions, the writes refused when made, failures, and a callback's rule under a
-    /// scheduler.
+    /// rule and in a child, terms and unions, deletions, the writes refused when made, failures, and a callback's rule
+    /// under a scheduler.
     /// </summary>
     public sealed class RuleCallbackTests
     {
@@ -144,6 +144,38 @@ namespace Eggnog.Tests.Rules
             });
             var e = Assert.Throws<RuleEvaluationException>(() => t.Root.CreateChild().Run(unbound));
             Assert.Contains("is not bound before the callback", e.Message, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// Only a write of a function whose merge is not a lattice is the root's: a full callback of a rule running in
+        /// a child reads one.
+        /// </summary>
+        [Fact]
+        public void AFullCallbackInAChildReadsAFunctionWithAMerge()
+        {
+            var graph = new EGraph();
+            var key = graph.DefineRelation<long>("key");
+            var latest = graph.DefineFunction<long, long>("latest", FunctionMerge.New<long>());
+            var seen = graph.DefineFunction<long, long>("seen", ValueLattice.Max<long>());
+            var rules = graph.DefineRuleset("rules");
+            rules.DefineRule("copy", rule =>
+            {
+                var k = rule.Var<long>("k");
+                rule.When(key.Of(k));
+                rule.ThenCallFull(ctx =>
+                {
+                    if (ctx.TryLookup(latest, [ctx.Get(k)], out var value))
+                        ctx.Set(seen, [ctx.Get(k)], value);
+                });
+            });
+            graph.Root.Assume(key.Of(1L), latest.Of(1L).Is(3L));
+            graph.Root.Freeze();
+            var child = graph.Root.CreateChild();
+
+            child.Run(rules);
+
+            Assert.Equal(3L, child.Get(seen.Of(1L)));
+            Assert.False(child.IsFaulted);
         }
 
         /// <summary>

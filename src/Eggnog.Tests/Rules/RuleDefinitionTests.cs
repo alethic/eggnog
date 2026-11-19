@@ -210,6 +210,10 @@ namespace Eggnog.Tests.Rules
             t.Rules.DefineRule("a root class", r => r.Then(t.Tag.Of(mine)));
         }
 
+        /// <summary>
+        /// A body may not read another graph's table, in a relation row or in an application, whether the application
+        /// is tested for a row or bound to a variable: it would read this graph's table of the same engine id.
+        /// </summary>
         [Fact]
         public void ATableOfAnotherGraphIsRefused()
         {
@@ -220,6 +224,29 @@ namespace Eggnog.Tests.Rules
                 var x = r.Var<long>("x");
                 r.When(other.Num.Of(x));
             }, "table 'num' belongs to another graph");
+            AssertRefused(t, "foreign term", r =>
+            {
+                var x = r.Var<long>("x");
+                r.When(t.Num.Of(x), Fact.Exists(other.Lit.Of(x)));
+            }, "table 'Lit' belongs to another graph");
+            AssertRefused(t, "foreign class", r =>
+            {
+                var (n, x) = r.Vars<Node, long>("n", "x");
+                r.When(t.Num.Of(x), n.Is(other.Lit.Of(x)));
+            }, "table 'Lit' belongs to another graph");
+        }
+
+        /// <summary>
+        /// A null fact is refused when it is given, and nothing is registered.
+        /// </summary>
+        [Fact]
+        public void ANullFactIsRefused()
+        {
+            var t = new NodeTheory();
+            var e = Assert.Throws<ArgumentNullException>(() => t.Rules.DefineRule("null", r => r.When(t.Num.Of(1L), null!)));
+            Assert.Equal("facts", e.ParamName);
+            Assert.StartsWith("A fact is null.", e.Message, StringComparison.Ordinal);
+            Assert.Empty(t.Rules.Rules);
         }
 
         [Fact]

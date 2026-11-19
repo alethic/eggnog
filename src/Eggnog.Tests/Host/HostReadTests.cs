@@ -266,6 +266,13 @@ namespace Eggnog.Tests.Host
             Assert.Equal(3L, t.Root.Get(Int64Primitives.Add.Of(1L, 2L)));
             var other = new NodeTheory();
             Assert.Throws<ArgumentException>(() => t.Root.Check(other.Num.Of(1L)));
+
+            // An application of another graph's constructor is refused too, though this graph's table of the same
+            // engine id holds a row at the key.
+            other.Root.Make(other.Lit.Of(1L));
+            t.Root.Make(t.Lit.Of(1L));
+            Assert.Throws<ArgumentException>(() => t.Root.Get(other.Lit.Of(1L)));
+            Assert.Throws<ArgumentException>(() => t.Root.TryGet(other.Lit.Of(1L), out _));
         }
 
         [Fact]

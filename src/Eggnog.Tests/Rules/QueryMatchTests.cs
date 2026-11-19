@@ -381,6 +381,18 @@ namespace Eggnog.Tests.Rules
             }));
             Assert.Throws<ArgumentException>(() => t.Root.Rows(other.Num));
             Assert.Throws<ArgumentException>(() => t.Root.CountRows(other.Num));
+
+            // An application of another graph's constructor that the body tests for a row is refused: it would read
+            // this graph's table of the same engine id.
+            other.Root.Make(other.Lit.Of(1L));
+            t.Root.Assume(t.Num.Of(1L));
+            t.Root.Make(t.Lit.Of(1L));
+            var foreign = Assert.Throws<RuleDefinitionException>(() => t.Graph.DefineQuery("foreign", b =>
+            {
+                var x = b.Var<long>("x");
+                b.When(t.Num.Of(x), Fact.Exists(other.Lit.Of(x)));
+            }));
+            Assert.Equal("table 'Lit' belongs to another graph", foreign.Message);
         }
 
         [Fact]

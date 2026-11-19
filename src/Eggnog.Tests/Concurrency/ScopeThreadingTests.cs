@@ -17,7 +17,8 @@ namespace Eggnog.Tests.Concurrency
     /// <summary>
     /// Thread domains of scopes under load: a domain is shared by a writable scope and its children and reassigned when
     /// a scope freezes; a second thread fails fast; frozen scopes are read, queried and extracted from many threads in
-    /// transient query children; releases wait for the last call; and runs meet definitions made on other threads,
+    /// transient query children; releases wait for the last call; a freeze keeps the rules and queries it lists to plan
+    /// while other threads dispose queries and release scopes; and runs meet definitions made on other threads,
     /// container types among them. Every test runs on dedicated threads, never on pool threads that could run a task
     /// inline.
     /// </summary>
@@ -58,6 +59,18 @@ namespace Eggnog.Tests.Concurrency
         /// </summary>
         static object ChildrenLockOf(Scope scope) =>
             typeof(Scope).GetField("childrenLock", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(scope)!;
+
+        /// <summary>
+        /// Gets a query's private lock: holding it stands for a concurrent call that starts or ends a use of the query,
+        /// and stops a freeze that lists the query to plan there, after it has listed the schedulers' rules.
+        /// </summary>
+        static object QueryLockOf(Query query) =>
+            typeof(CompiledQuery).GetField("sync", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(query.Compiled)!;
+
+        /// <summary>
+        /// Gets whether a thread waits: blocked on a lock, or in a wait, a sleep or a join.
+        /// </summary>
+        static bool Waits(Thread thread) => (thread.ThreadState & ThreadState.WaitSleepJoin) != 0;
 
         /// <summary>
         /// A child created on another thread once its parent's context is frozen, but before the freeze has given the
@@ -248,6 +261,85 @@ namespace Eggnog.Tests.Concurrency
         }
 
         /// <summary>
+        /// The same holds for a rule that deletes where the scope may not delete: one defined during a run of the root,
+        /// which may not delete while it has a live child, takes no part in the run's later iterations, so the run
+        /// completes and the row stays.
+        /// </summary>
+        [Fact]
+        public void ADeletingRuleDefinedDuringARunWhereTheScopeMayNotDeleteDoesNotFailTheRunHalfway()
+        {
+            var t = new ScopeTheory();
+            using var entered = new ManualResetEventSlim();
+            using var release = new ManualResetEventSlim();
+            t.DefineBlocking(entered, release);
+            t.Root.Assume(t.Fact.Of("a"));
+            var child = t.Root.CreateChild();
+
+            var errors = new Exception?[1];
+            RunReport? report = null;
+            var run = Spawn(() => report = t.Root.Run(Schedule.Saturate(t.Rules)), errors, 0);
+            Assert.True(entered.Wait(Patience));
+
+            // A rule that deletes, which the root's run leaves out of its later iterations while the child lives.
+            t.Rules.DefineRule("drop a", r => r.Delete(t.Fact.Of("a")));
+            release.Set();
+            Assert.True(run.Join(Patience));
+
+            var observed = errors[0] is null
+                ? $"completed: {report!.StopReason}"
+                : $"threw {errors[0]!.GetType().Name} after writing seen(a) = {t.Root.Check(t.Seen.Of("a"))}: {errors[0]!.Message}";
+            if (observed.StartsWith("completed", StringComparison.Ordinal) == false)
+                Assert.Fail(observed);
+
+            Assert.True(t.Root.Check(t.Fact.Of("a")));
+            Assert.True(child.Check(t.Fact.Of("a")));
+        }
+
+        /// <summary>
+        /// The same holds for a scheduler's step: a rule only the root may run, defined during a child's run of
+        /// <c>RunWith</c> steps, takes no part in the run's later steps, so the run completes, and the child is not
+        /// faulted.
+        /// </summary>
+        [Fact]
+        public void ARuleDefinedDuringAScheduledRunThatTheScopeMayNotRunDoesNotFailTheRunHalfway()
+        {
+            var t = new ScopeTheory();
+            using var entered = new ManualResetEventSlim();
+            using var release = new ManualResetEventSlim();
+            t.DefineBlocking(entered, release);
+            var latest = t.Graph.DefineFunction<string, long>("latest", FunctionMerge.New<long>());
+            var scheduler = t.Graph.AddScheduler(new BackOffScheduler());
+            t.Root.Freeze();
+            var outer = t.Root.CreateChild();
+            outer.Assume(t.Fact.Of("a"));
+
+            var errors = new Exception?[1];
+            RunReport? report = null;
+            var run = Spawn(() => report = outer.Run(Schedule.Saturate(Schedule.RunWith(scheduler, t.Rules))), errors, 0);
+            Assert.True(entered.Wait(Patience));
+
+            // A rule only the root may run, which the child's later steps leave out.
+            t.Rules.DefineRule("writes latest", r =>
+            {
+                var x = r.Var<string>("x");
+                r.When(t.Fact.Of(x));
+                r.Then(latest.Of(x).Is(1L));
+            });
+            release.Set();
+            Assert.True(run.Join(Patience));
+
+            var observed = errors[0] is null
+                ? $"completed: {report!.StopReason}"
+                : $"threw {errors[0]!.GetType().Name}, the child {(outer.IsFaulted ? "faulted" : "not faulted")}: {errors[0]!.Message}";
+            if (observed.StartsWith("completed", StringComparison.Ordinal) == false)
+                Assert.Fail(observed);
+
+            Assert.False(outer.IsFaulted);
+            Assert.True(outer.Check(t.Seen.Of("a")));
+            Assert.Equal(0, outer.CountRows(latest));
+        }
+
+        /// <summary>
         /// A freeze plans the default variant of every live query, and holds each query it lists while it plans, so a
         /// query disposed on another thread meanwhile does not make the engine refuse the list: under a steady churn of
         /// single-request queries, each defined and disposed for one request, every freeze succeeds.
@@ -318,6 +410,61 @@ namespace Eggnog.Tests.Concurrency
             Assert.All(errors, Assert.Null);
             if (failures.Count > 0)
                 Assert.Fail($"{failures.Count} of {Freezes} freezes failed: {failures[0]}");
+        }
+
+        /// <summary>
+        /// A child's freeze lists the schedulers' query and action rules to plan, the scheduled form of a sibling's
+        /// local rule among them, and lists and plans them under the definition lock, under which the sibling's release
+        /// frees that scheduled form: a sibling disposed on another thread while the freeze is between its list and its
+        /// plan is released once the freeze is done, and the freeze succeeds. Holding a live query's lock stops the
+        /// freeze in its list, after the schedulers' rules, as a concurrent call on the query would.
+        /// </summary>
+        [Fact]
+        public void AFreezeKeepsTheSchedulersRulesItListedUntilItPlansThem()
+        {
+            var t = new ScopeTheory();
+            var scheduler = t.Graph.AddScheduler(new FirstNScheduler(10));
+            var all = t.Graph.DefineQuery("all", q => q.When(t.Fact.Of(q.Var<string>("x"))));
+            t.Root.Freeze();
+            var sibling = t.Root.CreateChild();
+            sibling.Assume(t.Fact.Of("a"));
+            sibling.DefineRule(t.Rules, "local seen", r =>
+            {
+                var x = r.Var<string>("x");
+                r.When(t.Fact.Of(x));
+                r.Then(t.Seen.Of(x));
+            });
+            sibling.Run(Schedule.RunWith(scheduler, t.Rules));
+            Assert.Equal(1, scheduler.ScheduledRuleCount);
+            var child = t.Root.CreateChild();
+            child.Assume(t.Fact.Of("b"));
+            var queryLock = QueryLockOf(all);
+            var errors = new Exception?[2];
+            Thread freezer;
+            Thread releaser;
+
+            Monitor.Enter(queryLock);
+            try
+            {
+                freezer = Spawn(child.Freeze, errors, 0);
+                Assert.True(SpinWait.SpinUntil(() => Waits(freezer), Patience));
+
+                // The release waits for the freeze to plan; were the freeze to list without the lock, the release would
+                // free the scheduled form the freeze listed, and the engine would refuse the freeze's list.
+                releaser = Spawn(sibling.Dispose, errors, 1);
+                Assert.True(SpinWait.SpinUntil(() => releaser.IsAlive == false || Waits(releaser), Patience));
+            }
+            finally
+            {
+                Monitor.Exit(queryLock);
+            }
+
+            Assert.True(freezer.Join(Patience));
+            Assert.True(releaser.Join(Patience));
+            Assert.Null(errors[0]);
+            Assert.Null(errors[1]);
+            Assert.True(child.IsFrozen);
+            Assert.Equal(0, scheduler.ScheduledRuleCount);
         }
 
         /// <summary>

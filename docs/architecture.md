@@ -80,9 +80,10 @@ An `EGraph` is a theory and its database. It holds the column types (`Values`), 
 rules, the queries, and the root of a tree of scopes (`Root`). It holds only managed memory and is not disposable.
 
 Definitions are never sealed. Rules, rulesets and queries may be defined from any thread at any time, and take part
-from the next iteration of every run. A table definition may be made from any thread once the root is frozen;
-before that it throws `InvalidOperationException` if another thread is using the root at that moment. Definitions are
-taken under the graph's definition lock and published copy-on-write to the engine.
+from the next iteration of every run, in the iterations where they may run (sections 2.3 and 2.5). A table definition
+may be made from any thread once the root is frozen; before that it throws `InvalidOperationException` if another
+thread is using the root at that moment. Definitions are taken under the graph's definition lock and published
+copy-on-write to the engine.
 
 `EGraphOptions` sets the root's degree of parallelism (default 1: serial and deterministic; 0 for every processor, as
 egglog's `-j 0` when `RAYON_NUM_THREADS` is unset) and whether rule statistics record each rule's query plan.
@@ -390,11 +391,12 @@ or holds changes before a class that loses is held by a container of a kind the 
 root from that merge on, at the end of each fact that changes the batch's congruence check, O(passes × rows of the
 check) each time. A merge whose rebuilt containers meet none that such a row names, or meet one that keeps its smaller
 id, leaves the row as it is and is not refused. Also refused: a rule local to a child that writes one; and a run in
-which a rule that writes one would run below the root, in a child. Two cases depend on the data, so only the engine
-refuses them, with its `InvalidOperationException`: a rule's union below the root that would rewrite one of the
-function's rows fails the run (and faults a child); and a root write or merge that a live child would have to rewrite at
-its catch-up, because the child merged away a class keying or held by the row, faults that child at its next call, and
-not the root.
+which a rule that writes one would run below the root, in a child, before any work. One defined on another thread
+during a child's run takes no part in it, as a deleting rule defined during a run takes part only in the iterations
+where it may run (section 2.5). Two cases depend on the data, so only the engine refuses them, with its
+`InvalidOperationException`: a rule's union below the root that would rewrite one of the function's rows fails the run
+(and faults a child); and a root write or merge that a live child would have to rewrite at its catch-up, because the
+child merged away a class keying or held by the row, faults that child at its next call, and not the root.
 
 Each kind of table has its own options, so that each offers only what applies to it. `ConstructorOptions` sets whether
 extraction skips its rows (`Unextractable`, egglog's `:unextractable`); a constructor's cost is not an option but a
@@ -551,10 +553,11 @@ too, and a rule whose head uses no variable of its body cannot be scheduled (egg
 runs on the scope's thread under the engine-call marker, so it cannot call into a graph; one that throws faults the
 scope.
 
-`RunOptions` bounds a run: `IterationLimit` (engine iterations), `TimeLimit` and `RowLimit` (rows in the scope's own
-layers). All three are off by default, so a `Saturate` runs until nothing changes, as egglog's does. Limits and
-cancellation are checked before every iteration; an iteration cannot be interrupted, so a run overshoots by at most one.
-Reaching a limit is not an error: the run stops soundly with fewer facts, and `RunReport.StopReason` says why.
+`RunOptions` bounds a run: `IterationLimit` (iterations, a `RunWith` step counting as one), `TimeLimit` and `RowLimit`
+(rows in the scope's own layers). All three are off by default, so a `Saturate` runs until nothing changes, as egglog's
+does. Limits and cancellation are checked before every iteration; an iteration cannot be interrupted, so a run
+overshoots by at most one. Reaching a limit is not an error: the run stops soundly with fewer facts, and
+`RunReport.StopReason` says why.
 
 `RunReport` gives the iterations, whether the run saturated and whether it changed the scope, search, merge and
 rebuild times, and per-rule statistics (matches, search time, iterations with matches, and the plan when
@@ -735,6 +738,7 @@ Extractors over a frozen scope may run concurrently, one per thread.
   |---|---|
   | Its rows, layers, union-find overlay, journal and cursors | nothing |
   | Its local rules, their engine rules, variants and call-site external functions | nothing; freed rule and external-function ids are reused |
+  | The worklists of its local rules' scheduled forms (section 2.6) | the tables, since an engine table is never freed: each waits for another scheduled rule of the same columns, but one a failed step may have left rows in stays unused |
   | Values it interned: constants, primitive and merge results | all of them, in the graph's pools (section 2.2) |
   | Ids it reserved (one block of 16 for its first term, then blocks doubling up to 4,096) | all of them: ids are never handed out again |
   | Epochs its writes, run iterations and rebuild passes took | all of them: the clock never goes back |

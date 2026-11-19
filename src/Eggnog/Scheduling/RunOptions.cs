@@ -5,9 +5,9 @@ namespace Eggnog
 
     /// <summary>
     /// How a <see cref="Scope.Run(Schedule, RunOptions, System.Threading.CancellationToken)"/> runs. Limits are per
-    /// run, and checked before every iteration (the first included); a run overshoots a limit or a cancellation by at
-    /// most one engine iteration, which cannot be interrupted. A limit is not an error: the run stops soundly, with
-    /// fewer facts, and <see cref="RunReport.StopReason"/> says why.
+    /// run, and checked before every iteration (the first included), a step of <see cref="Schedule.RunWith"/> counting
+    /// as one; a run overshoots a limit or a cancellation by at most one iteration, which cannot be interrupted. A
+    /// limit is not an error: the run stops soundly, with fewer facts, and <see cref="RunReport.StopReason"/> says why.
     /// </summary>
     public sealed class RunOptions
     {
@@ -18,9 +18,9 @@ namespace Eggnog
         public static RunOptions Default { get; } = new();
 
         /// <summary>
-        /// Gets the most engine iterations the run may make; must be at least 0. The default, <see cref="int.MaxValue"/>,
-        /// is the largest count the iteration counter holds and in effect sets no limit: as in egglog, a <c>Saturate</c>
-        /// runs until nothing changes.
+        /// Gets the most iterations the run may make, a step of <see cref="Schedule.RunWith"/> counting as one; must be
+        /// at least 0. The default, <see cref="int.MaxValue"/>, is the largest count the iteration counter holds and in
+        /// effect sets no limit: as in egglog, a <c>Saturate</c> runs until nothing changes.
         /// </summary>
         public int IterationLimit { get; init; } = int.MaxValue;
 

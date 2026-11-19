@@ -94,8 +94,9 @@ namespace Eggnog.Tests.Rules
         }
 
         /// <summary>
-        /// A refused birewrite registers nothing. The left-to-right rule would compile, but the right-to-left one does
-        /// not, so the pair is checked before either compiles; the same holds for a local birewrite.
+        /// A refused birewrite registers and interns nothing. The left-to-right rule would compile, interning its
+        /// condition's literal, but the right-to-left one does not, so the pair is checked before either compiles; the
+        /// same holds for a local birewrite.
         /// </summary>
         [Fact]
         public void ARefusedBiRewriteRegistersNothing()
@@ -104,10 +105,11 @@ namespace Eggnog.Tests.Rules
             t.Graph.DefineSort<Node>("Node");
             var wrap = t.Graph.DefineConstructor<Node, Node>("Wrap");
             var variants = t.Graph.VariantsByDescription.Count;
+            var interned = t.Graph.Values.InternedCount;
             (Term<Node> Left, Term<Node> Right) Unwrap(RuleBuilder r)
             {
-                var (x, s) = r.Vars<Node, string>("x", "s");
-                r.When(t.Fact.Of(s));
+                var x = r.Var<Node>("x");
+                r.When(t.Fact.Of("only in the refused pair"));
                 return (wrap.Of(x), x);
             }
 
@@ -115,6 +117,7 @@ namespace Eggnog.Tests.Rules
             Assert.Throws<RuleDefinitionException>(() => t.Root.DefineBiRewrite<Node>(t.Rules, "unwrap", Unwrap));
 
             Assert.Equal(variants, t.Graph.VariantsByDescription.Count);
+            Assert.Equal(interned, t.Graph.Values.InternedCount);
             Assert.Empty(t.Rules.Rules);
             Assert.Empty(t.Root.LocalRules);
         }

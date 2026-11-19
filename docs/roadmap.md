@@ -220,6 +220,10 @@ Considered and not planned. Each line says what would reopen it.
   reads it with `Check` and stops a schedule on it with `Schedule.Until` wrapped around each step
   (`Saturate(Until(rules, c))`, [`architecture.md`](architecture.md), section 2.3), as the `PredicateTheory` fixture
   derives and reads its own. Reopen only by a decision to make a scope's lack of a model a library feature.
+- Scope tags, scoped reads (`In(tag)`, `Fact.In`) and the mirror tables behind them, and the licences and table roles
+  that checked what a rule reads: a theory that reads another scope's facts copies them into tables of its own with
+  rules that scope's schedule runs, as the `PredicateTheory` fixture copies its schema's presence and domain claims for
+  its queries' rewrites to read. Reopen only by a decision to make reading another scope's facts a library feature.
 - Guarded terms as a feature, a term that differs by case built by the library: for a user who reasons over
   if-then-else guards in volume; the recipe with children is in [`architecture.md`](architecture.md), section 2.8.
 - Pairing a catch-up failure with the run's own in `RunRulesCore`: if an engine caller outside the library appears.

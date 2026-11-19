@@ -208,6 +208,67 @@ namespace Eggnog.Tests.Predicates.Scoped
         }
 
         /// <summary>
+        /// A schema's copies hold what its rules derive, not only what it asserts: each of its schedules copies its
+        /// facts once they saturate. A disequality narrows the schema's domain {A, B} of <c>kind</c> to {A}, which
+        /// implies the comparison with A, so the query deletes it.
+        /// </summary>
+        /// <param name="cases">Whether the schema is compiled with its case rules (<see cref="PredicateTheory.Facts"/>)
+        /// rather than without them (<see cref="PredicateTheory.PlainFacts"/>).</param>
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void ASchemasCopiesHoldWhatItsRulesDerive(bool cases)
+        {
+            var c = new PredicateTheory(new EGraph());
+            c.Graph.Root.Freeze();
+            var schema = c.Graph.Root.CreateChild();
+            schema.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of(["A", "B"])), c.Ne.Of("kind", "B"));
+            Assert.True(schema.Run(cases ? c.Facts : c.PlainFacts).Saturated);
+            schema.Freeze();
+            Assert.Equal(Set.Of(["A"]), schema.Get(c.Dom.Of("kind")));
+            var (query, q) = DiscriminatedSchema.Ask(c, schema, c.And.Of(c.StrEq.Of("kind", "A"), c.StrEq.Of("id", "x")));
+            using (query)
+            {
+                Assert.Equal(Set.Of(["A"]), query.Get(c.SchemaDom.Of("kind")));
+                var best = query.Extract(q);
+                Assert.Equal("(StrEq \"id\" \"x\")", best.ToString());
+                Assert.Equal(3UL, best.Cost);
+            }
+        }
+
+        /// <summary>
+        /// A schema compiled under a compiled schema narrows the copy of a domain it inherits, as its own domain
+        /// narrows (an intersect lattice): the outer schema's domain {A, B} of <c>kind</c> implies no comparison, and
+        /// the inner schema's {A} implies the comparison with A, so a query of the inner schema deletes it and one of
+        /// the outer schema keeps it.
+        /// </summary>
+        [Fact]
+        public void ANestedSchemasCopyNarrowsTheDomainItInherits()
+        {
+            var c = new PredicateTheory(new EGraph());
+            var outer = SchemaOf(c, c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of(["A", "B"])));
+            var inner = outer.CreateChild();
+            inner.Assume(c.Dom.Of("kind").Is(Set.Of(["A"])));
+            Assert.True(inner.Run(c.PlainFacts).Saturated);
+            inner.Freeze();
+            var predicate = c.And.Of(c.StrEq.Of("kind", "A"), c.StrEq.Of("id", "x"));
+
+            var (query, q) = DiscriminatedSchema.Ask(c, inner, predicate);
+            using (query)
+            {
+                Assert.Equal(Set.Of(["A"]), query.Get(c.SchemaDom.Of("kind")));
+                Assert.Equal("(StrEq \"id\" \"x\")", query.Extract(q).ToString());
+            }
+
+            var (outerQuery, p) = DiscriminatedSchema.Ask(c, outer, predicate);
+            using (outerQuery)
+            {
+                Assert.Equal(Set.Of(["A", "B"]), outerQuery.Get(c.SchemaDom.Of("kind")));
+                Assert.Equal("(And (StrEq \"kind\" \"A\") (StrEq \"id\" \"x\"))", outerQuery.Extract(p).ToString());
+            }
+        }
+
+        /// <summary>
         /// Excluding kind b leaves a and c, and kind c declares no ref, so nothing proves its form and the UUID
         /// comparison stays.
         /// </summary>
