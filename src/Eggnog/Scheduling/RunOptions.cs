@@ -18,9 +18,9 @@ namespace Eggnog
         public static RunOptions Default { get; } = new();
 
         /// <summary>
-        /// Gets the most engine iterations the run may make (mirror syncs do not count); must be at least 0. The
-        /// default, <see cref="int.MaxValue"/>, is the largest count the iteration counter holds and in effect sets no
-        /// limit: as in egglog, a <c>Saturate</c> runs until nothing changes.
+        /// Gets the most engine iterations the run may make; must be at least 0. The default, <see cref="int.MaxValue"/>,
+        /// is the largest count the iteration counter holds and in effect sets no limit: as in egglog, a <c>Saturate</c>
+        /// runs until nothing changes.
         /// </summary>
         public int IterationLimit { get; init; } = int.MaxValue;
 

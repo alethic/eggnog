@@ -12,7 +12,7 @@ namespace Eggnog
         /// <summary>
         /// Checks a name of a table, sort, value type, ruleset, rule or variable: not <c>null</c> and not empty. As in
         /// egglog, a table's name may hold any character, <c>'@'</c> and a leading <c>'$'</c> included: the tables the
-        /// library makes for itself (mirrors and worklists) take no name of the user's.
+        /// library makes for itself (the schedulers' worklists) take no name of the user's.
         /// </summary>
         /// <param name="name">The name.</param>
         /// <param name="parameter">The parameter name for exceptions.</param>

@@ -9,8 +9,7 @@ namespace Eggnog.Tests.Rules
 
     /// <summary>
     /// The engine rule a program lowers to, read through the bridge's rule (<c>Relations.BridgeQuery</c>): atoms, steps
-    /// in placement order, head operations, and the descriptions of the variants of rules, local rules and mirror copy
-    /// rules.
+    /// in placement order, head operations, and the descriptions of the variants of rules and local rules.
     /// </summary>
     public sealed class LoweringTests
     {
@@ -200,15 +199,14 @@ namespace Eggnog.Tests.Rules
         }
 
         /// <summary>
-        /// A local rule's variant is described <c>{scope path}:{ruleset}/{name}#{serial}</c> and a mirror copy rule's
-        /// <c>$mirror/{mirror name}#{serial}</c>; copy rules are never listed in a run's report.
+        /// A local rule's variant is described <c>{scope path}:{ruleset}/{name}#{serial}</c>, and the rule is listed in a
+        /// run's report.
         /// </summary>
         [Fact]
-        public void LocalAndCopyRulesAreDescribedAsSpecified()
+        public void ALocalRuleIsDescribedAsSpecified()
         {
             var t = new ScopeTheory();
-            var copies = new OuterCopies(t);
-            var outer = t.Root.CreateChild(t.Outer);
+            var outer = t.Root.CreateChild();
             var local = outer.DefineRule(t.Rules, "local", r =>
             {
                 var x = r.Var<string>("x");
@@ -217,15 +215,9 @@ namespace Eggnog.Tests.Rules
             });
             Assert.Equal($"{outer.Path}:rules/local#{local.Compiled.Serial}", local.Compiled.Variants.Default!.Description);
 
-            var mirror = t.Graph.Mirrors.Get(t.Fact, t.Outer);
-            var copy = mirror.CopyRule;
-            Assert.Equal($"$mirror/fact @outer#{copy.Serial}", copy.Variants.Default!.Description);
-
             outer.Assume(t.Fact.Of("a"));
             var report = outer.Run(Schedule.Saturate(t.Rules));
-            Assert.True(outer.Check(copies.Facts.Of("a"), t.Seen.Of("a")));
-            Assert.DoesNotContain(copy.Rule, report.Rules.Keys);
-            Assert.DoesNotContain(report.Rules.Keys, r => r.Ruleset.Name == "$mirror");
+            Assert.True(outer.Check(t.Seen.Of("a")));
             Assert.Contains(local, report.Rules.Keys);
         }
 

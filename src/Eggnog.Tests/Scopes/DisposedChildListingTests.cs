@@ -16,9 +16,9 @@ namespace Eggnog.Tests.Scopes
         public void ADisposedChildWaitingForItsReleaseIsNotListed()
         {
             var t = new ScopeTheory();
-            var kept = t.Root.CreateChild(t.Outer);
-            var waiting = t.Root.CreateChild(t.Outer);
-            var grandchild = waiting.CreateChild(t.Inner);
+            var kept = t.Root.CreateChild();
+            var waiting = t.Root.CreateChild();
+            var grandchild = waiting.CreateChild();
 
             waiting.Dispose();
 

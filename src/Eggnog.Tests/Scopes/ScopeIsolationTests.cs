@@ -22,13 +22,13 @@ namespace Eggnog.Tests.Scopes
                 r.Then(t.Seen.Of(x), t.Best.Of(x).Is(1L));
             });
             t.Root.Freeze();
-            var schema = t.Root.CreateChild(t.Outer);
+            var schema = t.Root.CreateChild();
             schema.Assume(t.Fact.Of("schema"));
             schema.Run(Schedule.Saturate(t.Rules));
             schema.Freeze();
 
-            using var one = schema.CreateChild(t.Inner);
-            using var two = schema.CreateChild(t.Inner);
+            using var one = schema.CreateChild();
+            using var two = schema.CreateChild();
             one.Assume(t.Fact.Of("one"), t.Best.Of("schema").Is(5L));
             one.Run(Schedule.Saturate(t.Rules));
             two.Run(Schedule.Saturate(t.Rules));

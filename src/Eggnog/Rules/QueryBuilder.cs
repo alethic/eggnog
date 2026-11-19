@@ -70,15 +70,11 @@ namespace Eggnog
         /// filters.
         /// </summary>
         /// <param name="facts">The facts.</param>
-        /// <exception cref="ArgumentException">The tag of a <see cref="Fact.In"/> belongs to another graph.</exception>
         public void When(params ReadOnlySpan<Fact> facts)
         {
             ThrowIfClosed();
             foreach (var fact in facts)
-            {
-                graph.CheckFactTags(fact ?? throw new ArgumentNullException(nameof(facts), "A fact is null."), nameof(facts));
-                draft.Body.Add(fact);
-            }
+                draft.Body.Add(fact ?? throw new ArgumentNullException(nameof(facts), "A fact is null."));
         }
 
         /// <summary>

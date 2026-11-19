@@ -32,15 +32,15 @@ namespace Eggnog.Tests.Concurrency
             var c = new PredicateTheory(new EGraph(new EGraphOptions { DegreeOfParallelism = degree }));
             ForceParallel(c.Graph.Root, degree);
             c.Graph.Root.Freeze();
-            var schema = c.Graph.Root.CreateChild(c.Schema, degree > 1 ? new ScopeOptions { DegreeOfParallelism = degree } : null);
+            var schema = c.Graph.Root.CreateChild(degree > 1 ? new ScopeOptions { DegreeOfParallelism = degree } : null);
             ForceParallel(schema, degree);
             DiscriminatedSchema.Declare(c, schema);
-            schema.Run(Schedule.Saturate(c.Horn, c.Lattice));
+            schema.Run(c.PlainFacts);
             schema.Freeze();
             var facts = new List<IReadOnlyList<string>> { ScopeFacts.Of(schema) };
             foreach (var term in DiscriminatedSchema.Queries(c))
             {
-                var query = schema.CreateChild(c.Query, degree > 1 ? new ScopeOptions { DegreeOfParallelism = degree } : null);
+                var query = schema.CreateChild(degree > 1 ? new ScopeOptions { DegreeOfParallelism = degree } : null);
                 ForceParallel(query, degree);
                 var q = query.Make(term);
                 query.Assume(c.WhereClause.Of(q));
@@ -96,12 +96,12 @@ namespace Eggnog.Tests.Concurrency
             var c = new PredicateTheory(new EGraph(new EGraphOptions { DegreeOfParallelism = degree }));
             ForceParallel(c.Graph.Root, degree);
             c.Graph.Root.Freeze();
-            var schema = c.Graph.Root.CreateChild(c.Schema, degree > 1 ? new ScopeOptions { DegreeOfParallelism = degree } : null);
+            var schema = c.Graph.Root.CreateChild(degree > 1 ? new ScopeOptions { DegreeOfParallelism = degree } : null);
             ForceParallel(schema, degree);
             declare(c, schema);
-            schema.Run(Schedule.Saturate(c.Horn, c.Lattice));
+            schema.Run(c.PlainFacts);
             schema.Freeze();
-            using var query = schema.CreateChild(c.Query, degree > 1 ? new ScopeOptions { DegreeOfParallelism = degree } : null);
+            using var query = schema.CreateChild(degree > 1 ? new ScopeOptions { DegreeOfParallelism = degree } : null);
             ForceParallel(query, degree);
             var q = query.Make(term(c));
             query.Assume(c.WhereClause.Of(q));

@@ -30,16 +30,6 @@ namespace Eggnog
         /// not its column's.</exception>
         public Fact Of(params ReadOnlySpan<object> keys) => new RelationFact(this, ToArguments(keys));
 
-        /// <summary>
-        /// A read-only scoped view of the table, which must have no sort column, as for the typed relations.
-        /// </summary>
-        /// <param name="scope">The tag of the scope to read.</param>
-        /// <returns>The view.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="scope"/> is <c>null</c>.</exception>
-        /// <exception cref="ArgumentException">The tag belongs to another graph, or the table has a sort
-        /// column.</exception>
-        public RelationN In(ScopeTag scope) => ViewIn(new RelationN(), scope);
-
     }
 
 }

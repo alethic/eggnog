@@ -12,7 +12,7 @@ namespace Eggnog
     /// functions to constructors; and the conversion of cost models, cached per model instance.
     /// </summary>
     /// <remarks>
-    /// Relations, functions and mirror tables are never declared. Thread-safe: schemas are made and extended under the
+    /// Relations and functions are never declared. Thread-safe: schemas are made and extended under the
     /// catalog's lock; the bridge's extraction schema publishes its declarations for extractors on other threads.
     /// </remarks>
     internal sealed class ExtractionCatalog

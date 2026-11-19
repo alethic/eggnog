@@ -24,7 +24,7 @@ namespace Eggnog.Tests.Scopes
                 r.Then(t.Fact.Of("path"));
             });
             t.Root.Freeze();
-            var scope = t.Root.CreateChild(t.Outer);
+            var scope = t.Root.CreateChild();
             var local = scope.DefineRule(t.Rules, "local sees", r =>
             {
                 var x = r.Var<string>("x");
@@ -53,7 +53,7 @@ namespace Eggnog.Tests.Scopes
             var t = new ScopeTheory();
             var others = t.Graph.DefineRuleset("others");
             t.Root.Freeze();
-            var schema = t.Root.CreateChild(t.Outer);
+            var schema = t.Root.CreateChild();
             var local = schema.DefineRule(t.Rules, "local sees", r =>
             {
                 var x = r.Var<string>("x");
@@ -61,7 +61,7 @@ namespace Eggnog.Tests.Scopes
                 r.Then(t.Seen.Of(x));
             });
             schema.Freeze();
-            var query = schema.CreateChild(t.Inner);
+            var query = schema.CreateChild();
             query.Assume(t.Fact.Of("q"));
 
             var report = query.Run(Schedule.Saturate(others));

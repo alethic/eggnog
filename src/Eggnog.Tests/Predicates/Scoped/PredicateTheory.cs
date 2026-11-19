@@ -9,14 +9,15 @@ namespace Eggnog.Tests.Predicates.Scoped
     /// terms are predicates (<see cref="Pred"/>) over paths. Its rules derive what a predicate's conjuncts claim,
     /// settle the lattices, derive a contradiction (<see cref="Contradiction"/>) when no document can satisfy the
     /// claims, reason by the cases of a discriminator's domain over set lattices, lower costly comparisons and simplify
-    /// the predicate. A schema scope (<see cref="Schema"/>) holds what every document satisfies; a query scope
-    /// (<see cref="Query"/>) under it adds one predicate. Contexts carry no data argument and facts flow to a child by
-    /// scope inheritance.
-    /// <see cref="Literal.ContextArgumentTheory"/> is the same theory with both written out, but for its cases: it opens
-    /// a context per value of a discriminator and runs the whole theory there, where this theory's case rules read only
-    /// what each value's branch declares, and so derive less (<see cref="DefineCaseRules"/>). The theory is defined once
-    /// per graph and shared by every schema scope in it; there is one per graph, because it defines the graph's scope
-    /// tags.
+    /// the predicate. A schema scope holds what every document satisfies; a query scope under it adds one predicate.
+    /// Contexts carry no data argument and facts flow to a child by scope inheritance.
+    /// <see cref="Literal.ContextArgumentTheory"/> is the same theory with both written out, but for its cases: it
+    /// opens a context per value of a discriminator and runs the whole theory there, where this theory's case rules
+    /// read only what each value's branch declares, and so derive less (<see cref="DefineCaseRules"/>). A schema's
+    /// schedules end by copying its presence and domain claims into tables of their own (<see cref="SchemaPresent"/>,
+    /// <see cref="SchemaDom"/>), which the rewrites that delete a conjunct read; no rule of a query's schedule writes
+    /// them, so a conjunct never proves itself redundant from what its own query derived. The theory is defined once
+    /// per graph and shared by every schema scope in it.
     /// </summary>
     public sealed partial class PredicateTheory
     {
@@ -24,9 +25,7 @@ namespace Eggnog.Tests.Predicates.Scoped
         static readonly Set<string> StringOrNull = Set.Of(["string", "null"]);
 
         /// <summary>
-        /// Defines the theory in a graph. Every rule that reads a scope is defined here, before any schema is frozen:
-        /// the first read of a table in a scope creates its mirror, which is refused once a scope of that tag is
-        /// frozen.
+        /// Defines the theory in a graph.
         /// </summary>
         /// <param name="graph">The graph.</param>
         public PredicateTheory(EGraph graph)
@@ -34,15 +33,10 @@ namespace Eggnog.Tests.Predicates.Scoped
             Graph = graph;
             graph.DefineSort<Pred>("Pred");
 
-            // The graph's own tags (a tag belongs to the graph that defines it): a schema scope, and a query scope.
-            Schema = graph.DefineScopeTag("schema");
-            Query = graph.DefineScopeTag("query");
-
             // A nullary fact: no document satisfies the scope's claims.
             Contradiction = graph.DefineRelation("contradiction");
 
-            // Claims about a path. Value-only, so a query can read the schema's view of each: a scoped read may name
-            // only a value-only table, which it reads through a mirror.
+            // Claims about a path.
             Present = graph.DefineRelation<string>("present");
             Form = graph.DefineRelation<string, string>("form");
             Ne = graph.DefineRelation<string, string>("ne");
@@ -71,21 +65,26 @@ namespace Eggnog.Tests.Predicates.Scoped
             UuidEq = graph.DefineConstructor<string, string, Pred>("UuidEq", cost: 1000);
             InstantGt = graph.DefineConstructor<string, string, Pred>("InstantGt", cost: 1000);
 
-            // Query bookkeeping, and the analyses, which are derived from terms alone.
-            var analysis = new FunctionOptions { Analysis = true };
+            // Query bookkeeping, and what a predicate's terms imply of a path, derived from the terms alone.
             WhereClause = graph.DefineRelation<Pred>("where");
             Conjunct = graph.DefineRelation<Pred>("conjunct");
-            InSet = graph.DefineFunction<Pred, string, Set<string>>("inset", ValueLattice.Intersect<string>(), analysis);
-            Admits = graph.DefineFunction<Pred, string, Set<string>>("admits", ValueLattice.Intersect<string>(), analysis);
+            InSet = graph.DefineFunction<Pred, string, Set<string>>("inset", ValueLattice.Intersect<string>());
+            Admits = graph.DefineFunction<Pred, string, Set<string>>("admits", ValueLattice.Intersect<string>());
+
+            // The schema's presence and domain claims, as a query reads them: copies that only a schema's schedule
+            // writes, once its facts saturate (Copies).
+            SchemaPresent = graph.DefineRelation<string>("schema-present");
+            SchemaDom = graph.DefineFunction<string, Set<string>>("schema-dom", ValueLattice.Intersect<string>());
 
             Horn = graph.DefineRuleset("horn");
             Lattice = graph.DefineRuleset("lattice");
-            // Every rewrite reads facts only from the schema, so that a conjunct never proves itself redundant, unless
-            // the rule says why it may read the query's.
-            Rewrite = graph.DefineRuleset("rewrite", new RulesetOptions { Licence = Schema });
+            Rewrite = graph.DefineRuleset("rewrite");
+            Copies = graph.DefineRuleset("schema copies");
             DefineHorn();
             DefineLattice();
             DefineRewrite();
+            DefineCopies();
+            PlainFacts = Schedule.Sequence(Schedule.Saturate(Horn, Lattice), Schedule.Saturate(Copies));
             DefineCases();
         }
 
@@ -94,12 +93,6 @@ namespace Eggnog.Tests.Predicates.Scoped
 
         /// <summary>Gets the graph.</summary>
         public EGraph Graph { get; }
-
-        /// <summary>Gets the tag of a schema scope: what every document satisfies.</summary>
-        public ScopeTag Schema { get; }
-
-        /// <summary>Gets the tag of a query scope: its schema plus one predicate's claims.</summary>
-        public ScopeTag Query { get; }
 
         /// <summary>
         /// Gets the nullary relation "no document satisfies the scope's claims": the lattice rules derive it where a
@@ -198,6 +191,18 @@ namespace Eggnog.Tests.Predicates.Scoped
         /// <summary>Gets "the predicate implies that path p holds a value of S".</summary>
         public Function<Pred, string, Set<string>> Admits { get; }
 
+        /// <summary>
+        /// Gets the paths the schema holds present, as a query reads them: <see cref="Present"/> in the schema scope,
+        /// copied by <see cref="Copies"/> once its facts saturate.
+        /// </summary>
+        public Relation<string> SchemaPresent { get; }
+
+        /// <summary>
+        /// Gets the domains the schema holds, as a query reads them: <see cref="Dom"/> in the schema scope, copied by
+        /// <see cref="Copies"/> once its facts saturate.
+        /// </summary>
+        public Function<string, Set<string>> SchemaDom { get; }
+
         /// <summary>Gets the Horn ruleset.</summary>
         public Ruleset Horn { get; }
 
@@ -205,10 +210,25 @@ namespace Eggnog.Tests.Predicates.Scoped
         public Ruleset Lattice { get; }
 
         /// <summary>
-        /// Gets the rewrite ruleset, licensed by <see cref="Schema"/>: its rules read facts from the schema, unless a
-        /// rule says why it may read the query's own.
+        /// Gets the rewrite ruleset. Its rules that delete a conjunct read facts only from the schema, through
+        /// <see cref="SchemaPresent"/> and <see cref="SchemaDom"/>, so that a conjunct never proves itself redundant; the
+        /// rest read terms only, or the running scope's own facts where that is sound.
         /// </summary>
         public Ruleset Rewrite { get; }
+
+        /// <summary>
+        /// Gets the rules that copy a schema's <see cref="Present"/> and <see cref="Dom"/> into
+        /// <see cref="SchemaPresent"/> and <see cref="SchemaDom"/>. A schema's schedules run them (<see cref="Facts"/> and
+        /// <see cref="PlainFacts"/> end with them), and no query's schedule does, so no rule a query runs writes the
+        /// copies: a query reads in them exactly what its schema held when it was compiled.
+        /// </summary>
+        public Ruleset Copies { get; }
+
+        /// <summary>
+        /// Gets the schedule a schema is compiled with when it reasons by no cases: horn and lattice, then the copies of
+        /// its facts (<see cref="Copies"/>).
+        /// </summary>
+        public Schedule PlainFacts { get; }
 
         /// <summary>
         /// Declares one branch of a discriminated union: where the path holds the value, the branch's claims hold:
@@ -419,57 +439,57 @@ namespace Eggnog.Tests.Predicates.Scoped
 
         void DefineRewrite()
         {
-            // These four judge on the query's own facts, and each says why that is sound.
+            // These four judge on the running scope's own facts, which is sound for each. The two lowerings: the guard
+            // that proved the form is a conjunct that stays in the predicate.
             Rewrite.DefineRule("lower uuid", r =>
             {
                 var (e, p, v) = r.Vars<Pred, string, string>("e", "p", "v");
-                r.ReadsOwnFacts("the guard that proved the form is a conjunct that stays in the predicate");
                 r.When(e.Is(UuidEq.Of(p, v)), Form.Of(p, "uuid-lower"));
                 r.Then(e.Is(StrEq.Of(p, v)));
             });
             Rewrite.DefineRule("lower instant", r =>
             {
                 var (e, p, v) = r.Vars<Pred, string, string>("e", "p", "v");
-                r.ReadsOwnFacts("the guard that proved the form is a conjunct that stays in the predicate");
                 r.When(e.Is(InstantGt.Of(p, v)), Form.Of(p, "instant-ms"));
                 r.Then(e.Is(StrGt.Of(p, v)));
             });
+
+            // A query with no documents makes every predicate equivalent to false.
             Rewrite.DefineRule("contradicted predicate", r =>
             {
                 var e = r.Var<Pred>("e");
-                r.ReadsOwnFacts("a query with no documents makes every predicate equivalent to false");
                 r.When(WhereClause.Of(e), Contradiction.Of());
                 r.Then(e.Is(PFalse.Of()));
             });
-            // Not(IsString p) admits nothing a present string-or-null path holds: it is Not(IsDefined p).
+
+            // Not(IsString p) admits nothing a present string-or-null path holds: it is Not(IsDefined p), an equivalence
+            // under type facts whose conjuncts stay in the predicate.
             Rewrite.DefineRule("a string path's negated string test", r =>
             {
                 var (e, p, t) = r.Vars<Pred, string, Set<string>>("e", "p", "t");
-                r.ReadsOwnFacts("an equivalence under type facts whose conjuncts stay in the predicate");
                 r.When(e.Is(Not.Of(IsString.Of(p))), t.Is(Types.Of(p)));
                 r.Where(t, t => t.IsSubsetOf(StringOrNull));
                 r.Then(e.Is(Not.Of(IsDefined.Of(p))));
             });
 
-            // Deletions read facts only from the schema, and the ruleset's licence checks it: a conjunct's own
-            // consequences in the query (present(kind) from StrEq(kind, A)) can never delete it. present @schema and
-            // dom @schema are mirrors.
+            // Deletions read facts only from the schema, through its copies, which no query rule writes: a conjunct's own
+            // consequences in the query (present(kind) from StrEq(kind, A)) can never delete it.
             Rewrite.DefineRule("declared tautology", r =>
             {
                 var (e, p) = r.Vars<Pred, string>("e", "p");
                 var (s, d) = r.Vars<Set<string>, Set<string>>("s", "d");
-                r.When(s.Is(InSet.Of(e, p)), Present.In(Schema).Of(p), d.Is(Dom.In(Schema).Of(p)));
+                r.When(s.Is(InSet.Of(e, p)), SchemaPresent.Of(p), d.Is(SchemaDom.Of(p)));
                 r.Where(Primitives.SetIsSubset<string>().Of(d, s));
                 r.Then(e.Is(PTrue.Of()));
             });
             Rewrite.DefineRule("declared presence", r =>
             {
                 var (e, p) = r.Vars<Pred, string>("e", "p");
-                r.When(e.Is(IsDefined.Of(p)), Present.In(Schema).Of(p));
+                r.When(e.Is(IsDefined.Of(p)), SchemaPresent.Of(p));
                 r.Then(e.Is(PTrue.Of()));
             });
 
-            // These read terms only, so the licence does not constrain them.
+            // These read terms only.
             Rewrite.DefineRule("a definedness test absorbs its negation", r =>
             {
                 var (p, x) = r.Vars<string, Pred>("p", "x");
@@ -491,6 +511,22 @@ namespace Eggnog.Tests.Predicates.Scoped
             Rewrite.DefineRule("false and", r => { var a = r.Var<Pred>("a"); r.Rewrite(And.Of(PFalse.Of(), a), PFalse.Of()); });
             Rewrite.DefineRule("false or", r => { var a = r.Var<Pred>("a"); r.Rewrite(Or.Of(PFalse.Of(), a), a); });
             Rewrite.DefineRule("true or", r => { var a = r.Var<Pred>("a"); r.Rewrite(Or.Of(PTrue.Of(), a), PTrue.Of()); });
+        }
+
+        void DefineCopies()
+        {
+            Copies.DefineRule("copy presence", r =>
+            {
+                var p = r.Var<string>("p");
+                r.When(Present.Of(p));
+                r.Then(SchemaPresent.Of(p));
+            });
+            Copies.DefineRule("copy domain", r =>
+            {
+                var (p, d) = r.Vars<string, Set<string>>("p", "d");
+                r.When(d.Is(Dom.Of(p)));
+                r.Then(SchemaDom.Of(p).Is(d));
+            });
         }
 
     }

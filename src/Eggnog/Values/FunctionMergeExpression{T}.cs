@@ -108,7 +108,7 @@ namespace Eggnog
 
         /// <inheritdoc />
         /// <exception cref="ArgumentException">The expression holds a variable other than the old and the new value, a
-        /// class constant that is not from the root, a table of another graph, or a scoped view.</exception>
+        /// class constant that is not from the root, or a table of another graph.</exception>
         public override Relations.MergeFn CreateMergeFn(EGraph graph, string functionName, ColumnType type, List<Relations.ExternalFunctionId> registered) =>
             Lower(graph, functionName, body, registered);
 
@@ -216,9 +216,6 @@ namespace Eggnog
                     var table = shape.Table!;
                     if (ReferenceEquals(table.Graph, graph) == false)
                         throw new ArgumentException($"The merge {Name} of '{functionName}' calls '{table.Name}', a table of another graph.", "merge");
-
-                    if (table.ReadScope is { } tag)
-                        throw new ArgumentException($"The merge {Name} of '{functionName}' reads '{table.Name} @{tag.Name}'; a merge reads its own scope.", "merge");
 
                     return Relations.MergeFn.Function(table.Function, LowerAll(graph, functionName, shape.Arguments, registered));
                 }

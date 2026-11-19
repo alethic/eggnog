@@ -28,19 +28,18 @@ namespace Eggnog
         /// cannot use. All are refused before any work, so nothing is written.</exception>
         /// <exception cref="ArgumentOutOfRangeException">The iteration, time or row limit is negative.</exception>
         /// <exception cref="InvalidOperationException">The scope is frozen or faulted; a rule the schedule reaches
-        /// reads a tag no ancestor-or-self of the scope carries, or a rule that would run below the root writes a
-        /// function whose merge is not a lattice, or a rule deletes and the scope may not delete (it has live
-        /// descendants or a writable parent) (all before any work); or the call comes from another thread while the
-        /// scope is in use, from a primitive, lattice, filter or cost function, or from a run observer.</exception>
+        /// writes a function whose merge is not a lattice and would run below the root, or deletes where the scope may
+        /// not delete (it has live descendants or a writable parent) (both before any work); or the call comes from
+        /// another thread while the scope is in use, from a primitive, lattice, filter or cost function, or from a run
+        /// observer.</exception>
         /// <exception cref="OperationCanceledException">The run was cancelled.</exception>
         /// <exception cref="RuleEvaluationException">An evaluation failure in an iteration of this scope, a primitive's,
         /// a lambda's, a callback's or a merge's: as egglog's failed run, the failure stops the iteration, whose matches
         /// applied before it stopped keep what they wrote before a call of theirs failed, merged and rebuilt; the iteration
         /// counts as run, so a later run does not apply the matches of a semi-naive rule it did not reach, as egglog's; and
-        /// the scope is not faulted. Or a scheduler threw: the scope is then faulted. Or a copy rule failed in the sync of
-        /// a mirror that a rule of the run reads: the scope is faulted, and so is the tagged scope the sync ran in. Or a
-        /// lattice merge threw in the catch-up the call makes first, here or in a writable ancestor: the scope is
-        /// faulted, and so is the ancestor.</exception>
+        /// the scope is not faulted. Or a scheduler threw: the scope is then faulted. Or a lattice merge threw in the
+        /// catch-up the call makes first, here or in a writable ancestor: the scope is faulted, and so is the
+        /// ancestor.</exception>
         /// <exception cref="OverflowException">The graph has run out of ids or epochs (<see cref="EGraph.Usage"/>): the
         /// step that ran out changes nothing, what the run's earlier iterations wrote stays, and the scope is not
         /// faulted, but every later call that needs an id or an epoch throws the same way. A rule that makes a term
@@ -75,17 +74,13 @@ namespace Eggnog
                         throw new ArgumentException($"An until condition cannot be checked in scope '{Path}': {error}: {fact}.", nameof(schedule));
 
                 // One pass over the reachable rules, listed once: a query runs here too, so these checks stay cheap per
-                // rule. Every tag a reachable rule reads must resolve from here. Only the root writes a function whose
-                // merge is not a lattice, so no rule that writes one runs in this scope when it is a child. And egglog's
-                // delete: the engine's retraction guard lets a scope delete only with no live descendant and no writable
-                // parent.
+                // rule. Only the root writes a function whose merge is not a lattice, so no rule that writes one runs in
+                // this scope when it is a child. And egglog's delete: the engine's retraction guard lets a scope delete
+                // only with no live descendant and no writable parent.
                 var reachable = ScheduleExecutor.RulesFor(new List<Ruleset>(rulesets), this);
                 for (var r = 0; r < reachable.Count; r++)
                 {
                     var rule = reachable[r];
-                    foreach (var tag in rule.Program.ReadScopes)
-                        ScopeResolver.Resolve(this, tag, $"Rule '{rule.Rule.Name}'");
-
                     if (IsRoot == false && rule.Program.RootOnlyWrite is { } function)
                         throw RootOnly(rule, function, $"'{Path}' is not the root");
 
@@ -111,9 +106,9 @@ namespace Eggnog
                 }
                 catch (RuleEvaluationException failure) when (executor.ObserverFailed == false && executor.RunFailed == false)
                 {
-                    // A failure with no egglog counterpart, such as a scheduler's or a mirror's, fails the run: the
-                    // scope is faulted too, with the same cause. One of this scope's own iterations fails the run as
-                    // egglog's does, and leaves the scope usable.
+                    // A failure with no egglog counterpart, such as a scheduler's, fails the run: the scope is faulted
+                    // too, with the same cause. One of this scope's own iterations fails the run as egglog's does, and
+                    // leaves the scope usable.
                     Fault(failure);
                     throw;
                 }

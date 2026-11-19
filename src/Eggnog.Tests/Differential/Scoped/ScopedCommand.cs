@@ -1,5 +1,4 @@
 using System;
-using System.Globalization;
 using System.Linq;
 
 namespace Eggnog.Tests.Differential
@@ -12,10 +11,9 @@ namespace Eggnog.Tests.Differential
     /// <param name="Scope">The scope it acts on: the new scope's number for
     /// <see cref="ScopedCommandKind.Create"/>.</param>
     /// <param name="Parent">The parent of a new scope.</param>
-    /// <param name="Tag">The tag of a new scope; -1 for none.</param>
     /// <param name="Facts">The ground facts of an <see cref="ScopedCommandKind.Assume"/>.</param>
     /// <param name="Rules">The local rules of a new scope.</param>
-    internal sealed record ScopedCommand(ScopedCommandKind Kind, int Scope, int Parent, int Tag, ScopedAtomSpec[] Facts, ScopedRuleSpec[] Rules)
+    internal sealed record ScopedCommand(ScopedCommandKind Kind, int Scope, int Parent, ScopedAtomSpec[] Facts, ScopedRuleSpec[] Rules)
     {
 
         /// <summary>
@@ -24,13 +22,12 @@ namespace Eggnog.Tests.Differential
         /// <param name="kind">The kind.</param>
         /// <param name="scope">The scope.</param>
         /// <returns>The command.</returns>
-        public static ScopedCommand Of(ScopedCommandKind kind, int scope) => new(kind, scope, -1, -1, Array.Empty<ScopedAtomSpec>(), Array.Empty<ScopedRuleSpec>());
+        public static ScopedCommand Of(ScopedCommandKind kind, int scope) => new(kind, scope, -1, Array.Empty<ScopedAtomSpec>(), Array.Empty<ScopedRuleSpec>());
 
         /// <inheritdoc />
         public override string ToString() => Kind switch
         {
-            ScopedCommandKind.Create => $"create s{Scope} under s{Parent}{(Tag >= 0 ? " tagged t" + Tag.ToString(CultureInfo.InvariantCulture) : "")}"
-                + string.Concat(Rules.Select(r => "\n    local " + r)),
+            ScopedCommandKind.Create => $"create s{Scope} under s{Parent}" + string.Concat(Rules.Select(r => "\n    local " + r)),
             ScopedCommandKind.Assume => $"assume s{Scope}: {string.Join(", ", Facts.Select(f => f.ToString()))}",
             _ => $"{Kind.ToString().ToLowerInvariant()} s{Scope}",
         };

@@ -129,7 +129,7 @@ namespace Eggnog
             var worklist = graph.TakeWorklist("$worklist " + description, types);
             var query = new RuleProgram(program.Name, program.Registers, program.Atoms, program.Steps,
                 [new HeadOp(HeadOpKind.Collect, null, operands, slot, null)], program.WrittenIdConstants, program.IdConstantOrigins,
-                free.ToArray(), false, program.ReadScopes)
+                free.ToArray())
             {
                 IncludeSubsumed = true,
                 BodyContext = program.BodyContext,
@@ -139,8 +139,8 @@ namespace Eggnog
             var head = new HeadOp[program.Head.Length + 1];
             program.Head.CopyTo(head, 0);
             head[^1] = new HeadOp(HeadOpKind.Delete, worklist, operands, -1, null);
-            var action = new RuleProgram(program.Name, program.Registers, [new ProgramAtom(worklist, null, operands)], [], head,
-                program.WrittenIdConstants, program.IdConstantOrigins, program.NamedRegisters, program.WritesAnalysis, [])
+            var action = new RuleProgram(program.Name, program.Registers, [new ProgramAtom(worklist, operands)], [], head,
+                program.WrittenIdConstants, program.IdConstantOrigins, program.NamedRegisters)
             {
                 BodyContext = program.BodyContext,
                 HeadContext = program.HeadContext,

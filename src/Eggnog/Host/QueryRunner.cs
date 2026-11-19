@@ -5,15 +5,13 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// Runs a query in a scope: checks its class constants against the scope, brings the mirrors it reads current, runs
-    /// its naive engine rule, and returns the distinct full bindings, canonical, and in content order when asked.
+    /// Runs a query in a scope: checks its class constants against the scope, runs its naive engine rule, and returns
+    /// the distinct full bindings, canonical, and in content order when asked.
     /// </summary>
     /// <remarks>
     /// <para>
     /// In a writable scope the query is an iteration of that scope that writes nothing: the clock advances, but the
-    /// scope's version does not move and no extractor goes stale. A query reading a tag whose scope is writable and
-    /// changed since its last sync first syncs that scope's mirrors; the mirror tables are internal, so that moves
-    /// neither its <see cref="Scope.Version"/> nor any extractor. In a frozen scope it runs in a transient child
+    /// scope's version does not move and no extractor goes stale. In a frozen scope it runs in a transient child
     /// created for the call and disposed after it, so a frozen scope stays read-only and can be queried from many
     /// threads; the transient child defers the scope's release like any child. A query writes nothing, so a failure
     /// in it throws <see cref="RuleEvaluationException"/> without faulting the scope.
@@ -37,8 +35,7 @@ namespace Eggnog
         /// <returns>The matches, which the caller disposes.</returns>
         /// <exception cref="ObjectDisposedException">The query or the scope is disposed.</exception>
         /// <exception cref="ArgumentException">A class constant of the query cannot be used in the scope.</exception>
-        /// <exception cref="InvalidOperationException">A tag the query reads does not resolve from the scope, or the scope
-        /// is not usable.</exception>
+        /// <exception cref="InvalidOperationException">The scope is not usable.</exception>
         /// <exception cref="RuleEvaluationException">A primitive or filter of the query failed.</exception>
         public static TupleBuffer Run(Scope scope, CompiledQuery query, bool stopAtFirst, bool sort)
         {
@@ -53,16 +50,9 @@ namespace Eggnog
                         throw new ArgumentException($"Query '{query.Query.Name}': {error}", nameof(query));
                 }
 
-                // Every tag resolves before any work: a tag read later must not fail after an earlier one synced.
-                foreach (var tag in program.ReadScopes)
-                    ScopeResolver.Resolve(scope, tag, $"Query '{query.Query.Name}'");
-
                 var held = scope.EnterRead();
                 try
                 {
-                    if (program.ReadScopes.Length > 0)
-                        MirrorSync.Ensure(scope, program.ReadScopes, $"Query '{query.Query.Name}'", null);
-
                     var matches = scope.IsFrozen ? CollectInTransient(scope, query, stopAtFirst) : Collect(scope.Engine, query, stopAtFirst);
                     try
                     {

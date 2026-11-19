@@ -2,7 +2,7 @@ namespace Eggnog.Tests.Differential
 {
 
     /// <summary>
-    /// A table of a <see cref="ScopedProgram"/>. Relations and functions are value-only, so they may be read scoped.
+    /// A table of a <see cref="ScopedProgram"/>. Relations and functions are value-only.
     /// </summary>
     /// <param name="Name">The table's name.</param>
     /// <param name="Kind">The table's kind.</param>
@@ -12,7 +12,8 @@ namespace Eggnog.Tests.Differential
     {
 
         /// <summary>
-        /// Gets whether the table may be read scoped: a relation or a function.
+        /// Gets whether the table is value-only: a relation or a function, which queries read and the literal oracle
+        /// encodes.
         /// </summary>
         public bool IsValueOnly => Kind is ScopedTableKind.Relation or ScopedTableKind.Function;
 

@@ -105,11 +105,11 @@ namespace Eggnog.Tests.Scopes
             var compiled = 0;
             foreach (var i in order)
             {
-                var schema = c.Graph.Root.CreateChild(c.Schema);
+                var schema = c.Graph.Root.CreateChild();
                 if (i < cases.Count)
                 {
                     cases[i].Declare(c, schema);
-                    var report = schema.Run(Schedule.Saturate(c.Horn, c.Lattice));
+                    var report = schema.Run(c.PlainFacts);
                     Assert.True(report.Saturated, cases[i].Name);
                     Record(report, "the schema of " + cases[i].Name);
                 }
@@ -131,7 +131,7 @@ namespace Eggnog.Tests.Scopes
 
             void Ask(Scope schema, ConstructorTerm<Pred> term, Func<Scope, Pred, bool> holds, string name)
             {
-                using var query = schema.CreateChild(c.Query);
+                using var query = schema.CreateChild();
                 var q = query.Make(term);
                 query.Assume(c.WhereClause.Of(q));
                 var report = query.Run(Schedule.Saturate(c.Horn, c.Lattice, c.Rewrite));

@@ -596,17 +596,12 @@ namespace Eggnog.Tests.Scheduling
         }
 
         /// <summary>
-        /// <c>Schedule.Until</c> refuses filters at construction; a condition no host check of the scope can read (a
-        /// scoped read under a tag no ancestor of the scope carries, or another graph's table) is refused by <c>Run</c>
-        /// before any work, as another graph's ruleset is: the earlier steps do not iterate, and the version does not
-        /// move.
+        /// <c>Schedule.Until</c> refuses filters at construction; a condition no host check of the scope can read
+        /// (another graph's table) is refused by <c>Run</c> before any work, as another graph's ruleset is: the earlier
+        /// steps do not iterate, and the version does not move.
         /// </summary>
-        /// <param name="foreignTable">Whether the condition reads another graph's table rather than a tag that does not
-        /// resolve.</param>
-        [Theory]
-        [InlineData(false)]
-        [InlineData(true)]
-        public void AnUncheckableUntilConditionIsRefusedBeforeAnyWork(bool foreignTable)
+        [Fact]
+        public void AnUncheckableUntilConditionIsRefusedBeforeAnyWork()
         {
             var t = new NodeTheory();
             var other = new NodeTheory();
@@ -619,13 +614,84 @@ namespace Eggnog.Tests.Scheduling
                 r.Then(t.Num.Of(Int64Primitives.Add.Of(x, 1L)));
             });
             var version = t.Root.Version;
-            var condition = foreignTable ? other.Num.Of(2L) : t.Num.In(t.Graph.DefineScopeTag("elsewhere")).Of(2L);
+            var condition = other.Num.Of(2L);
 
             var error = Record.Exception(() => t.Root.Run(Schedule.Sequence(t.Rules, Schedule.Until(t.Rules, condition))));
 
             Assert.IsType<ArgumentException>(error);
             Assert.Equal(version, t.Root.Version);
             Assert.False(t.Root.Check(t.Num.Of(2L)));
+        }
+
+        /// <summary>
+        /// <c>Run</c> checks every rule the schedule reaches before its first step, the rules only a later step reaches
+        /// included: a child's run whose later step reaches a rule only the root may run (it writes a function whose
+        /// merge is not a lattice) is refused before the first step iterates, and the version does not move.
+        /// </summary>
+        [Fact]
+        public void ARuleOnlyALaterStepReachesIsCheckedBeforeAnyWork()
+        {
+            var t = new NodeTheory();
+            var total = t.Graph.DefineFunction<long, long>("total", FunctionMerge.Of<long>("sum", static (a, b) => checked(a + b)));
+            var first = t.Graph.DefineRuleset("first");
+            first.DefineRule("next", r =>
+            {
+                var x = r.Var<long>("x");
+                r.When(t.Num.Of(x));
+                r.Where(Int64Primitives.Less.Of(x, 3L));
+                r.Then(t.Num.Of(Int64Primitives.Add.Of(x, 1L)));
+            });
+            var later = t.Graph.DefineRuleset("later");
+            later.DefineRule("count", r =>
+            {
+                var x = r.Var<long>("x");
+                r.When(t.Num.Of(x));
+                r.Then(total.Of(x).Is(1L));
+            });
+            t.Root.Freeze();
+            var child = t.Root.CreateChild();
+            child.Assume(t.Num.Of(1L));
+            var version = child.Version;
+
+            var refused = Assert.Throws<InvalidOperationException>(() => child.Run(Schedule.Sequence(Schedule.Saturate(first), Schedule.Saturate(later))));
+
+            Assert.Contains("Rule 'count' writes 'total'", refused.Message, StringComparison.Ordinal);
+            Assert.Contains("only the root may run it", refused.Message, StringComparison.Ordinal);
+            Assert.False(child.Check(t.Num.Of(2L)));
+            Assert.Equal(version, child.Version);
+            Assert.False(child.IsFaulted);
+        }
+
+        /// <summary>
+        /// The scope's local rules are among the rules <c>Run</c> checks before its first step: a root with a live
+        /// child may not delete, so a run whose later step reaches a rule local to the root that deletes is refused
+        /// before the first step iterates, and the version does not move.
+        /// </summary>
+        [Fact]
+        public void ALocalRuleOnlyALaterStepReachesIsCheckedBeforeAnyWork()
+        {
+            var t = new NodeTheory();
+            var first = t.Graph.DefineRuleset("first");
+            first.DefineRule("next", r =>
+            {
+                var x = r.Var<long>("x");
+                r.When(t.Num.Of(x));
+                r.Where(Int64Primitives.Less.Of(x, 3L));
+                r.Then(t.Num.Of(Int64Primitives.Add.Of(x, 1L)));
+            });
+            var later = t.Graph.DefineRuleset("later");
+            t.Root.DefineRule(later, "drop", r => r.Delete(t.Num.Of(1L)));
+            t.Root.Assume(t.Num.Of(1L));
+            var child = t.Root.CreateChild();
+            var version = t.Root.Version;
+
+            var refused = Assert.Throws<InvalidOperationException>(() => t.Root.Run(Schedule.Sequence(Schedule.Saturate(first), Schedule.Saturate(later))));
+
+            Assert.Contains("Rule 'drop' deletes rows of 'num'", refused.Message, StringComparison.Ordinal);
+            Assert.False(t.Root.Check(t.Num.Of(2L)));
+            Assert.True(t.Root.Check(t.Num.Of(1L)));
+            Assert.Equal(version, t.Root.Version);
+            Assert.True(child.Check(t.Num.Of(1L)));
         }
 
         /// <summary>

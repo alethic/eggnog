@@ -10,9 +10,8 @@ namespace Eggnog
     /// until the fact's write point, then planned as the fact it is, before the fact's own write, and a union until the
     /// end of the fact; a write that conflicts is dropped alone, and the fact fails, as does one whose unions make two
     /// rows of a function without a lattice meet with different values, after its rebuild keeps one of them. Its table is checked when it is made: a
-    /// function whose merge is not a lattice is written only at the root, a deletion only where the scope may delete, a
-    /// subsumption only of a row a subsumable table holds, and no scoped view is written; in a rule or a merge no analysis
-    /// table either, since an analysis depends only on terms. A host write's other checks, such as of a second value for a
+    /// function whose merge is not a lattice is written only at the root, a deletion only where the scope may delete, and
+    /// a subsumption only of a row a subsumable table holds. A host write's other checks, such as of a second value for a
     /// key, apply when it plans the write. Values are of their columns' types, a class a sort value usable in the scope
     /// the call runs in. Valid only during the call.
     /// </summary>

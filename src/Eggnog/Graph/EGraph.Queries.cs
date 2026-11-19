@@ -30,9 +30,7 @@ namespace Eggnog
         /// <exception cref="ArgumentException"><paramref name="name"/> is empty, or a live query has it.</exception>
         /// <exception cref="RuleDefinitionException">The query is not valid (the checks of a rule body); nothing is
         /// registered.</exception>
-        /// <exception cref="InvalidOperationException">Called from a primitive, lattice, filter or cost function; or the
-        /// query's first scoped read of a table creates its mirror, which is a table definition, while another
-        /// thread is using the writable root (nothing is registered; once the root is frozen any thread may).</exception>
+        /// <exception cref="InvalidOperationException">Called from a primitive, lattice, filter or cost function.</exception>
         public Query DefineQuery(string name, Action<QueryBuilder> define)
         {
             EngineCallMarker.ThrowIfActive();

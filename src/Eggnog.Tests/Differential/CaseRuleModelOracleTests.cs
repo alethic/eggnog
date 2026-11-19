@@ -164,7 +164,7 @@ namespace Eggnog.Tests.Differential
         {
             var c = new PredicateTheory(new EGraph());
             c.Graph.Root.Freeze();
-            var schema = c.Graph.Root.CreateChild(c.Schema);
+            var schema = c.Graph.Root.CreateChild();
             foreach (var (path, values) in program.Discriminators)
                 schema.Assume(c.Present.Of(path), c.Dom.Of(path).Is(Set.From(values)), c.Discriminator.Of(path));
 
@@ -183,7 +183,7 @@ namespace Eggnog.Tests.Differential
             Assert.Equal(RunStopReason.Completed, schema.Run(c.Facts).StopReason);
             Assert.Empty(schema.Children);
             schema.Freeze();
-            using var query = schema.CreateChild(c.Query);
+            using var query = schema.CreateChild();
             var terms = new List<ConstructorTerm<Predicates.Pred>>();
             foreach (var conjunct in program.Conjuncts)
             {

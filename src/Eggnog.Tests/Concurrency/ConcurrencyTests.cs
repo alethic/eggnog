@@ -102,13 +102,13 @@ namespace Eggnog.Tests.Concurrency
                 q.When(c.Form.Of(p, f));
             });
             c.Graph.Root.Freeze();
-            var schema = c.Graph.Root.CreateChild(c.Schema);
+            var schema = c.Graph.Root.CreateChild();
             DiscriminatedSchema.Declare(c, schema);
             var terms = new List<Pred>();
             foreach (var term in DiscriminatedSchema.Queries(c))
                 terms.Add(schema.Make(term));
 
-            schema.Run(Schedule.Saturate(c.Horn, c.Lattice, c.Rewrite));
+            schema.Run(Schedule.Saturate(c.Horn, c.Lattice, c.Copies, c.Rewrite));
             schema.Freeze();
             var version = schema.Version;
             var expectedPresent = schema.Count(present);
@@ -327,7 +327,7 @@ namespace Eggnog.Tests.Concurrency
 
             string Ask()
             {
-                using var query = schema.CreateChild(c.Query);
+                using var query = schema.CreateChild();
                 var q = query.Make(Term());
                 query.Assume(c.WhereClause.Of(q));
                 var report = query.Run(c.Saturation);
@@ -355,7 +355,7 @@ namespace Eggnog.Tests.Concurrency
         {
             static string Ask(PredicateTheory c, Scope schema, ConstructorTerm<Pred> term)
             {
-                using var query = schema.CreateChild(c.Query);
+                using var query = schema.CreateChild();
                 var q = query.Make(term);
                 query.Assume(c.WhereClause.Of(q));
                 var report = query.Run(c.Saturation);
@@ -405,7 +405,7 @@ namespace Eggnog.Tests.Concurrency
             var graph = new EGraph();
             var c = new PredicateTheory(graph);
             graph.Root.Freeze();
-            var schema = graph.Root.CreateChild(c.Schema);
+            var schema = graph.Root.CreateChild();
             schema.Assume(
                 c.Present.Of("kind"),
                 c.Dom.Of("kind").Is(Set.Of(["order", "invoice", "note"])),
@@ -417,7 +417,7 @@ namespace Eggnog.Tests.Concurrency
 
             string RunOne()
             {
-                using var query = schema.CreateChild(c.Query);
+                using var query = schema.CreateChild();
                 var q = query.Make(c.And.Of(
                     c.Or.Of(c.StrEq.Of("kind", "order"), c.StrEq.Of("kind", "invoice")),
                     c.UuidEq.Of("ref", Ref)));
@@ -482,7 +482,7 @@ namespace Eggnog.Tests.Concurrency
             string Ask(int i)
             {
                 var (clause, cases) = jobs[i];
-                using var query = schema.CreateChild(c.Query, parallel ? new ScopeOptions { DegreeOfParallelism = 2 } : null);
+                using var query = schema.CreateChild(parallel ? new ScopeOptions { DegreeOfParallelism = 2 } : null);
                 if (parallel)
                     query.Engine.Context.Context.Database.ParallelRuleSetsOverride = true;
 

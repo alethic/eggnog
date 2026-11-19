@@ -217,9 +217,9 @@ namespace Eggnog
                 throw new ObjectDisposedException(nameof(ScopeWriter), "The Write batch has ended.");
             }
 
-            // A call the callback made in the domain between two of the batch's calls (an ancestor's query syncing its
-            // mirrors, say) may have left the scope behind its ancestors; writes and runs that would change what the batch
-            // read are refused. The catch-up is left out of Version.
+            // A call the callback made in the domain between two of the batch's calls (an ancestor's query whose
+            // primitives interned containers of classes there, say) may have left the scope behind its ancestors;
+            // writes and runs that would change what the batch read are refused. The catch-up is left out of Version.
             try
             {
                 Scope.CatchUp();

@@ -25,11 +25,9 @@ namespace Eggnog
             (One(graph, name + "=>", define, false), One(graph, name + "<=", define, true));
 
         /// <summary>
-        /// Compiles both drafts so that a refused pair registers nothing: the right-to-left rule is checked first, short
-        /// of its mirrors, then the left-to-right rule compiles, creating the mirrors of its scoped reads, then the
-        /// right-to-left one. Its scoped reads are the conditions', whose mirrors the first rule created: the right side
-        /// is the first rule's head, which reads no scoped view. Should the engine reject the second, the first's engine
-        /// rules are freed. Called under the graph's definition lock.
+        /// Compiles both drafts so that a refused pair registers nothing: the right-to-left rule is checked first, then
+        /// the left-to-right rule compiles, then the right-to-left one. Should the engine reject the second, the first's
+        /// engine rules are freed. Called under the graph's definition lock.
         /// </summary>
         /// <param name="graph">The graph.</param>
         /// <param name="forward">The left-to-right draft.</param>

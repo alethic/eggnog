@@ -197,8 +197,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Checks that a primitive of a host write may write a table: one of the batch's graph, not a scoped view, and
-        /// below the root no function whose merge is not a lattice.
+        /// Checks that a primitive of a host write may write a table: one of the batch's graph, and below the root no
+        /// function whose merge is not a lattice.
         /// </summary>
         /// <exception cref="ArgumentException">It may not.</exception>
         internal void CheckWritableForPrimitive(TableHandle table)
@@ -215,8 +215,8 @@ namespace Eggnog
         /// row as read made subsumed, or nothing for a row subsumed already.
         /// </summary>
         /// <returns>Plans the subsumption.</returns>
-        /// <exception cref="ArgumentException">The table is not of the batch's graph, is a scoped view or is not
-        /// subsumable, or a value is not of its column's type or a class not usable here.</exception>
+        /// <exception cref="ArgumentException">The table is not of the batch's graph or is not subsumable, or a value is
+        /// not of its column's type or a class not usable here.</exception>
         /// <exception cref="InvalidOperationException">The table holds no row for the keys, or holds classes and the
         /// batch merged classes before the call.</exception>
         internal Action SubsumeForPrimitive(TableHandle table, ReadOnlySpan<object> keys)
@@ -298,7 +298,7 @@ namespace Eggnog
         /// <summary>
         /// Checks that a primitive of a host write may delete a row of a table, as <see cref="CheckDeletable"/> does.
         /// </summary>
-        /// <exception cref="ArgumentException">The table is not of the batch's graph, or is a scoped view.</exception>
+        /// <exception cref="ArgumentException">The table is not of the batch's graph.</exception>
         /// <exception cref="InvalidOperationException">The scope may not delete.</exception>
         internal void CheckRemovableForPrimitive(TableHandle table)
         {

@@ -10,9 +10,9 @@ namespace Eggnog.Tests.Definitions
 {
 
     /// <summary>
-    /// Definitions: names, types, roles, the engine layout of each kind, and definitions from other threads. Rule and
-    /// query definitions may be made from any thread at any time; a table definition, and a rule or query whose first
-    /// scoped read creates a mirror table, is refused from another thread while the writable root is in use.
+    /// Definitions: names, types, the engine layout of each kind, and definitions from other threads. Rule and query
+    /// definitions may be made from any thread at any time; a table definition is refused from another thread while the
+    /// writable root is in use.
     /// </summary>
     public sealed class DefinitionTests
     {
@@ -117,18 +117,6 @@ namespace Eggnog.Tests.Definitions
         }
 
         [Fact]
-        public void EachKindTakesItsRoleFromItsOptions()
-        {
-            var graph = new EGraph();
-            graph.DefineSort<Node>("Node");
-            Assert.Equal(TableRole.Fact, graph.DefineRelation<long>("r").Role);
-            Assert.Equal(TableRole.Analysis, graph.DefineRelation<long>("ar", new RelationOptions { Analysis = true }).Role);
-            Assert.Equal(TableRole.Fact, graph.DefineFunction<long, long>("f").Role);
-            Assert.Equal(TableRole.Analysis, graph.DefineFunction<long, long>("af", options: new FunctionOptions { Analysis = true }).Role);
-            Assert.Equal(TableRole.Term, graph.DefineConstructor<long, Node>("c").Role);
-        }
-
-        [Fact]
         public void SortsAreDefinedOnce()
         {
             var graph = new EGraph();
@@ -156,24 +144,23 @@ namespace Eggnog.Tests.Definitions
             var graph = new EGraph();
             graph.DefineSort<Node>("Node");
             var present = graph.DefineRelation<string>("present");
-            var analysis = graph.DefineRelation<Node>("analysis", new RelationOptions { Analysis = true });
+            var nodes = graph.DefineRelation<Node>("nodes");
             var dom = graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
             var lit = graph.DefineConstructor<long, Node>("Lit", cost: 3);
 
-            Assert.Equal(new TableHandle[] { present, analysis, dom, lit }, graph.Tables);
+            Assert.Equal(new TableHandle[] { present, nodes, dom, lit }, graph.Tables);
             Assert.Equal(0, present.Index);
             Assert.Equal(TableKind.Relation, present.Kind);
             Assert.Null(present.Output);
             Assert.True(present.IsValueOnly);
             Assert.Same(graph, present.Graph);
             Assert.Equal("present", present.ToString());
-            Assert.False(analysis.IsValueOnly);
+            Assert.False(nodes.IsValueOnly);
             Assert.Equal(TableKind.Function, dom.Kind);
             Assert.Same(graph.Values.TypeOf<Set<string>>(), dom.Output);
             Assert.Equal("intersect", dom.Lattice!.Name);
             Assert.True(dom.IsValueOnly);
             Assert.Equal(TableKind.Constructor, lit.Kind);
-            Assert.Equal(TableRole.Term, lit.Role);
             Assert.False(lit.Unextractable);
             Assert.Equal<ulong>(3, lit.Cost);
             Assert.False(lit.IsValueOnly);
@@ -288,67 +275,6 @@ namespace Eggnog.Tests.Definitions
             Assert.True(report.Rules.ContainsKey(late));
             Assert.True(report.Rules[late].IterationsWithMatches > 0);
             Assert.True(graph.Root.Check(seen.Of(0L)));
-        }
-
-        /// <summary>
-        /// A rule or query definition whose first scoped read creates a mirror is a table definition, so from another
-        /// thread while the writable root is in use it throws <see cref="InvalidOperationException"/>.
-        /// </summary>
-        [Fact]
-        public void AFirstScopedReadFromAnotherThreadWhileTheRootRunsIsRefused()
-        {
-            using var run = new BlockingRun();
-            var tag = run.Graph.DefineScopeTag("outer");
-            run.Start();
-
-            var rule = Record.Exception(() => run.Rules.DefineRule("scoped", r =>
-            {
-                var x = r.Var<long>("x");
-                r.When(run.Seed.In(tag).Of(x));
-                r.Then(run.Done.Of(x));
-            }));
-            var query = Record.Exception(() => run.Graph.DefineQuery("scoped", q => q.When(run.Done.In(tag).Of(q.Var<long>("x")))));
-            run.Finish();
-
-            Assert.IsType<InvalidOperationException>(rule);
-            Assert.IsType<InvalidOperationException>(query);
-        }
-
-        /// <summary>
-        /// A rule definition whose first scoped read creates a mirror counts as a table definition: from another thread
-        /// while the writable root is in use it throws <see cref="InvalidOperationException"/> and registers nothing;
-        /// once the root is frozen, any thread may make one.
-        /// </summary>
-        [Fact]
-        public void AFirstScopedReadFromAnotherThreadWhileTheWritableRootRunsIsRefused()
-        {
-            using var run = new BlockingRun();
-            var tag = run.Graph.DefineScopeTag("outer");
-            var fact = run.Graph.DefineRelation<string>("fact");
-            var seen = run.Graph.DefineRelation<string>("seen");
-            run.Start();
-
-            var refused = Record.Exception(() => run.Rules.DefineRule("scoped", r =>
-            {
-                var x = r.Var<string>("x");
-                r.When(fact.In(tag).Of(x));
-                r.Then(seen.Of(x));
-            }));
-
-            run.Finish();
-            Assert.IsType<InvalidOperationException>(refused);
-            Assert.Empty(run.Graph.Mirrors.AllCopyRules());
-            Assert.DoesNotContain(run.Rules.Rules, r => r.Name == "scoped");
-
-            // Once the root is frozen, any thread.
-            run.Graph.Root.Freeze();
-            var defined = Task.Factory.StartNew(() => run.Rules.DefineRule("scoped", r =>
-            {
-                var x = r.Var<string>("x");
-                r.When(fact.In(tag).Of(x));
-                r.Then(seen.Of(x));
-            }), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default).GetAwaiter().GetResult();
-            Assert.Equal(new[] { tag }, defined.ReadScopes);
         }
 
     }

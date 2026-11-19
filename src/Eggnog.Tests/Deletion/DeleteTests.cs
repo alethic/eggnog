@@ -9,9 +9,9 @@ namespace Eggnog.Tests.Deletion
 
     /// <summary>
     /// egglog's <c>delete</c>, from host calls and rule heads: the row of a key goes and nothing else; a key with no
-    /// row deletes nothing; an iteration deletes before it writes; a deletion is no change for saturation. And where a
-    /// scope may delete: not with live descendants, not under a writable parent; and a deletion keeps the scope's
-    /// mirror under its own tag equal to the table.
+    /// row deletes nothing; an iteration deletes before it writes; a deletion is no change for saturation; a deletion
+    /// stands in an iteration a failure stopped. And where a scope may delete: not with live descendants, not under a
+    /// writable parent.
     /// </summary>
     public sealed class DeleteTests
     {
@@ -298,37 +298,15 @@ namespace Eggnog.Tests.Deletion
         }
 
         /// <summary>
-        /// A scoped read of the scope's own tag reads the scope's own table through a mirror, which a deletion keeps
-        /// equal to the table: a host deletion deletes the mirror's row in the same batch, and a rule's after the
-        /// iteration.
+        /// A deletion a rule applied in an iteration that a later rule's failure stopped stands, as everything the
+        /// iteration applied before it stopped does, merged and rebuilt: the run throws, the row is gone, and the scope
+        /// is not faulted.
         /// </summary>
         [Fact]
-        public void ADeletionKeepsTheScopesOwnMirrorEqualToTheTable()
-        {
-            var t = new NodeTheory();
-            var seen = t.Graph.DefineQuery("seen", q => q.When(t.Num.In(t.Graph.RootTag).Of(q.Var<long>("x"))));
-            t.Rules.DefineRule("drop two", r => r.Delete(t.Num.Of(2L)));
-            t.Root.Assume(t.Num.Of(1L), t.Num.Of(2L), t.Num.Of(3L));
-            Assert.Equal(3, t.Root.Count(seen));
-
-            t.Root.Delete(t.Num.Of(1L));
-            Assert.Equal(2, t.Root.Count(seen));
-
-            t.Root.Run(t.Rules);
-            Assert.Equal(1, t.Root.Count(seen));
-            Assert.Equal(1, t.Root.CountRows(t.Num));
-        }
-
-        /// <summary>
-        /// A deletion that merged in an iteration a later rule's failure stopped keeps the scope's own mirror equal to the
-        /// table, as after an iteration that did not fail.
-        /// </summary>
-        [Fact]
-        public void AFailedRunsDeletionKeepsTheScopesOwnMirrorEqualToTheTable()
+        public void AFailedIterationsDeletionStands()
         {
             var t = new NodeTheory();
             var output = t.Graph.DefineRelation<long>("output");
-            var seen = t.Graph.DefineQuery("seen", q => q.When(t.Num.In(t.Graph.RootTag).Of(q.Var<long>("x"))));
             t.Rules.DefineRule("drop two", r => r.Delete(t.Num.Of(2L)));
             t.Rules.DefineRule("fails on three", r =>
             {
@@ -337,68 +315,12 @@ namespace Eggnog.Tests.Deletion
                 r.Then(output.Of(Int64Primitives.Divide.Of(10L, Int64Primitives.Subtract.Of(x, 3L))));
             });
             t.Root.Assume(t.Num.Of(1L), t.Num.Of(2L), t.Num.Of(3L));
-            Assert.Equal(3, t.Root.Count(seen));
 
             Assert.Throws<RuleEvaluationException>(() => t.Root.Run(t.Rules));
+
             Assert.Equal(2, t.Root.CountRows(t.Num));
-            Assert.Equal(2, t.Root.Count(seen));
-        }
-
-
-        /// <summary>
-        /// egglog's update idiom: a rule deletes a row and writes its key again in one iteration. The scope's own mirror
-        /// then holds the old value under a key the table still has, so the reconcile compares whole rows: the mirror's
-        /// row goes, the next sync copies the new one, and no merge of the two faults the scope.
-        /// </summary>
-        [Fact]
-        public void ADeletionAndAWriteOfOneKeyKeepTheScopesOwnMirrorEqualToTheTable()
-        {
-            var t = new NodeTheory();
-            var f = t.Graph.DefineFunction<long, long>("f");
-            var go = t.Graph.DefineRelation<long>("go");
-            var one = t.Graph.DefineQuery("one", q => q.When(f.In(t.Graph.RootTag).Of(1L).Is(1L)));
-            var two = t.Graph.DefineQuery("two", q => q.When(f.In(t.Graph.RootTag).Of(1L).Is(2L)));
-            t.Rules.DefineRule("step", r =>
-            {
-                var (x, v) = r.Vars<long, long>("x", "v");
-                r.When(go.Of(x), v.Is(f.Of(x)));
-                r.Delete(go.Of(x));
-                r.Delete(f.Of(x));
-                r.Then(f.Of(x).Is(Int64Primitives.Add.Of(v, 1L)));
-            });
-            t.Root.Assume(f.Of(1L).Is(1L), go.Of(1L));
-            Assert.Equal(1, t.Root.Count(one));
-
-            t.Root.Run(t.Rules);
-
+            Assert.False(t.Root.Check(t.Num.Of(2L)));
             Assert.False(t.Root.IsFaulted);
-            Assert.Equal(2L, t.Root.Get(f.Of(1L)));
-            Assert.Equal(0, t.Root.Count(one));
-            Assert.Equal(1, t.Root.Count(two));
-        }
-
-        /// <summary>
-        /// A child carrying a tag reads its own table through that tag's mirror too, and its deletions keep the mirror
-        /// equal to it, while the frozen parent keeps its rows.
-        /// </summary>
-        [Fact]
-        public void ADeletionInATaggedChildKeepsItsMirrorEqualToItsTable()
-        {
-            var t = new NodeTheory();
-            var outer = t.Graph.DefineScopeTag("outer");
-            var seen = t.Graph.DefineQuery("seen", q => q.When(t.Num.In(outer).Of(q.Var<long>("x"))));
-            t.Rules.DefineRule("drop two", r => r.Delete(t.Num.Of(2L)));
-            t.Root.Assume(t.Num.Of(1L), t.Num.Of(2L), t.Num.Of(3L));
-            t.Root.Freeze();
-            var child = t.Root.CreateChild(outer);
-            Assert.Equal(3, child.Count(seen));
-
-            child.Delete(t.Num.Of(1L));
-            Assert.Equal(2, child.Count(seen));
-            child.Run(t.Rules);
-
-            Assert.Equal(1, child.Count(seen));
-            Assert.Equal(3, t.Root.CountRows(t.Num));
         }
 
         /// <summary>

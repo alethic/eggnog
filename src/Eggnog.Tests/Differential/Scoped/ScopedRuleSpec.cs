@@ -21,11 +21,6 @@ namespace Eggnog.Tests.Differential
         public string[] Variables =>
             Body.SelectMany(a => a.Keys.Append(a.Output)).Where(t => t?.Var is not null).Select(t => t!.Var!).Distinct().ToArray();
 
-        /// <summary>
-        /// Gets the tags the body reads, distinct.
-        /// </summary>
-        public int[] Tags => Body.Where(a => a.Tag >= 0).Select(a => a.Tag).Distinct().ToArray();
-
         /// <inheritdoc />
         public override string ToString() =>
             $"{Name}: {string.Join(", ", Body.Select(a => a.ToString()))}{(FilterVar is null ? "" : $", {FilterVar} < {FilterBelow}")} -> {string.Join(", ", Head.Select(a => a.ToString()))}";

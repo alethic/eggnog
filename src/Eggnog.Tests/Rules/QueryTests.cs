@@ -729,31 +729,6 @@ namespace Eggnog.Tests.Rules
             Assert.Equal(0, t.Root.Engine.Context.Context.ChildCount);
         }
 
-        [Fact]
-        public void AQueryWithScopedAtomsSeesAHostWriteIntoAWritableTaggedScope()
-        {
-            var t = new ScopeTheory();
-            var tagged = t.Graph.DefineQuery("tagged", q =>
-            {
-                var x = q.Var<string>("x");
-                q.When(t.Fact.In(t.Outer).Of(x), t.Fact.Of(x));
-            });
-            var outer = t.Root.CreateChild(t.Outer);
-            var inner = outer.CreateChild(t.Inner);
-            Assert.Equal(0, outer.Count(tagged));
-
-            // A host write into the writable tagged scope; the query from that scope and from a descendant.
-            outer.Assume(t.Fact.Of("a"));
-            Assert.Equal(1, outer.Count(tagged));
-            Assert.Equal(1, inner.Count(tagged));
-            inner.Assume(t.Fact.Of("d"));
-            outer.Assume(t.Fact.Of("b"), t.Fact.Of("c"));
-            Assert.Equal(3, inner.Count(tagged));
-            Assert.Equal(3, outer.Count(tagged));
-            Assert.Equal(4, inner.CountRows(t.Fact));
-            Assert.Equal("(query ((fact @outer x) (fact x)) (x))", tagged.ToString());
-        }
-
         /// <summary>
         /// The engine's own allocation for running a query's rule to completion with a collector that keeps nothing.
         /// </summary>

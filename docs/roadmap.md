@@ -188,7 +188,7 @@ Each waits on its trigger.
   the targeted tests and the soaks.
 - **The NativeAOT smoke application:** when NativeAOT becomes a supported target whose runtime output is tested, beyond
   the compatibility the CI publish check enforces ([decisions](engine/decisions.md), row 16).
-- **The deferred benchmark classes:** `ScopeCatchUp`, `MirrorSync` and `EqualStep` when a change touches those paths;
+- **The deferred benchmark classes:** `ScopeCatchUp` and `EqualStep` when a change touches those paths;
   `TheoryDefinition` when a host's graph rebuild needs a figure.
 
 ## Closed

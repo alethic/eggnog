@@ -8,7 +8,7 @@ namespace Eggnog.Tests.Differential
     {
 
         /// <summary>
-        /// Creates a child of a scope, with a tag and local rules.
+        /// Creates a child of a scope, with local rules.
         /// </summary>
         Create,
 

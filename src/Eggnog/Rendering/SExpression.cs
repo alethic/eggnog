@@ -42,9 +42,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Renders a rule as written: <c>(rule (body…) (head…) :ruleset name)</c>, with <c>:naive</c> for a naive rule,
-        /// <c>:erasing tag</c> for an erasing rule's licence, or <c>:reads-own-facts "reason"</c> for an exempt rule; a
-        /// scoped application renders as <c>(present @schema p)</c>.
+        /// Renders a rule as written: <c>(rule (body…) (head…) :ruleset name)</c>, with <c>:naive</c> for a naive rule.
         /// </summary>
         /// <param name="rule">The rule.</param>
         /// <returns>The rendering.</returns>
@@ -109,11 +107,6 @@ namespace Eggnog
             builder.Append(") :ruleset ").Append(rule.Ruleset.Name);
             if (rule.IsNaive)
                 builder.Append(" :naive");
-
-            if (rule.Licence is { } licence)
-                builder.Append(" :erasing ").Append(licence.Name);
-            else if (rule.OwnFactsReason is { } reason)
-                builder.Append(" :reads-own-facts ").Append(Literal(reason, null));
 
             return builder.Append(')').ToString();
         }
@@ -182,7 +175,7 @@ namespace Eggnog
         /// <summary>
         /// Appends a term; <paramref name="type"/> formats a constant in its context.
         /// </summary>
-        static void Append(StringBuilder builder, Term term, ColumnType? type, ScopeTag? enclosing = null)
+        static void Append(StringBuilder builder, Term term, ColumnType? type)
         {
             var shape = term.Shape;
             switch (shape.Kind)
@@ -196,19 +189,18 @@ namespace Eggnog
                 case TermShapeKind.Application:
                 {
                     var table = shape.Table!;
-                    builder.Append('(');
-                    AppendTable(builder, table, enclosing);
+                    builder.Append('(').Append(table.Name);
                     for (var i = 0; i < shape.Arguments.Length; i++)
                     {
                         builder.Append(' ');
-                        Append(builder, shape.Arguments[i], i < table.KeyArray.Length ? table.KeyArray[i] : null, enclosing);
+                        Append(builder, shape.Arguments[i], i < table.KeyArray.Length ? table.KeyArray[i] : null);
                     }
 
                     builder.Append(')');
                     break;
                 }
                 default:
-                    AppendComputation(builder, shape, shape.Primitive!.Name, enclosing);
+                    AppendComputation(builder, shape, shape.Primitive!.Name);
                     break;
             }
         }
@@ -216,7 +208,7 @@ namespace Eggnog
         /// <summary>
         /// Appends a primitive's application under a name: its own, or the name of its filter form.
         /// </summary>
-        static void AppendComputation(StringBuilder builder, TermShape shape, string name, ScopeTag? enclosing)
+        static void AppendComputation(StringBuilder builder, TermShape shape, string name)
         {
             builder.Append('(').Append(name);
 
@@ -227,7 +219,7 @@ namespace Eggnog
             foreach (var argument in shape.Arguments)
             {
                 builder.Append(' ');
-                Append(builder, argument, null, enclosing);
+                Append(builder, argument, null);
             }
 
             builder.Append(')');
@@ -236,53 +228,41 @@ namespace Eggnog
         /// <summary>
         /// Appends a body fact.
         /// </summary>
-        static void Append(StringBuilder builder, Fact fact, ScopeTag? enclosing = null)
+        static void Append(StringBuilder builder, Fact fact)
         {
             switch (fact)
             {
                 case RelationFact relation:
-                    builder.Append('(');
-                    AppendTable(builder, relation.Table, enclosing);
+                    builder.Append('(').Append(relation.Table.Name);
                     for (var i = 0; i < relation.Arguments.Length; i++)
                     {
                         builder.Append(' ');
-                        Append(builder, relation.Arguments[i], i < relation.Table.KeyArray.Length ? relation.Table.KeyArray[i] : null, enclosing);
+                        Append(builder, relation.Arguments[i], i < relation.Table.KeyArray.Length ? relation.Table.KeyArray[i] : null);
                     }
 
                     builder.Append(')');
                     break;
                 case EqualityFact equality:
-                    AppendPair(builder, "=", equality.Left, equality.Right, enclosing);
+                    AppendPair(builder, "=", equality.Left, equality.Right);
                     break;
                 case NotEqualFact notEqual:
-                    AppendPair(builder, "!=", notEqual.Left, notEqual.Right, enclosing);
+                    AppendPair(builder, "!=", notEqual.Left, notEqual.Right);
                     break;
                 case ExistsFact exists:
-                    Append(builder, exists.Application, null, enclosing);
+                    Append(builder, exists.Application, null);
                     break;
                 case FilterFact filter:
                     // egglog filters with a fallible primitive, which matches where it has a result: a bool primitive's
                     // filter form (bool-< filters as <), or guard of any other condition.
                     if (filter.Condition.Shape is { Kind: TermShapeKind.Computation, Primitive.FilterName: { } filterName } condition)
                     {
-                        AppendComputation(builder, condition, filterName, enclosing);
+                        AppendComputation(builder, condition, filterName);
                     }
                     else
                     {
                         builder.Append("(guard ");
-                        Append(builder, filter.Condition, null, enclosing);
+                        Append(builder, filter.Condition, null);
                         builder.Append(')');
-                    }
-
-                    break;
-                case ScopedFact scoped:
-                    // Fact.In renders as its facts, each application read in the tagged scope: (present @schema p).
-                    for (var i = 0; i < scoped.Facts.Length; i++)
-                    {
-                        if (i > 0)
-                            builder.Append(' ');
-
-                        Append(builder, scoped.Facts[i], scoped.Scope);
                     }
 
                     break;
@@ -317,25 +297,13 @@ namespace Eggnog
         /// <summary>
         /// Appends <c>(op a b)</c>, formatting a constant on one side by the other side's table output.
         /// </summary>
-        static void AppendPair(StringBuilder builder, string op, Term left, Term right, ScopeTag? enclosing = null)
+        static void AppendPair(StringBuilder builder, string op, Term left, Term right)
         {
             builder.Append('(').Append(op).Append(' ');
-            Append(builder, left, OutputOf(right), enclosing);
+            Append(builder, left, OutputOf(right));
             builder.Append(' ');
-            Append(builder, right, OutputOf(left), enclosing);
+            Append(builder, right, OutputOf(left));
             builder.Append(')');
-        }
-
-        /// <summary>
-        /// Appends a table's name, with <c> @tag</c> for a scoped read (a space, so that it never reads as an egglog
-        /// symbol such as a user's table named <c>T@tag</c>): its handle's tag, or an enclosing
-        /// <see cref="Fact.In"/>'s.
-        /// </summary>
-        static void AppendTable(StringBuilder builder, TableHandle table, ScopeTag? enclosing)
-        {
-            builder.Append(table.Name);
-            if ((table.ReadScope ?? enclosing) is { } tag)
-                builder.Append(" @").Append(tag.Name);
         }
 
         /// <summary>

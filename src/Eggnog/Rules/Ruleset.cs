@@ -22,12 +22,10 @@ namespace Eggnog
         /// </summary>
         /// <param name="graph">The graph.</param>
         /// <param name="name">The name, unique among the graph's rulesets.</param>
-        /// <param name="licence">The licence under which its rules are erasing; <c>null</c> for none.</param>
-        internal Ruleset(EGraph graph, string name, ScopeTag? licence = null)
+        internal Ruleset(EGraph graph, string name)
         {
             Graph = graph;
             Name = name;
-            Licence = licence;
         }
 
         /// <summary>
@@ -39,12 +37,6 @@ namespace Eggnog
         /// Gets the name.
         /// </summary>
         public string Name { get; }
-
-        /// <summary>
-        /// Gets the tag under which the ruleset's rules are erasing (<see cref="RulesetOptions.Licence"/>); <c>null</c> for
-        /// none.
-        /// </summary>
-        public ScopeTag? Licence { get; }
 
         /// <summary>
         /// Gets the global rules, in definition order (a snapshot).
@@ -61,9 +53,7 @@ namespace Eggnog
         /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
         /// <exception cref="ArgumentException"><paramref name="name"/> is empty.</exception>
         /// <exception cref="RuleDefinitionException">The rule is not valid; nothing is registered.</exception>
-        /// <exception cref="InvalidOperationException">Called from a primitive, lattice, filter or cost function; or the
-        /// rule's first scoped read of a table creates its mirror, which is a table definition, while another thread is
-        /// using the writable root (nothing is registered; once the root is frozen any thread may).</exception>
+        /// <exception cref="InvalidOperationException">Called from a primitive, lattice, filter or cost function.</exception>
         public Rule DefineRule(string name, Action<RuleBuilder> define)
         {
             EngineCallMarker.ThrowIfActive();

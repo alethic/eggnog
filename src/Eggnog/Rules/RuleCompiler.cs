@@ -19,18 +19,16 @@ namespace Eggnog
         /// <param name="owner">The scope the rule is local to; <c>null</c> for a global rule.</param>
         /// <returns>The compiled rule, its default variant lowered with the written class constants.</returns>
         /// <exception cref="RuleDefinitionException">The draft is not a valid rule, or the engine rejected it; nothing is
-        /// registered then (a mirror its first scoped read created stays, harmlessly).</exception>
+        /// registered then.</exception>
         public static CompiledRule Compile(EGraph graph, RuleDraft draft, Ruleset ruleset, Scope? owner)
         {
-            var licence = draft.Erasing ?? ruleset.Licence;
-            var program = new ProgramBuilder(graph, draft, owner, licence: licence).Build();
-            return Lower(graph, draft, ruleset, owner, licence, program);
+            var program = new ProgramBuilder(graph, draft, owner).Build();
+            return Lower(graph, draft, ruleset, owner, program);
         }
 
         /// <summary>
-        /// Checks a rule as <see cref="Compile"/> does, short of creating the mirrors of its scoped reads and lowering it,
-        /// so that a definition of several rules can check each before it registers anything. Called under the graph's
-        /// definition lock.
+        /// Checks a rule as <see cref="Compile"/> does, short of lowering it, so that a definition of several rules can
+        /// check each before it registers anything. Called under the graph's definition lock.
         /// </summary>
         /// <param name="graph">The graph.</param>
         /// <param name="draft">What the rule's builder collected.</param>
@@ -38,16 +36,15 @@ namespace Eggnog
         /// <param name="owner">The scope of a local rule; <c>null</c> for a global one.</param>
         /// <exception cref="RuleDefinitionException">The draft is not a valid rule.</exception>
         public static void Check(EGraph graph, RuleDraft draft, Ruleset ruleset, Scope? owner) =>
-            new ProgramBuilder(graph, draft, owner, licence: draft.Erasing ?? ruleset.Licence).Check();
+            new ProgramBuilder(graph, draft, owner).Check();
 
         /// <summary>
         /// Lowers a rule's program to its engine variants.
         /// </summary>
-        static CompiledRule Lower(EGraph graph, RuleDraft draft, Ruleset ruleset, Scope? owner, ScopeTag? licence, RuleProgram program)
+        static CompiledRule Lower(EGraph graph, RuleDraft draft, Ruleset ruleset, Scope? owner, RuleProgram program)
         {
             var serial = graph.NextSerial();
-            var effective = draft.OwnFactsReason is null ? licence : null;
-            var rule = new Rule(draft.Name, ruleset, owner, draft.Naive, draft, effective, Array.AsReadOnly(program.ReadScopes));
+            var rule = new Rule(draft.Name, ruleset, owner, draft.Naive, draft);
             var description = (owner is null ? "" : owner.Path + ":") + ruleset.Name + "/" + draft.Name + "#" + serial;
             var variants = new RuleVariants(program, rule, description, draft.Naive);
             var compiled = new CompiledRule(rule, program, variants, serial);

@@ -7,8 +7,8 @@ namespace Eggnog.Tests.Differential
 
     /// <summary>
     /// A random scoped program (run by <c>ScopeDifferentialTests</c> and <c>InheritanceOffEquivalenceTests</c>):
-    /// tables, two tags, global rules, queries, and a sequence of scope commands that build a tree up to four deep with
-    /// frozen prefixes, host writes into writable ancestors between child runs, and local rules with scoped atoms.
+    /// tables, global rules, queries, and a sequence of scope commands that build a tree up to four deep with frozen
+    /// prefixes, host writes into writable ancestors between child runs, and local rules.
     /// </summary>
     /// <param name="Seed">The seed it was generated from.</param>
     /// <param name="Tables">The tables.</param>
@@ -20,11 +20,6 @@ namespace Eggnog.Tests.Differential
     internal sealed record ScopedProgram(int Seed, ScopedTableSpec[] Tables, ScopedRuleSpec[] Globals, ScopedRuleSpec[] Queries,
         ScopedCommand[] Commands, bool Constructors)
     {
-
-        /// <summary>
-        /// The number of tags every program defines, <c>t0</c> and <c>t1</c>.
-        /// </summary>
-        public const int TagCount = 2;
 
         /// <summary>
         /// Generates a program from a seed.

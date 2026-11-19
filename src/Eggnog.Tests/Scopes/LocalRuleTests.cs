@@ -23,8 +23,8 @@ namespace Eggnog.Tests.Scopes
         {
             var t = new ScopeTheory();
             t.Root.Freeze();
-            var a = t.Root.CreateChild(t.Outer);
-            var b = t.Root.CreateChild(t.Outer);
+            var a = t.Root.CreateChild();
+            var b = t.Root.CreateChild();
             var ruleA = a.DefineRule(t.Rules, "a sees", r =>
             {
                 var x = r.Var<string>("x");
@@ -60,7 +60,7 @@ namespace Eggnog.Tests.Scopes
         {
             var (t, a, _, ruleA) = Siblings();
             a.Freeze();
-            var child = a.CreateChild(t.Inner);
+            var child = a.CreateChild();
             child.Assume(t.Fact.Of("y"));
 
             var report = child.Run(Schedule.Saturate(t.Rules));
@@ -109,7 +109,7 @@ namespace Eggnog.Tests.Scopes
             using var entered = new ManualResetEventSlim();
             using var release = new ManualResetEventSlim();
             t.DefineBlocking(entered, release);
-            var scope = t.Root.CreateChild(t.Outer);
+            var scope = t.Root.CreateChild();
             scope.Assume(t.Fact.Of("a"));
             var run = Task.Factory.StartNew(() => scope.Run(t.Rules), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
             Assert.True(entered.Wait(TimeSpan.FromSeconds(30)));
@@ -139,20 +139,20 @@ namespace Eggnog.Tests.Scopes
             graph.Root.Freeze();
 
             // Orders carry a UUID ref in schema one; invoices do in schema two.
-            var one = graph.Root.CreateChild(c.Schema);
+            var one = graph.Root.CreateChild();
             one.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of(["order", "invoice"])));
             c.DeclareBranch(one, "kind", "order", forms: [("ref", "uuid-lower")]);
-            one.Run(Schedule.Saturate(c.Horn, c.Lattice));
+            one.Run(c.PlainFacts);
             one.Freeze();
-            var two = graph.Root.CreateChild(c.Schema);
+            var two = graph.Root.CreateChild();
             two.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of(["order", "invoice"])));
             c.DeclareBranch(two, "kind", "invoice", forms: [("ref", "uuid-lower")]);
-            two.Run(Schedule.Saturate(c.Horn, c.Lattice));
+            two.Run(c.PlainFacts);
             two.Freeze();
 
             foreach (var (schema, kind, lowers) in new[] { (one, "order", true), (one, "invoice", false), (two, "order", false), (two, "invoice", true) })
             {
-                using var query = schema.CreateChild(c.Query);
+                using var query = schema.CreateChild();
                 var q = query.Make(c.And.Of(c.StrEq.Of("kind", kind), c.UuidEq.Of("ref", Ref)));
                 query.Assume(c.WhereClause.Of(q));
                 query.Run(Schedule.Saturate(c.Horn, c.Lattice, c.Rewrite));

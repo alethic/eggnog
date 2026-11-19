@@ -106,7 +106,6 @@ namespace Eggnog
         static string KindName(RunStepKind kind) => kind switch
         {
             RunStepKind.Iteration => "iteration",
-            RunStepKind.MirrorSync => "mirror-sync",
             _ => kind.ToString().ToLowerInvariant(),
         };
 

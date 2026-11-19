@@ -26,7 +26,6 @@ namespace Eggnog
         readonly Scope? owner;
         readonly string ruleName;
         readonly bool query;
-        readonly ScopeTag? licence;
 
         /// <summary>
         /// The context of the body's primitives, and the body as a refusal names it.
@@ -50,7 +49,6 @@ namespace Eggnog
         /// The placeholder cells of the new constants of a builder that interns nothing.
         /// </summary>
         Dictionary<(ColumnType, object), uint>? placeholders;
-        readonly List<ScopeTag> readScopes = new();
 
         readonly List<ColumnType> rawTypes = new();
         readonly List<string> rawNames = new();
@@ -60,7 +58,7 @@ namespace Eggnog
         readonly Dictionary<Term, int> declared = new(ReferenceEqualityComparer.Instance);
         readonly Dictionary<Term, string> makeVariables = new(ReferenceEqualityComparer.Instance);
         readonly Dictionary<Term, int> made = new(ReferenceEqualityComparer.Instance);
-        readonly List<(TableHandle Table, ScopeTag? Scope, Operand[] Columns)> rawAtoms = new();
+        readonly List<(TableHandle Table, Operand[] Columns)> rawAtoms = new();
         readonly List<(ProgramStepKind Kind, Primitive? Primitive, Operand[] Arguments, Operand Target)> rawSteps = new();
         readonly Dictionary<string, int> bodyMemo = new(StringComparer.Ordinal);
         readonly Dictionary<string, int> headMemo = new(StringComparer.Ordinal);
@@ -75,7 +73,6 @@ namespace Eggnog
         bool[] bound = Array.Empty<bool>();
         ProgramAtom[] atoms = Array.Empty<ProgramAtom>();
         ProgramStep[] steps = Array.Empty<ProgramStep>();
-        Primitive? tableReader;
         int fresh;
 
         /// <summary>
@@ -86,15 +83,12 @@ namespace Eggnog
         /// <param name="owner">The rule's owner scope; <c>null</c> for a global rule or a query.</param>
         /// <param name="query">Whether the draft is a query's: its class constants are checked at each call, against the
         /// scope it runs in, rather than against an owner here.</param>
-        /// <param name="licence">The rule's licence, under which it is erasing: its own <c>Erasing</c> tag, else its
-        /// ruleset's; <c>null</c> for none.</param>
-        public ProgramBuilder(EGraph graph, RuleDraft draft, Scope? owner, bool query = false, ScopeTag? licence = null)
+        public ProgramBuilder(EGraph graph, RuleDraft draft, Scope? owner, bool query = false)
         {
             this.graph = graph;
             this.draft = draft;
             this.owner = owner;
             this.query = query;
-            this.licence = licence;
             ruleName = draft.Name;
 
             // egglog's contexts: a semi-naive rule's body pure and its head write, a naive rule's body read and its head
@@ -106,16 +100,15 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Compiles the draft into a program: variables, body normalization with scoped reads, range restriction and step
-        /// order, the licence, the head and the analysis-writer check; the mirrors of the scoped reads last.
+        /// Compiles the draft into a program: variables, body normalization, range restriction and step order, and the
+        /// head.
         /// </summary>
         /// <returns>The program.</returns>
         /// <exception cref="RuleDefinitionException">The draft is not a valid rule.</exception>
         public RuleProgram Build()
         {
             InternLiterals(static builder => builder.CheckRule());
-            var writesAnalysis = CheckRule();
-            ReadMirrors();
+            CheckRule();
             var named = new List<int>();
             foreach (var (_, _, variable) in draft.Variables)
             {
@@ -128,7 +121,7 @@ namespace Eggnog
                     named.Add(made.TryGetValue(item.Variable!, out var register) ? register : -1);
 
             return new RuleProgram(ruleName, registers.ToArray(), atoms, steps, head.ToArray(), idCells.ToArray(), idOrigins.ToArray(),
-                named.ToArray(), writesAnalysis, readScopes.ToArray())
+                named.ToArray())
             {
                 BodyContext = bodyContext,
                 HeadContext = headContext,
@@ -136,10 +129,9 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Checks the draft as <see cref="Build"/> does, short of creating the mirrors of its scoped reads and of
-        /// interning its constants: what a definition of several rules runs on a rule before it creates any mirror or
-        /// interns any constant, so that a refused definition registers and interns none. The builder is spent
-        /// afterwards.
+        /// Checks the draft as <see cref="Build"/> does, short of interning its constants: what a definition of several
+        /// rules runs on a rule before it interns any constant, so that a refused definition registers and interns none.
+        /// The builder is spent afterwards.
         /// </summary>
         /// <exception cref="RuleDefinitionException">The draft is not a valid rule.</exception>
         public void Check()
@@ -149,23 +141,18 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Every check of <see cref="Build"/> before the mirrors: variables, body normalization with scoped reads, range
-        /// restriction and step order, the licence, the head and the analysis-writer check.
+        /// Every check of <see cref="Build"/>: variables, body normalization, range restriction and step order, and the
+        /// head.
         /// </summary>
-        /// <returns>Whether the rule writes an analysis table.</returns>
-        bool CheckRule()
+        void CheckRule()
         {
             DeclareVariables();
             foreach (var fact in draft.Body)
-                AddBodyFact(fact, null);
+                AddBodyFact(fact);
 
             ResolveBody();
-            CheckLicence();
             foreach (var item in draft.Head)
                 AddHeadItem(item);
-
-            CheckLicencedPrimitives();
-            return CheckAnalysisWriters();
         }
 
         /// <summary>
@@ -179,13 +166,12 @@ namespace Eggnog
         {
             InternLiterals(static builder => builder.LowerQuery());
             var columns = LowerQuery();
-            ReadMirrors();
             var named = new int[columns.Length];
             for (var i = 0; i < named.Length; i++)
                 named[i] = columns[i].IsRegister ? columns[i].Index : -1;
 
             return new RuleProgram(ruleName, registers.ToArray(), atoms, steps, head.ToArray(), idCells.ToArray(), idOrigins.ToArray(),
-                named, false, readScopes.ToArray())
+                named)
             {
                 BodyContext = bodyContext,
                 HeadContext = headContext,
@@ -193,8 +179,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Lowers a query's draft short of its mirrors: the body checked and normalized as a rule's, and the head's
-        /// collector of the declared variables.
+        /// Lowers a query's draft: the body checked and normalized as a rule's, and the head's collector of the declared
+        /// variables.
         /// </summary>
         /// <returns>The collected operands.</returns>
         Operand[] LowerQuery()
@@ -207,14 +193,14 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Lowers a draft whose head collects <paramref name="columns"/>, short of its mirrors: a query's.
+        /// Lowers a draft whose head collects <paramref name="columns"/>: a query's.
         /// </summary>
         /// <returns>The collected operands.</returns>
         Operand[] LowerCollect(IReadOnlyList<Term> columns)
         {
             DeclareVariables();
             foreach (var fact in draft.Body)
-                AddBodyFact(fact, null);
+                AddBodyFact(fact);
 
             ResolveBody();
             var operands = new Operand[columns.Count];
@@ -232,11 +218,11 @@ namespace Eggnog
         /// them in the order it meets them. First <paramref name="lower"/> checks the draft in a twin builder that interns
         /// nothing, as egglog typechecks a rule before it lowers it: a refused draft interns no constant.
         /// </summary>
-        /// <param name="lower">The lowering this builder is about to run, short of its mirrors.</param>
+        /// <param name="lower">The lowering this builder is about to run.</param>
         /// <exception cref="RuleDefinitionException">The draft is not valid.</exception>
         void InternLiterals(Action<ProgramBuilder> lower)
         {
-            lower(new ProgramBuilder(graph, draft, owner, query, licence) { interns = false });
+            lower(new ProgramBuilder(graph, draft, owner, query) { interns = false });
             var order = new LiteralOrder(InternConstant, Parts);
             foreach (var bound in order.Query(draft.Body))
                 InternConstant(bound);
@@ -331,46 +317,33 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Normalizes one body fact into atoms, unifications, constant bindings and steps; inside <see cref="Fact.In"/>,
-        /// every table application reads <paramref name="enclosing"/>.
+        /// Normalizes one body fact into atoms, unifications, constant bindings and steps.
         /// </summary>
-        void AddBodyFact(Fact fact, ScopeTag? enclosing)
+        void AddBodyFact(Fact fact)
         {
             switch (fact)
             {
                 case RelationFact relation:
                 {
                     CheckTable(relation.Table);
-                    var (table, scope) = AtomTable(relation.Table, enclosing);
                     var columns = new Operand[relation.Arguments.Length];
                     for (var i = 0; i < columns.Length; i++)
-                        columns[i] = FlattenBody(relation.Arguments[i], enclosing);
+                        columns[i] = FlattenBody(relation.Arguments[i]);
 
-                    rawAtoms.Add((table, scope, columns));
+                    rawAtoms.Add((relation.Table, columns));
                     break;
                 }
                 case EqualityFact equality when IsSameValueConstant(equality.Left.Shape, equality.Right.Shape):
                     // egglog's canonicalize drops an equality of two equal literals before it interns either.
                     break;
                 case EqualityFact equality:
-                    Equate(FlattenBody(equality.Left, enclosing), FlattenBody(equality.Right, enclosing));
+                    Equate(FlattenBody(equality.Left), FlattenBody(equality.Right));
                     break;
                 case NotEqualFact notEqual:
-                    rawSteps.Add((ProgramStepKind.NotEqual, null, new[] { FlattenBody(notEqual.Left, enclosing), FlattenBody(notEqual.Right, enclosing) }, default));
+                    rawSteps.Add((ProgramStepKind.NotEqual, null, new[] { FlattenBody(notEqual.Left), FlattenBody(notEqual.Right) }, default));
                     break;
                 case ExistsFact exists:
-                    FlattenBody(exists.Application, enclosing);
-                    break;
-                case ScopedFact scoped:
-                    if (enclosing is not null)
-                        throw Error("Fact.In cannot be nested");
-
-                    if (ReferenceEquals(scoped.Scope.Graph, graph) == false)
-                        throw Error($"scope tag '{scoped.Scope.Name}' belongs to another graph");
-
-                    foreach (var inner in scoped.Facts)
-                        AddBodyFact(inner, scoped.Scope);
-
+                    FlattenBody(exists.Application);
                     break;
                 case FilterFact filter:
                 {
@@ -382,12 +355,12 @@ namespace Eggnog
                         if (result.ClrType != typeof(bool))
                             throw Error($"primitive '{primitive.Name}' returns {result.Name}, not bool, so it cannot filter");
 
-                        var arguments = FlattenArguments(shape.Arguments, parameters, primitive, body: true, enclosing);
+                        var arguments = FlattenArguments(shape.Arguments, parameters, primitive, body: true);
                         rawSteps.Add((ProgramStepKind.Filter, primitive, arguments, default));
                     }
                     else
                     {
-                        rawSteps.Add((ProgramStepKind.Filter, Primitives.IsTrue, new[] { FlattenBody(filter.Condition, enclosing) }, default));
+                        rawSteps.Add((ProgramStepKind.Filter, Primitives.IsTrue, new[] { FlattenBody(filter.Condition) }, default));
                     }
 
                     break;
@@ -398,10 +371,9 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Turns a body term into an operand, creating atoms for applications and lets for computations; an application
-        /// with a read scope (its handle's, or <paramref name="enclosing"/>) becomes an atom over its mirror.
+        /// Turns a body term into an operand, creating atoms for applications and lets for computations.
         /// </summary>
-        Operand FlattenBody(Term term, ScopeTag? enclosing)
+        Operand FlattenBody(Term term)
         {
             var shape = term.Shape;
             switch (shape.Kind)
@@ -421,20 +393,19 @@ namespace Eggnog
                     return ConstantOperand(shape);
                 case TermShapeKind.Application:
                 {
-                    CheckTable(shape.Table!);
-                    var (table, scope) = AtomTable(shape.Table!, enclosing);
+                    var table = shape.Table!;
+                    CheckTable(table);
                     var columns = new Operand[shape.Arguments.Length + 1];
                     for (var i = 0; i < shape.Arguments.Length; i++)
-                        columns[i] = FlattenBody(shape.Arguments[i], enclosing);
+                        columns[i] = FlattenBody(shape.Arguments[i]);
 
-                    var key = "a" + table.Index.ToString(CultureInfo.InvariantCulture) + "@" + (scope?.Serial ?? -1).ToString(CultureInfo.InvariantCulture)
-                        + Key(columns.AsSpan(0, shape.Arguments.Length));
+                    var key = "a" + table.Index.ToString(CultureInfo.InvariantCulture) + Key(columns.AsSpan(0, shape.Arguments.Length));
                     if (bodyMemo.TryGetValue(key, out var shared))
                         return Operand.Register(shared, rawTypes[shared]);
 
                     var output = NewRegister(table.Output!, "$" + table.Name + (fresh++).ToString(CultureInfo.InvariantCulture), RegisterKind.Fresh);
                     columns[^1] = Operand.Register(output, table.Output!);
-                    rawAtoms.Add((table, scope, columns));
+                    rawAtoms.Add((table, columns));
                     bodyMemo.Add(key, output);
                     return columns[^1];
                 }
@@ -442,7 +413,7 @@ namespace Eggnog
                 {
                     var primitive = shape.Primitive!;
                     var (parameters, result) = CheckPrimitive(primitive, body: true);
-                    var arguments = FlattenArguments(shape.Arguments, parameters, primitive, body: true, enclosing);
+                    var arguments = FlattenArguments(shape.Arguments, parameters, primitive, body: true);
                     var key = "c" + PrimitiveId(primitive).ToString(CultureInfo.InvariantCulture) + Key(arguments);
                     if (bodyMemo.TryGetValue(key, out var shared))
                         return Operand.Register(shared, rawTypes[shared]);
@@ -459,12 +430,12 @@ namespace Eggnog
         /// <summary>
         /// Flattens a computation's arguments, checking each against its parameter's type.
         /// </summary>
-        Operand[] FlattenArguments(Term[] terms, ColumnType[] parameters, Primitive primitive, bool body, ScopeTag? enclosing = null)
+        Operand[] FlattenArguments(Term[] terms, ColumnType[] parameters, Primitive primitive, bool body)
         {
             var arguments = new Operand[terms.Length];
             for (var i = 0; i < terms.Length; i++)
             {
-                arguments[i] = body ? FlattenBody(terms[i], enclosing) : EvalHead(terms[i]);
+                arguments[i] = body ? FlattenBody(terms[i]) : EvalHead(terms[i]);
                 if (ReferenceEquals(arguments[i].Type, parameters[i]) == false)
                     throw Error($"primitive '{primitive.Name}' takes {parameters[i].Name} as argument {i + 1}, not {arguments[i].Type.Name}");
             }
@@ -558,7 +529,7 @@ namespace Eggnog
 
             atoms = new ProgramAtom[rawAtoms.Count];
             for (var i = 0; i < atoms.Length; i++)
-                atoms[i] = new ProgramAtom(rawAtoms[i].Table, rawAtoms[i].Scope, rawAtoms[i].Columns.Select(Resolve).ToArray());
+                atoms[i] = new ProgramAtom(rawAtoms[i].Table, rawAtoms[i].Columns.Select(Resolve).ToArray());
 
             var pending = new List<ProgramStep>(rawSteps.Count);
             foreach (var (kind, primitive, arguments, target) in rawSteps)
@@ -709,9 +680,6 @@ namespace Eggnog
             Term[] arguments;
             if (item.Fact is { } fact)
             {
-                if (fact is ScopedFact scoped)
-                    throw Error($"head facts are writes; Fact.In('{scoped.Scope.Name}') is read-only");
-
                 if (fact is not RelationFact relation)
                     throw Error($"Subsume takes relation rows and constructor terms; {fact} is not a relation row");
 
@@ -764,9 +732,6 @@ namespace Eggnog
             Term[] arguments;
             if (item.Fact is { } fact)
             {
-                if (fact is ScopedFact scoped)
-                    throw Error($"head facts are writes; Fact.In('{scoped.Scope.Name}') is read-only");
-
                 if (fact is not RelationFact relation)
                     throw Error($"Delete takes relation rows and function or constructor applications; {fact} is not a relation row");
 
@@ -803,7 +768,7 @@ namespace Eggnog
             var stepCount = rawSteps.Count;
             var operands = new Operand[terms.Length];
             for (var i = 0; i < operands.Length; i++)
-                operands[i] = Resolve(FlattenBody(terms[i], null));
+                operands[i] = Resolve(FlattenBody(terms[i]));
 
             if (rawAtoms.Count != atomCount || rawSteps.Count != stepCount)
                 throw new InvalidOperationException($"Rule '{ruleName}': a term of the head was not flattened by the body.");
@@ -857,8 +822,6 @@ namespace Eggnog
                     break;
                 case FilterFact:
                     throw Error("head facts are writes; 'True' is a filter");
-                case ScopedFact scoped:
-                    throw Error($"head facts are writes; Fact.In('{scoped.Scope.Name}') is read-only");
                 default:
                     throw Error($"a {fact.GetType().Name} cannot appear in a rule");
             }
@@ -957,159 +920,14 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Checks that a rule that writes an analysis table reads no fact table and no scoped atom, so analyses depend only
-        /// on terms.
-        /// </summary>
-        /// <returns>Whether the rule writes an analysis table.</returns>
-        bool CheckAnalysisWriters()
-        {
-            TableHandle? written = null;
-            foreach (var op in head)
-            {
-                if (op.Kind is HeadOpKind.Insert or HeadOpKind.Write or HeadOpKind.Subsume or HeadOpKind.Delete && op.Table!.Role == TableRole.Analysis)
-                {
-                    written = op.Table;
-                    break;
-                }
-            }
-
-            if (written is null)
-                return false;
-
-            foreach (var atom in atoms)
-            {
-                if (atom.Table.Role == TableRole.Fact)
-                    throw Error($"rule writes analysis table '{written.Name}' and may read only term and analysis tables; it reads '{SourceName(atom)}'");
-
-                if (atom.Scope is not null)
-                    throw Error($"rule writes analysis table '{written.Name}' and may not read scoped atoms; it reads '{SourceName(atom)} @{atom.Scope.Name}'");
-            }
-
-            // A primitive over the tables reads any of them, which no check of the atoms sees.
-            if (tableReader is not null)
-                throw Error($"rule writes analysis table '{written.Name}' and may read only term and analysis tables; it reads tables through primitive '{tableReader.Name}'");
-
-            return true;
-        }
-
-        /// <summary>
-        /// Gets the table an atom over <paramref name="table"/> reads, with its read scope: the handle's own
-        /// (<c>In(tag)</c>) or <paramref name="enclosing"/> (<see cref="Fact.In"/>). A scoped read is of a value-only table;
-        /// the atom keeps the source table until <see cref="ReadMirrors"/> moves it onto its mirror once every other check
-        /// has passed, so that a refused definition registers no mirror. The tag is recorded in the program's read scopes,
-        /// in first-use order.
-        /// </summary>
-        (TableHandle Table, ScopeTag? Scope) AtomTable(TableHandle table, ScopeTag? enclosing)
-        {
-            var own = table.ReadScope;
-            if (own is not null && enclosing is not null && ReferenceEquals(own, enclosing) == false)
-                throw Error($"'{table.Name} @{own.Name}' is inside Fact.In('{enclosing.Name}')");
-
-            var scope = own ?? enclosing;
-            if (scope is null)
-                return (table, null);
-
-            var source = table.Table;
-            if (source.IsValueOnly == false)
-                throw Error($"scoped reads are limited to tables whose columns are all values; '{source.Name}' has a sort column");
-
-            // A scoped read copies the table into a mirror in the scope that reads it, which below the root only a lattice
-            // merge may write.
-            if (source is FunctionHandle { Merge: { } merge })
-                throw Error($"a scoped read copies the table into a mirror, which only the root may write when the merge is not a lattice; '{source.Name}' has the merge '{merge.Name}', which is not a lattice");
-
-            if (readScopes.Contains(scope) == false)
-                readScopes.Add(scope);
-
-            return (source, scope);
-        }
-
-        /// <summary>
-        /// Moves each scoped atom onto the mirror of its table under its tag, creating the mirrors this definition
-        /// reads first. Called once every other check has passed; the creation is all or nothing
-        /// (<see cref="MirrorRegistry.GetOrCreateAll"/>), so a refused definition registers no mirror and does not
-        /// count as a first read.
-        /// </summary>
-        /// <exception cref="RuleDefinitionException">A mirror would be new and a live frozen scope carries its tag.</exception>
-        /// <exception cref="InvalidOperationException">A mirror would be new and another thread is using the writable root:
-        /// a new mirror is a table definition, which a writable root refuses while another thread uses it.</exception>
-        void ReadMirrors()
-        {
-            List<(TableHandle Table, ScopeTag Tag)>? reads = null;
-            foreach (var atom in atoms)
-                if (atom.Scope is { } tag && (reads ??= new()).Contains((atom.Table, tag)) == false)
-                    reads.Add((atom.Table, tag));
-
-            if (reads is null)
-                return;
-
-            var mirrors = graph.Mirrors.GetOrCreateAll(reads, ruleName);
-            for (var i = 0; i < atoms.Length; i++)
-                if (atoms[i].Scope is { } tag)
-                    atoms[i] = new ProgramAtom(mirrors[reads.IndexOf((atoms[i].Table, tag))].Handle, tag, atoms[i].Columns);
-        }
-
-        /// <summary>
-        /// Checks that a head never writes a scoped view: actions write only to the running scope. A rule local to a scope
-        /// below the root never runs at the root, so it may not write a function whose merge is not a lattice.
+        /// Checks that a rule local to a scope below the root, which never runs at the root, writes no function whose
+        /// merge is not a lattice.
         /// </summary>
         void CheckWritable(TableHandle table)
         {
-            if (table.ReadScope is { } tag)
-                throw Error($"'{table.Name} @{tag.Name}' is read-only");
-
             if (owner is { IsRoot: false } && table is FunctionHandle { Merge: { } merge })
                 throw Error($"'{table.Name}' has the merge '{merge.Name}', which is not a lattice, so only the root may write it, and a rule local to '{owner.Path}' never runs there");
         }
-
-        /// <summary>
-        /// Checks the licence: with a licence and no <c>ReadsOwnFacts</c>, every atom over a fact table reads the licence
-        /// scope; <c>ReadsOwnFacts</c> needs a reason and a licence.
-        /// </summary>
-        void CheckLicence()
-        {
-            if (draft.OwnFactsReason is { } reason)
-            {
-                if (string.IsNullOrWhiteSpace(reason))
-                    throw Error("ReadsOwnFacts needs a reason");
-
-                if (licence is null)
-                    throw Error("rule calls ReadsOwnFacts but has no licence");
-
-                return;
-            }
-
-            if (licence is null)
-                return;
-
-            foreach (var atom in atoms)
-                if (atom.Table.Role == TableRole.Fact && ReferenceEquals(atom.Scope, licence) == false)
-                    throw Error($"rule reads fact table '{SourceName(atom)}' outside scope '{licence.Name}'; read it through In({licence.Name}), or call ReadsOwnFacts with the reason that is sound");
-
-            // A full callback reads the running scope's tables, which no licence check sees.
-            foreach (var item in draft.Head)
-                if (item.Callback is { Full: true })
-                    throw Error($"rule reads tables in a full callback, outside scope '{licence.Name}'; "
-                        + "call ReadsOwnFacts with the reason that is sound");
-        }
-
-        /// <summary>
-        /// Checks the licence of the rule's primitives over the tables: with a licence and no <c>ReadsOwnFacts</c>, a read
-        /// or full primitive reads the running scope's tables, which no licence check sees, as a full callback does.
-        /// </summary>
-        void CheckLicencedPrimitives()
-        {
-            if (licence is null || draft.OwnFactsReason is not null || tableReader is null)
-                return;
-
-            throw Error($"rule reads tables through primitive '{tableReader.Name}', outside scope '{licence.Name}'; "
-                + "call ReadsOwnFacts with the reason that is sound");
-        }
-
-        /// <summary>
-        /// Gets the name of the table an atom reads: a mirror's source's.
-        /// </summary>
-        static string SourceName(ProgramAtom atom) => (atom.Table.Source ?? atom.Table).Name;
 
         /// <summary>
         /// Turns a constant into a value constant or a class constant. A class must name a class of this graph; outside a
@@ -1207,11 +1025,6 @@ namespace Eggnog
             var (context, site) = body ? (bodyContext, bodySite) : (headContext, headSite);
             if (Primitive.Allows(context, primitive.Access) == false)
                 throw Error(Primitive.Refusal(primitive, site, context));
-
-            // A function value's application reads the tables where the context does.
-            if (primitive.Access is PrimitiveAccess.Read or PrimitiveAccess.Full
-                || (primitive.DispatchesOnContext && context is PrimitiveAccess.Read or PrimitiveAccess.Full))
-                tableReader ??= primitive;
 
             var parameters = new ColumnType[primitive.ParameterTypes.Count];
             for (var i = 0; i < parameters.Length; i++)

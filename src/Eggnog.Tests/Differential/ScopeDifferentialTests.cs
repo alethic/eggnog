@@ -9,12 +9,11 @@ namespace Eggnog.Tests.Differential
 {
 
     /// <summary>
-    /// The scope differential: random scope trees up to four deep, with tags, frozen prefixes, host writes into
-    /// writable ancestors between child runs, local rules with scoped atoms, and host queries with scoped atoms from
-    /// tagged scopes and their descendants, all over value-only tables, run with scopes as contexts and checked against
-    /// the program's literal encoding at one root (<see cref="LiteralOracle"/>). At every check each scope's view, its
-    /// scoped reads, and every query's answer must equal the oracle's facts for its context constant. 300 seeds by
-    /// default; <c>EGGNOG_SEEDS</c> raises it. A failing program prints itself.
+    /// The scope differential: random scope trees up to four deep, with frozen prefixes, host writes into writable
+    /// ancestors between child runs, local rules, and host queries, all over value-only tables, run with scopes as
+    /// contexts and checked against the program's literal encoding at one root (<see cref="LiteralOracle"/>). At every
+    /// check each scope's view and every query's answer must equal the oracle's facts for its context constant. 300
+    /// seeds by default; <c>EGGNOG_SEEDS</c> raises it. A failing program prints itself.
     /// </summary>
     public sealed class ScopeDifferentialTests
     {
@@ -40,9 +39,8 @@ namespace Eggnog.Tests.Differential
         }
 
         /// <summary>
-        /// The generator produces every shape the comparison relies on: trees four deep, tags, at least two freezes,
-        /// local rules and queries with scoped atoms, writes into an ancestor between child runs, and a final check in
-        /// every program.
+        /// The generator produces every shape the comparison relies on: trees four deep, at least two freezes, local
+        /// rules, writes into an ancestor between child runs, and a final check in every program.
         /// </summary>
         [Fact]
         public void TheGeneratedProgramsCoverEveryShapeUnderTest()
@@ -50,14 +48,11 @@ namespace Eggnog.Tests.Differential
             var programs = Enumerable.Range(0, DefaultSeeds).Select(s => ScopedProgram.Generate(s, false)).ToList();
             var creates = programs.SelectMany(p => p.Commands.Where(c => c.Kind == ScopedCommandKind.Create)).ToList();
 
-            // Trees four deep, tags, frozen prefixes, writes into ancestors with children, local rules with scoped
-            // atoms.
+            // Trees four deep, frozen prefixes, writes into ancestors with children, local rules.
             Assert.Contains(programs, p => Depths(p).Max() == 4);
-            Assert.Contains(creates, c => c.Tag >= 0);
             Assert.Contains(programs, p => p.Commands.Count(c => c.Kind == ScopedCommandKind.Freeze) >= 2);
-            Assert.Contains(creates, c => c.Rules.Any(r => r.Body.Any(a => a.Tag >= 0)));
+            Assert.Contains(creates, c => c.Rules.Length > 0);
             Assert.Contains(programs, WritesAnAncestorBetweenChildRuns);
-            Assert.Contains(programs, p => p.Queries.Any(q => q.Body.Any(a => a.Tag >= 0)));
             Assert.All(programs, p => Assert.Equal(ScopedCommandKind.Check, p.Commands[^1].Kind));
         }
 

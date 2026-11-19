@@ -74,8 +74,8 @@ namespace Eggnog
         /// <exception cref="FactConflictException">A function without a lattice holds another value, and the write is not
         /// made; or a merge the facts make merges two of its keys that hold different values, and the merge stands, the
         /// rebuild keeping one of the rows, as egglog's.</exception>
-        /// <exception cref="ArgumentException">A fact is a value equality that is not a function write or a filter; or it
-        /// writes through a scoped view (<c>T.In(tag)</c>) or a <see cref="Fact.In"/>, which are read-only.</exception>
+        /// <exception cref="ArgumentException">A fact is a value equality that is not a function write or a
+        /// filter.</exception>
         /// <exception cref="InvalidOperationException">The scope is frozen (write in a child of it) or faulted, or in use on
         /// another thread; or the call comes from a run observer or a user delegate the engine invoked.</exception>
         /// <exception cref="RuleEvaluationException">A primitive had no result or threw, or a merge failed, as egglog's
@@ -227,9 +227,8 @@ namespace Eggnog
         /// </summary>
         /// <param name="rows">The rows, of subsumable relations (<see cref="RelationOptions.Subsumable"/>).</param>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
-        /// <exception cref="ArgumentException">A fact is not a relation row, a relation is not subsumable, a term in a
-        /// row is not ground or holds a class value this scope cannot use, or a row writes through a scoped view
-        /// (<c>T.In(tag)</c>) or a <see cref="Fact.In"/>, which are read-only.</exception>
+        /// <exception cref="ArgumentException">A fact is not a relation row, a relation is not subsumable, or a term in
+        /// a row is not ground or holds a class value this scope cannot use.</exception>
         /// <exception cref="InvalidOperationException">The scope is frozen (write in a child of it) or faulted, or in
         /// use on another thread; or the call comes from a run observer or a user delegate the engine
         /// invoked.</exception>
@@ -279,9 +278,8 @@ namespace Eggnog
         /// <typeparam name="T">The application's type.</typeparam>
         /// <param name="term">The application: <c>f.Of(k)</c> of a function or a constructor.</param>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
-        /// <exception cref="ArgumentException">The term is not an application of a function or a constructor, it
-        /// applies a scoped view (<c>T.In(tag)</c>), or a term in its keys is a variable or holds a class value this
-        /// scope cannot use.</exception>
+        /// <exception cref="ArgumentException">The term is not an application of a function or a constructor, or a
+        /// term in its keys is a variable or holds a class value this scope cannot use.</exception>
         /// <exception cref="InvalidOperationException">The scope may not delete (it has live descendants or a writable
         /// parent, or the function's merge is not a lattice and the scope is not the root); the scope is frozen or
         /// faulted, or in use on another thread; a function read in the keys has no value, and the terms the keys made
@@ -325,9 +323,8 @@ namespace Eggnog
         /// </summary>
         /// <param name="rows">The rows.</param>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
-        /// <exception cref="ArgumentException">A fact is not a relation row, a term in a row is a variable or holds a
-        /// class value this scope cannot use, or a row is of a scoped view (<c>T.In(tag)</c>) or a
-        /// <see cref="Fact.In"/>, which are read-only.</exception>
+        /// <exception cref="ArgumentException">A fact is not a relation row, or a term in a row is a variable or holds a
+        /// class value this scope cannot use.</exception>
         /// <exception cref="InvalidOperationException">As for <see cref="Delete{T}"/>. The row deletes nothing, and the
         /// rows before it stand.</exception>
         /// <exception cref="RuleEvaluationException">As for <see cref="Delete{T}"/>.</exception>
@@ -448,8 +445,9 @@ namespace Eggnog
                     failure.Throw();
 
                 // The callback may have made calls in this scope's domain that left it behind its ancestors without
-                // changing what the batch read (a mirror sync before an ancestor's query). The catch-up is made here,
-                // left out of Version as at the entry, so that the commit's flush makes only the batch's changes.
+                // changing what the batch read (an ancestor's query whose primitives interned containers of classes
+                // there). The catch-up is made here, left out of Version as at the entry, so that the commit's flush
+                // makes only the batch's changes.
                 if (batch.IsEmpty == false)
                 {
                     Runtime.TakeFailure();

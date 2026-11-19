@@ -179,7 +179,6 @@ namespace Eggnog.Tests.Host
             Assert.True(graph.Root.Check(((Term<int>)(-5)).Is(-5)));
             Assert.Equal(-5, graph.Root.Get((Term<int>)(-5)));
             Assert.True(graph.Root.Check(Primitives.SetOf<string>().Of("q").Is(Set.Of(["q"]))));
-            Assert.True(graph.Root.Check(Fact.In(graph.RootTag, StringPrimitives.Concat.Of("x", "y").Is("xy"))));
 
             Assert.Equal(before, graph.Values.InternedCount);
         }

@@ -100,8 +100,7 @@ namespace Eggnog
             var (parameters, output, name) = target switch
             {
                 TableHandle { IsRelation: true } table => throw RelationIsNoTarget(table),
-                TableHandle table when table.ReadScope is null => (Array.ConvertAll(table.KeyArray, type => type.ClrType), table.Output!.ClrType, table.Name),
-                TableHandle table => throw new ArgumentException($"'{table}' is a scoped view, which a function value does not apply.", nameof(target)),
+                TableHandle table => (Array.ConvertAll(table.KeyArray, type => type.ClrType), table.Output!.ClrType, table.Name),
                 Primitive primitive => ([.. primitive.ParameterTypes], primitive.ResultType, primitive.Name),
                 _ => throw new ArgumentException($"A function value applies a constructor, a function or a primitive, not a {target.GetType().Name}.", nameof(target)),
             };

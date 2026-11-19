@@ -287,36 +287,6 @@ namespace Eggnog.Tests.Diagnostics
             Assert.Contains($"(form {schema.Id} \"uid\" \"uuid-lower\")", root.Rows(c.Form).Select(r => r.ToString()));
         }
 
-        [Fact]
-        public void MirrorSyncsAreSteps()
-        {
-            var t = new ScopeTheory();
-            var copies = new OuterCopies(t);
-            var outer = t.Root.CreateChild(t.Outer);
-            outer.Assume(t.Fact.Of("a"), t.Best.Of("k").Is(3L));
-            var inner = outer.CreateChild(t.Inner);
-            var observed = new List<RunStep>();
-
-            var report = inner.Run(Schedule.Saturate(t.Rules), new RunOptions { RecordSteps = true, Observer = observed.Add });
-
-            // One sync of the outer scope before the first iteration; later iterations find it current.
-            var syncs = report.Steps.Where(s => s.Kind == RunStepKind.MirrorSync).ToArray();
-            var sync = Assert.Single(syncs);
-            Assert.Same(outer, sync.Scope);
-            Assert.True(sync.Changed);
-            Assert.Empty(sync.Rules);
-            Assert.Equal(0, sync.Index);
-            Assert.StartsWith("#0 mirror-sync " + outer.Path + " changed", sync.ToString());
-            Assert.Equal(report.Steps, observed);
-            Assert.Equal(report.Iterations, report.Steps.Count(s => s.Kind == RunStepKind.Iteration));
-            Assert.True(inner.Check(copies.Facts.Of("a"), copies.Bests.Of("k").Is(3L)));
-
-            // A write into the outer scope makes the next run sync again; an unchanged scope does not.
-            outer.Assume(t.Fact.Of("b"));
-            Assert.Single(inner.Run(Schedule.Saturate(t.Rules), new RunOptions { RecordSteps = true }).Steps, s => s.Kind == RunStepKind.MirrorSync);
-            Assert.DoesNotContain(inner.Run(Schedule.Saturate(t.Rules), new RunOptions { RecordSteps = true }).Steps, s => s.Kind == RunStepKind.MirrorSync);
-        }
-
         /// <summary>
         /// An observer may only read: a write, a <c>Run</c>, any other call that changes a scope, and every structural
         /// call throw <see cref="InvalidOperationException"/> with the message
@@ -333,7 +303,7 @@ namespace Eggnog.Tests.Diagnostics
                 r.When(t.Fact.Of(x));
                 r.Then(t.Seen.Of(x));
             });
-            var scope = t.Root.CreateChild(t.Outer);
+            var scope = t.Root.CreateChild();
             scope.Assume(t.Fact.Of("a"));
             Exception? refused = null;
             Scope? made = null;
@@ -346,7 +316,7 @@ namespace Eggnog.Tests.Diagnostics
 
                     try
                     {
-                        made = scope.CreateChild(t.Inner);
+                        made = scope.CreateChild();
                     }
                     catch (Exception exception)
                     {
@@ -376,7 +346,7 @@ namespace Eggnog.Tests.Diagnostics
                 r.Then(t.Seen.Of(x));
             });
             t.Root.Freeze();
-            var scope = t.Root.CreateChild(t.Outer);
+            var scope = t.Root.CreateChild();
             scope.Assume(t.Fact.Of("a"));
             Exception? refused = null;
             scope.Run(Schedule.Saturate(t.Rules), new RunOptions { Observer = _ => refused ??= Record.Exception(scope.Freeze) });

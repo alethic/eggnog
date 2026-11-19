@@ -44,7 +44,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets the number of engine iterations the run made; mirror syncs do not count.
+        /// Gets the number of engine iterations the run made.
         /// </summary>
         public int Iterations { get; }
 

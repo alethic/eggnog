@@ -11,8 +11,8 @@ namespace Eggnog.Tests.Subsumption
     /// Which tables may be subsumed and where a subsumption may be written: every relation and constructor is subsumable
     /// unless it opts out with <see cref="RelationOptions.Subsumable"/> or <see cref="ConstructorOptions.Subsumable"/>,
     /// and a function never is, its options having no such setting (egglog's <c>test_subsume_custom</c> and
-    /// <c>test_cant_subsume_merge</c>); rules and hosts subsume only subsumable tables, only through the running
-    /// scope, and only relation rows and constructor terms. Rules render their subsumptions as egglog writes them.
+    /// <c>test_cant_subsume_merge</c>); rules and hosts subsume only subsumable tables, and only relation rows and
+    /// constructor terms. Rules render their subsumptions as egglog writes them.
     /// </summary>
     public sealed class SubsumeDefinitionTests
     {
@@ -25,7 +25,6 @@ namespace Eggnog.Tests.Subsumption
         public void RelationsAndConstructorsAreSubsumableUnlessTheyOptOut()
         {
             var t = new MathTheory();
-            var tag = t.Graph.DefineScopeTag("schema");
             var fact = t.Graph.DefineRelation<string>("fact");
             var plain = t.Graph.DefineConstructor<long, Node>("Plain", 1, MathTheory.NotSubsumable);
             var byDefault = t.Graph.DefineConstructor<long, Node>("ByDefault");
@@ -34,7 +33,6 @@ namespace Eggnog.Tests.Subsumption
 
             Assert.True(t.Num.Subsumable);
             Assert.True(fact.Subsumable);
-            Assert.True(fact.In(tag).Subsumable);
             Assert.True(byDefault.Subsumable);
             Assert.True(relation.Subsumable);
             Assert.False(function.Subsumable);
@@ -102,8 +100,6 @@ namespace Eggnog.Tests.Subsumption
         public void ARuleSubsumesRelationRowsAndConstructorTermsOnly()
         {
             var t = new MathTheory();
-            var fact = t.Graph.DefineRelation<long>("fact");
-            var tag = t.Graph.DefineScopeTag("schema");
 
             var equality = Assert.Throws<RuleDefinitionException>(() => t.Rules.DefineRule("equality", r =>
             {
@@ -112,46 +108,6 @@ namespace Eggnog.Tests.Subsumption
                 r.Subsume(x.Is(y));
             }));
             Assert.Contains("Subsume takes relation rows and constructor terms", equality.Message, StringComparison.Ordinal);
-
-            // A scoped view is read-only, in a subsumption as in any write.
-            var scoped = Assert.Throws<RuleDefinitionException>(() => t.Rules.DefineRule("scoped", r =>
-            {
-                var n = r.Var<long>("n");
-                r.When(fact.Of(n));
-                r.Subsume(fact.In(tag).Of(n));
-            }));
-            Assert.Contains("'fact @schema' is read-only", scoped.Message, StringComparison.Ordinal);
-            var scopedFact = Assert.Throws<RuleDefinitionException>(() => t.Rules.DefineRule("scoped fact", r =>
-            {
-                var n = r.Var<long>("n");
-                r.When(fact.Of(n));
-                r.Subsume(Fact.In(tag, fact.Of(n)));
-            }));
-            Assert.Contains("Fact.In('schema') is read-only", scopedFact.Message, StringComparison.Ordinal);
-        }
-
-        [Fact]
-        public void AnAnalysisIsSubsumedOnlyByRulesThatReadTermsAndAnalyses()
-        {
-            var t = new MathTheory();
-            var fact = t.Graph.DefineRelation<long>("fact");
-            var analysis = t.Graph.DefineRelation<long>("analysis", new RelationOptions { Analysis = true });
-
-            // Subsuming is writing: a rule that subsumes an analysis may not judge on facts.
-            var error = Assert.Throws<RuleDefinitionException>(() => t.Rules.DefineRule("judges on a fact", r =>
-            {
-                var n = r.Var<long>("n");
-                r.When(fact.Of(n), analysis.Of(n));
-                r.Subsume(analysis.Of(n));
-            }));
-            Assert.Contains("rule writes analysis table 'analysis'", error.Message, StringComparison.Ordinal);
-
-            t.Rules.DefineRule("reads a term", r =>
-            {
-                var n = r.Var<long>("n");
-                r.When(Fact.Exists(t.Num.Of(n)), analysis.Of(n));
-                r.Subsume(analysis.Of(n));
-            });
         }
 
         [Fact]
@@ -186,14 +142,11 @@ namespace Eggnog.Tests.Subsumption
             var t = new MathTheory();
             var plain = t.Graph.DefineConstructor<long, Node>("Plain", 1, MathTheory.NotSubsumable);
             var fact = t.Graph.DefineRelation<long>("fact");
-            var tag = t.Graph.DefineScopeTag("schema");
             var version = t.Root.Version;
 
             var refused = Assert.Throws<ArgumentException>(() => t.Root.Subsume(plain.Of(1L)));
             Assert.Contains("'Plain' is not subsumable", refused.Message, StringComparison.Ordinal);
             Assert.Throws<ArgumentException>(() => t.Root.Subsume(t.Seen.Of(1L)));
-            Assert.Throws<ArgumentException>(() => t.Root.Subsume(fact.In(tag).Of(1L)));
-            Assert.Throws<ArgumentException>(() => t.Root.Subsume(Fact.In(tag, fact.Of(1L))));
             Assert.Throws<ArgumentException>(() => t.Root.Subsume(t.Num.Of(1L).Is(t.Num.Of(2L))));
 
             // A refused row writes nothing, and the rows before it stand, as egglog's commands do.

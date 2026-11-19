@@ -12,8 +12,8 @@ namespace Eggnog.Tests.Predicates.Scoped
     /// schema that reasons by the cases of its discriminator are <see cref="DiscriminatedSchema"/>'s. Between them they
     /// exercise stored forms and lowering, discriminated and undiscriminated unions, refused values, numeric bounds,
     /// integer domains, type claims and the deletion of conjuncts the schema implies. Used by the tests that must run
-    /// every query in another setting: two graphs in either order and on parallel threads (ScopeTagTests), and a degree
-    /// of parallelism above 1 (ParallelEquivalenceTests).
+    /// every query in another setting: two graphs in either order and on parallel threads (GraphIndependenceTests), and a
+    /// degree of parallelism above 1 (ParallelEquivalenceTests).
     /// </summary>
     public static class ScopedQueryCases
     {
@@ -103,7 +103,7 @@ namespace Eggnog.Tests.Predicates.Scoped
 
         /// <summary>
         /// Compiles a case's schema under the graph's frozen root: declares it in a new schema scope, saturates horn
-        /// and lattice rules, and freezes it.
+        /// and lattice rules, copies its facts (<see cref="PredicateTheory.PlainFacts"/>), and freezes it.
         /// </summary>
         /// <param name="c">The theory, whose graph's root is frozen.</param>
         /// <param name="queryCase">The case.</param>
@@ -111,9 +111,9 @@ namespace Eggnog.Tests.Predicates.Scoped
         /// <returns>The frozen schema.</returns>
         public static Scope Compile(PredicateTheory c, ScopedQueryCase queryCase, ScopeOptions? options = null)
         {
-            var schema = c.Graph.Root.CreateChild(c.Schema, options);
+            var schema = c.Graph.Root.CreateChild(options);
             queryCase.Declare(c, schema);
-            Assert.True(schema.Run(Schedule.Saturate(c.Horn, c.Lattice)).Saturated, queryCase.Name);
+            Assert.True(schema.Run(c.PlainFacts).Saturated, queryCase.Name);
             schema.Freeze();
             return schema;
         }

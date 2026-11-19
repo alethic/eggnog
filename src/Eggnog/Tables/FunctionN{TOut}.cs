@@ -32,16 +32,6 @@ namespace Eggnog
         /// not its column's.</exception>
         public Term<TOut> Of(params ReadOnlySpan<object> keys) => new ApplicationTerm<TOut>(this, ToArguments(keys));
 
-        /// <summary>
-        /// A read-only scoped view of the table, which must have no sort column, as for the typed functions.
-        /// </summary>
-        /// <param name="scope">The tag of the scope to read.</param>
-        /// <returns>The view.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="scope"/> is <c>null</c>.</exception>
-        /// <exception cref="ArgumentException">The tag belongs to another graph, or the table has a sort
-        /// column.</exception>
-        public FunctionN<TOut> In(ScopeTag scope) => ViewIn(new FunctionN<TOut>(), scope);
-
     }
 
 }

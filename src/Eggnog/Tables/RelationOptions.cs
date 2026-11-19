@@ -8,12 +8,6 @@ namespace Eggnog
     {
 
         /// <summary>
-        /// Gets whether the relation is an analysis (<see cref="TableRole.Analysis"/>), derived from terms only, rather
-        /// than a fact (<see cref="TableRole.Fact"/>, the default).
-        /// </summary>
-        public bool Analysis { get; init; }
-
-        /// <summary>
         /// Gets whether rows of the relation may be subsumed (egglog's <c>subsume</c>): by a rule's <see
         /// cref="RuleBuilder.Subsume(System.ReadOnlySpan{Fact})"/>, or by a host's <see
         /// cref="Scope.Subsume(System.ReadOnlySpan{Fact})"/> or the same call of a <see cref="ScopeWriter"/>. A

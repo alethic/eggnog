@@ -7,7 +7,7 @@ namespace Eggnog.Tests.Predicates.Scoped
     {
 
         /// <summary>
-        /// Gets the paths the running scope's predicate terms mention: an analysis, derived from terms alone.
+        /// Gets the paths the running scope's predicate terms mention, derived from the terms alone.
         /// </summary>
         public Relation<string> Mentioned { get; private set; } = null!;
 
@@ -65,7 +65,10 @@ namespace Eggnog.Tests.Predicates.Scoped
         /// </summary>
         public Ruleset QueryCases { get; private set; } = null!;
 
-        /// <summary>Gets the schedule a schema is compiled with: horn, lattice and the schema's case rules.</summary>
+        /// <summary>
+        /// Gets the schedule a schema is compiled with: horn, lattice and the schema's case rules, then the copies of its
+        /// facts (<see cref="Copies"/>).
+        /// </summary>
         public Schedule Facts { get; private set; } = null!;
 
         /// <summary>
@@ -74,14 +77,14 @@ namespace Eggnog.Tests.Predicates.Scoped
         public Schedule Saturation { get; private set; } = null!;
 
         /// <summary>
-        /// Defines the case members: the analysis <see cref="Mentioned"/> and the rules that derive it, the tables a
-        /// branch declares its claims in and the case rules derive from them, the schema's and the query's case rules,
-        /// and the schedules that take them.
+        /// Defines the case members: <see cref="Mentioned"/> and the rules that derive it, the tables a branch declares
+        /// its claims in and the case rules derive from them, the schema's and the query's case rules, and the schedules
+        /// that take them.
         /// </summary>
         partial void DefineCases()
         {
             // A path is mentioned when a comparison or test over it is a term of the running scope.
-            Mentioned = Graph.DefineRelation<string>("mentioned", new RelationOptions { Analysis = true });
+            Mentioned = Graph.DefineRelation<string>("mentioned");
             foreach (var comparison in new[] { StrEq, StrGe, StrGt, UuidEq, InstantGt })
             {
                 Horn.DefineRule($"{comparison.Name} mentions its path", r =>
@@ -130,7 +133,7 @@ namespace Eggnog.Tests.Predicates.Scoped
             DefineCaseRules(QueryCases, mentioned: true);
 
             var settle = Schedule.Saturate(Horn, Lattice);
-            Facts = Schedule.Saturate(settle, SchemaCases);
+            Facts = Schedule.Sequence(Schedule.Saturate(settle, SchemaCases), Schedule.Saturate(Copies));
             Saturation = Schedule.Saturate(settle, QueryCases, Rewrite);
         }
 

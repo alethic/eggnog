@@ -86,14 +86,14 @@ namespace Eggnog.Tests.Graph
             var churn = new ScopeChurn();
             var c = churn.Theory;
             LeaveIds(churn.Graph, Relations.IdBlockAllocator.FirstBlockSize - 1);
-            using var query = churn.Schema.CreateChild(c.Query);
+            using var query = churn.Schema.CreateChild();
 
             Assert.Throws<OverflowException>(() => query.Make(c.StrEq.Of("kind", "a")));
             Assert.False(query.IsFaulted);
             query.Assume(c.Present.Of("written without an id"));
             Assert.True(query.Check(c.Present.Of("written without an id")));
             Assert.Throws<OverflowException>(() => query.Make(c.StrEq.Of("kind", "a")));
-            using (var sibling = churn.Schema.CreateChild(c.Query))
+            using (var sibling = churn.Schema.CreateChild())
                 Assert.Throws<OverflowException>(() => sibling.Make(c.StrEq.Of("kind", "a")));
 
             Assert.Equal(1, churn.Graph.Usage.FractionUsed);
@@ -213,7 +213,7 @@ namespace Eggnog.Tests.Graph
         {
             var churn = new ScopeChurn();
             var c = churn.Theory;
-            var query = churn.Schema.CreateChild(c.Query);
+            var query = churn.Schema.CreateChild();
             var p = query.Make(c.Not.Of(c.StrEq.Of("kind", "zz")));
             query.Assume(c.WhereClause.Of(p));
             LeaveEpochs(churn.Graph, 3);

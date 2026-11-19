@@ -54,13 +54,6 @@ namespace Eggnog
         /// <inheritdoc />
         public override long Version => Context.Version;
 
-        /// <summary>
-        /// Gets a stamp of the rows the context's views show: the sum of the change stamps of the context and its ancestors
-        /// (the storage context's view stamp). It moves whenever the context's own layer or an ancestor's
-        /// changes, which <see cref="Version"/> alone does not see. O(depth).
-        /// </summary>
-        public long ViewStamp => Context.Context.ViewStamp;
-
         /// <inheritdoc />
         public override long OwnRowCount => Context.OwnRowCount;
 

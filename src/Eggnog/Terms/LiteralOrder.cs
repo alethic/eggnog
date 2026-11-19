@@ -259,11 +259,6 @@ namespace Eggnog
                 case ExistsFact exists:
                     Slot(exists.Application.Shape, atoms, variables, ref next);
                     break;
-                case ScopedFact scoped:
-                    foreach (var inner in scoped.Facts)
-                        Flatten(inner, atoms, variables, ref next);
-
-                    break;
             }
         }
 

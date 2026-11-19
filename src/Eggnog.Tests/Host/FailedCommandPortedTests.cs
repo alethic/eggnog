@@ -192,7 +192,7 @@ namespace Eggnog.Tests.Host
         [Fact]
         public void ARefusedFactWritesNothing()
         {
-            // A fact egglog's type checker refuses never runs: a read of a scoped view in a write, a fact that is a filter.
+            // A fact egglog's type checker refuses never runs: a fact that is a filter, a value equality that is no write.
             var t = new Theory();
             Assert.Throws<ArgumentException>(() => t.Root.Assume(Fact.True(true)));
             Assert.Throws<ArgumentException>(() => t.Root.Assume(((Term<long>)1L).Is(2L)));

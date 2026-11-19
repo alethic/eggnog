@@ -25,7 +25,7 @@ Eggnog brings that to .NET:
   strings to parse.
 - **Scopes.** A child scope starts as a copy of its parent and costs in proportion to what it touches. Freeze a scope
   that holds a schema or a theory, and any number of threads can query it and extend it in children of their own, one
-  per request. Rules can be local to a scope, and can read another scope's facts through tags.
+  per request. Rules can be local to a scope.
 - **Extraction** of the cheapest equivalent term under a cost model you can change per call.
 - **egglog's engine, in C#.** The engine is a faithful reimplementation of egglog's Rust engine (tables with
   functional dependencies, Free Join planning and execution, semi-naive evaluation, union-find with rebuilding).

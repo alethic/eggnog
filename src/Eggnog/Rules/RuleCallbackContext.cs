@@ -15,10 +15,10 @@ namespace Eggnog
     /// <para>
     /// Values are of their columns' types, a class a sort value usable in the scope the rule runs in. A write is checked as
     /// a head's is, when it is made rather than before the run, since the callback decides what it writes: a function whose
-    /// merge is not a lattice is written only at the root, a deletion only where the scope may delete, a subsumption only
-    /// of a subsumable table, and no analysis table and no scoped view is written. A refused write, or an exception the
-    /// callback throws, fails the rule with a <see cref="RuleEvaluationException"/>, as egglog's callback returning
-    /// <c>None</c> panics; a refusal fails the rule even when the callback catches it.
+    /// merge is not a lattice is written only at the root, a deletion only where the scope may delete, and a subsumption
+    /// only of a subsumable table. A refused write, or an exception the callback throws, fails the rule with a
+    /// <see cref="RuleEvaluationException"/>, as egglog's callback returning <c>None</c> panics; a refusal fails the rule
+    /// even when the callback catches it.
     /// </para>
     /// <para>
     /// Callbacks run on the engine's threads, in parallel with each other, and must be thread-safe; one cannot call into a

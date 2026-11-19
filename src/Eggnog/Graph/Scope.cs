@@ -22,10 +22,9 @@ namespace Eggnog
     /// command leaves its e-graph: what the run's matches or the write's calls staged before they failed stands, merged
     /// and rebuilt. A failure with no egglog counterpart faults the scope, and every later call except
     /// <see cref="Dispose"/> throws; a faulted root makes its graph unusable. So it is after a lattice merge that
-    /// throws in the catch-up a call makes first, a read's, query's or extraction's included, after a scheduler that
-    /// throws, and after a copy rule that fails as a mirror is synced, which faults the tagged scope and the scope
-    /// whose run needed the sync. <see cref="Dispose"/> never throws: it makes the scope unusable at once, and
-    /// releases its engine state once nothing defers it.
+    /// throws in the catch-up a call makes first, a read's, query's or extraction's included, and after a scheduler
+    /// that throws. <see cref="Dispose"/> never throws: it makes the scope unusable at once, and releases its engine
+    /// state once nothing defers it.
     /// </para>
     /// <para>
     /// A child starts as a copy of its parent and keeps seeing what its writable ancestors write later. A call into a
@@ -35,10 +34,7 @@ namespace Eggnog
     /// "catch-up the call makes first" of the members' exception clauses. <see cref="DefineRule"/>,
     /// <see cref="DefineBiRewrite{TSort}"/> and the queries of an <see cref="Extractor"/> make it only while the
     /// scope's parent is writable: a child of a frozen scope that still owes the catch-up for what its ancestors wrote
-    /// before they froze makes it at its next read, write, run, <see cref="CreateChild"/> or <see cref="Freeze"/>. A
-    /// scoped read (<c>T.In(tag)</c>) in a rule or query reads a mirror: an internal copy of the table that copy rules
-    /// keep equal to the view of the nearest ancestor-or-self carrying the tag, synced just before a rule, query or
-    /// freeze reads it.
+    /// before they froze makes it at its next read, write, run, <see cref="CreateChild"/> or <see cref="Freeze"/>.
     /// </para>
     /// <para>
     /// Every member that enters the scope (its reads, writes, runs, extraction and tree operations) throws
@@ -67,7 +63,6 @@ namespace Eggnog
             Graph = graph;
             IsRoot = true;
             Path = "root";
-            Tag = graph.RootTag;
             Origin = graph.RootOrigin;
             guard = new ScopeGuard();
             var engine = new ContextEngineScope(graph, graph.Engine.Root);
@@ -81,15 +76,13 @@ namespace Eggnog
         /// Initializes a child scope over an engine child.
         /// </summary>
         /// <param name="parent">The parent scope.</param>
-        /// <param name="tag">The child's tag, of the parent's graph; <c>null</c> for none.</param>
         /// <param name="engine">The engine child.</param>
         /// <param name="guard">The parent's guard when the parent is writable, a new one when it is frozen.</param>
         /// <param name="path">The child's path.</param>
-        internal Scope(Scope parent, ScopeTag? tag, ContextEngineScope engine, ScopeGuard guard, string path)
+        internal Scope(Scope parent, ContextEngineScope engine, ScopeGuard guard, string path)
         {
             Graph = parent.Graph;
             Parent = parent;
-            Tag = tag;
             Path = path;
             Origin = new ScopeOrigin(Graph, parent.Origin, path, false);
             this.guard = guard;
@@ -114,11 +107,10 @@ namespace Eggnog
 
         /// <summary>
         /// Gets whether the scope is faulted: set after a <see cref="RuleEvaluationException"/> with no egglog
-        /// counterpart (a lattice merge that threw in the catch-up of any call into this scope or a descendant, a
-        /// scheduler that threw, a copy rule that failed as this scope's mirrors were synced, or in the sync a run of this
-        /// scope needed), or after the engine faulted the scope's context because an exception escaped one of its writes,
-        /// runs or rebuilds (an ancestor row the scope stopped seeing before its rewritten copy was merged would stay lost,
-        /// so the scope cannot be repaired).
+        /// counterpart (a lattice merge that threw in the catch-up of any call into this scope or a descendant, or a
+        /// scheduler that threw), or after the engine faulted the scope's context because an exception escaped one of its
+        /// writes, runs or rebuilds (an ancestor row the scope stopped seeing before its rewritten copy was merged would
+        /// stay lost, so the scope cannot be repaired).
         /// </summary>
         public bool IsFaulted => Failure is not null;
 
@@ -155,9 +147,8 @@ namespace Eggnog
         /// Gets the scope's change stamp. It moves on every effective change that a write, run or freeze of this scope
         /// makes to its own rows, including the rewritten copies of ancestor rows that a merge of one of this scope's
         /// classes makes in that call (the copies replace those rows in this scope's view). Queries, reads and writes
-        /// that change nothing never move it. Two kinds of maintenance are left out, because neither is a change of
-        /// this scope's own: the mirror sync that a run or query reading this scope's tag makes first, and the catch-up
-        /// a call into this scope or a descendant makes first (see the remarks on <see cref="Scope"/>). A write into an
+        /// that change nothing never move it. The catch-up a call into this scope or a descendant makes first is left
+        /// out, because it is no change of this scope's own (see the remarks on <see cref="Scope"/>). A write into an
         /// ancestor therefore never moves it, whether or not this scope needs copies to follow that write.
         /// </summary>
         /// <remarks>
@@ -167,7 +158,7 @@ namespace Eggnog
         public long Version => Engine.Version - Volatile.Read(ref upkeepStamps);
 
         /// <summary>
-        /// Gets the scope's path, for messages: <c>root</c>, <c>root/schema#2/query#7</c>.
+        /// Gets the scope's path, for messages: <c>root</c>, <c>root/scope#2/scope#7</c>.
         /// </summary>
         public string Path { get; }
 
@@ -302,17 +293,6 @@ namespace Eggnog
 
             if (Engine.IsFrozen)
                 throw new InvalidOperationException($"Scope '{Path}' is frozen; write and run in a child of it.");
-        }
-
-        /// <summary>
-        /// Leaves the stamp moves of a mirror sync out of <see cref="Version"/>: mirror tables are internal, so a sync
-        /// is not a change a caller can see. Called on the scope's domain thread, right after the sync.
-        /// </summary>
-        /// <param name="moved">How far the sync moved the engine's change stamp.</param>
-        internal void ExcludeMirrorSync(long moved)
-        {
-            if (moved != 0)
-                Interlocked.Add(ref upkeepStamps, moved);
         }
 
         /// <summary>

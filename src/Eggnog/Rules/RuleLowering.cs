@@ -22,7 +22,7 @@ namespace Eggnog
         /// </summary>
         /// <param name="graph">The graph.</param>
         /// <param name="program">The program.</param>
-        /// <param name="rule">The rule, for statistics; <c>null</c> for a query or a copy rule.</param>
+        /// <param name="rule">The rule, for statistics; <c>null</c> for a query.</param>
         /// <param name="semiNaive">Whether to build a semi-naive engine rule.</param>
         /// <param name="constants">The values to lower the class constants with, by <see cref="OperandKind.IdConstant"/>
         /// index.</param>
@@ -66,7 +66,7 @@ namespace Eggnog
 
                     // Rows that are not subsumed, as egglog's rules match (src/lib.rs:2525-2537), or every row for a
                     // scheduler's query; a table without a subsumption column ignores the flag.
-                    builder.QueryTable(atom.Table.Function, columns, program.IncludeSubsumed ? null : atom.SubsumedOnly);
+                    builder.QueryTable(atom.Table.Function, columns, program.IncludeSubsumed ? null : false);
                 }
 
                 var bound = new HashSet<Operand>();

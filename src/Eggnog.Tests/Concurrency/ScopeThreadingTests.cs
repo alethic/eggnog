@@ -71,7 +71,7 @@ namespace Eggnog.Tests.Concurrency
             var t = new ScopeTheory();
             var all = t.Graph.DefineQuery("all", q => q.When(t.Fact.Of(q.Var<string>("x"))));
             t.Root.Freeze();
-            var parent = t.Root.CreateChild(t.Outer);
+            var parent = t.Root.CreateChild();
             parent.Assume(t.Fact.Of("a"));
             var childrenLock = ChildrenLockOf(parent);
             var errors = new Exception?[3];
@@ -143,7 +143,7 @@ namespace Eggnog.Tests.Concurrency
                 var t = new ScopeTheory();
                 var all = t.Graph.DefineQuery("all", q => q.When(t.Fact.Of(q.Var<string>("x"))));
                 t.Root.Freeze();
-                var parent = t.Root.CreateChild(t.Outer);
+                var parent = t.Root.CreateChild();
                 parent.Assume(t.Fact.Of("a"));
                 for (var i = 0; i < Siblings; i++)
                     parent.CreateChild();
@@ -209,19 +209,20 @@ namespace Eggnog.Tests.Concurrency
 
         /// <summary>
         /// Everything <c>Run</c> refuses it refuses before the first iteration, and a rule defined from another thread
-        /// joins the next iteration. A global rule defined during a run that reads a tag the running scope cannot
-        /// resolve meets both: the run does not fail half-way, leaving its first iterations' writes behind and losing
-        /// its report; it completes.
+        /// joins the next iteration. A global rule defined during a child's run that writes a function whose merge is not
+        /// a lattice, which only the root may run, meets both: the run does not fail half-way, leaving its first
+        /// iterations' writes behind and losing its report; it completes.
         /// </summary>
         [Fact]
-        public void ARuleDefinedDuringARunThatReadsATagTheScopeLacksDoesNotFailTheRunHalfway()
+        public void ARuleDefinedDuringARunThatTheScopeMayNotRunDoesNotFailTheRunHalfway()
         {
             var t = new ScopeTheory();
             using var entered = new ManualResetEventSlim();
             using var release = new ManualResetEventSlim();
             t.DefineBlocking(entered, release);
+            var latest = t.Graph.DefineFunction<string, long>("latest", FunctionMerge.New<long>());
             t.Root.Freeze();
-            var outer = t.Root.CreateChild(t.Outer);
+            var outer = t.Root.CreateChild();
             outer.Assume(t.Fact.Of("a"));
 
             var errors = new Exception?[1];
@@ -229,12 +230,12 @@ namespace Eggnog.Tests.Concurrency
             var run = Spawn(() => report = outer.Run(Schedule.Saturate(t.Rules)), errors, 0);
             Assert.True(entered.Wait(Patience));
 
-            // The root is frozen, so this thread may define a rule whose first scoped read creates a mirror.
-            t.Rules.DefineRule("reads inner", r =>
+            // A rule only the root may run, which the child's run leaves out of its later iterations.
+            t.Rules.DefineRule("writes latest", r =>
             {
                 var x = r.Var<string>("x");
-                r.When(t.Fact.In(t.Inner).Of(x));
-                r.Then(t.Seen.Of(x));
+                r.When(t.Fact.Of(x));
+                r.Then(latest.Of(x).Is(1L));
             });
             release.Set();
             Assert.True(run.Join(Patience));
@@ -258,7 +259,7 @@ namespace Eggnog.Tests.Concurrency
             const int Freezes = 400;
             var t = new ScopeTheory();
             t.Root.Freeze();
-            var schema = t.Root.CreateChild(t.Outer);
+            var schema = t.Root.CreateChild();
             schema.Assume(t.Fact.Of("a"));
             schema.Freeze();
 
@@ -293,7 +294,7 @@ namespace Eggnog.Tests.Concurrency
             {
                 for (var i = 0; i < Freezes; i++)
                 {
-                    var inner = t.Root.CreateChild(t.Inner);
+                    var inner = t.Root.CreateChild();
                     inner.Assume(t.Fact.Of("b" + i));
                     try
                     {
@@ -440,7 +441,7 @@ namespace Eggnog.Tests.Concurrency
                 r.Then(t.Seen.Of(x));
             });
             t.Root.Freeze();
-            var parent = t.Root.CreateChild(t.Outer);
+            var parent = t.Root.CreateChild();
             var left = parent.CreateChild();
             var right = parent.CreateChild();
             var leftChild = left.CreateChild();
@@ -474,7 +475,7 @@ namespace Eggnog.Tests.Concurrency
         /// <summary>
         /// Queries on a frozen scope run at the same time in transient children (a barrier in the query's filter proves
         /// the overlap); the children are counted in the engine but never listed; a disposal during them is released
-        /// after the last one, exactly once, and uncounts the frozen tag.
+        /// after the last one, exactly once.
         /// </summary>
         [Fact]
         public void EightQueriesOnAFrozenScopeOverlapInTransientChildrenAndDeferItsRelease()
@@ -486,7 +487,7 @@ namespace Eggnog.Tests.Concurrency
             var meet = t.Graph.DefineQuery("meet", q =>
             {
                 var x = q.Var<string>("x");
-                q.When(t.Fact.In(t.Outer).Of(x));
+                q.When(t.Fact.Of(x));
                 q.Where(x, _ =>
                 {
                     allInside.SignalAndWait(Patience);
@@ -495,10 +496,9 @@ namespace Eggnog.Tests.Concurrency
                 });
             });
             t.Root.Freeze();
-            var schema = t.Root.CreateChild(t.Outer);
+            var schema = t.Root.CreateChild();
             schema.Assume(t.Fact.Of("a"));
             schema.Freeze();
-            Assert.Equal(1, t.Graph.Mirrors.FrozenCount(t.Outer));
 
             var errors = new Exception?[Threads];
             var counts = new long[Threads];
@@ -509,7 +509,6 @@ namespace Eggnog.Tests.Concurrency
             Assert.Equal(Threads, schema.Engine.Context.Context.ChildCount);
             schema.Dispose();
             Assert.False(schema.Engine.IsDisposed);
-            Assert.Equal(1, t.Graph.Mirrors.FrozenCount(t.Outer));
 
             go.Set();
             foreach (var thread in threads)
@@ -518,25 +517,24 @@ namespace Eggnog.Tests.Concurrency
             Assert.All(errors, Assert.Null);
             Assert.All(counts, count => Assert.Equal(1L, count));
             Assert.True(schema.Engine.IsDisposed);
-            Assert.Equal(0, t.Graph.Mirrors.FrozenCount(t.Outer));
             Assert.Equal(0, t.Root.Engine.Context.Context.ChildCount);
             Assert.Empty(t.Root.Children);
         }
 
         /// <summary>
-        /// A frozen schema with a local rule and a scoped read, queried, extracted (one extractor per call) and
-        /// given query children from eight dedicated threads, is disposed in the middle of it. Every call either
-        /// completes or is refused with <see cref="ObjectDisposedException"/>; the schema is released once, after
-        /// the last child and call; its local rule is freed and its tag uncounted.
+        /// A frozen schema with a local rule, queried, extracted (one extractor per call) and given query children from
+        /// eight dedicated threads, is disposed in the middle of it. Every call either completes or is refused with
+        /// <see cref="ObjectDisposedException"/>; the schema is released once, after the last child and call; its local
+        /// rule is freed.
         /// </summary>
         [Fact]
         public void AFrozenSchemaDisposedUnderLoadIsReleasedOnceAfterTheLastCall()
         {
             const int Threads = 8;
             var c = new PredicateTheory(new EGraph());
-            var present = c.Graph.DefineQuery("present", q => q.When(c.Present.In(c.Schema).Of(q.Var<string>("p"))));
+            var present = c.Graph.DefineQuery("present", q => q.When(c.Present.Of(q.Var<string>("p"))));
             c.Graph.Root.Freeze();
-            var schema = c.Graph.Root.CreateChild(c.Schema);
+            var schema = c.Graph.Root.CreateChild();
             DiscriminatedSchema.Declare(c, schema);
             var local = schema.DefineRule(c.Horn, "local present", r =>
             {
@@ -546,14 +544,14 @@ namespace Eggnog.Tests.Concurrency
             });
             var terms = DiscriminatedSchema.Queries(c);
             var inSchema = terms.Select(term => schema.Make(term)).ToArray();
-            schema.Run(Schedule.Saturate(c.Horn, c.Lattice, c.Rewrite));
+            schema.Run(Schedule.Saturate(c.Horn, c.Lattice, c.Copies, c.Rewrite));
             schema.Freeze();
             var description = local.Compiled.Variants.Default!.Description;
             var expectedPresent = schema.Count(present);
             var expectedInSchema = inSchema.Select(x => schema.Extract(x).ToString()).ToArray();
             var expected = terms.Select(term =>
             {
-                using var query = schema.CreateChild(c.Query);
+                using var query = schema.CreateChild();
                 var q = query.Make(term);
                 query.Assume(c.WhereClause.Of(q));
                 query.Run(Schedule.Saturate(c.Horn, c.Lattice, c.Rewrite));
@@ -577,7 +575,7 @@ namespace Eggnog.Tests.Concurrency
                         if (schema.CreateExtractor().Extract(inSchema[k]).ToString() != expectedInSchema[k])
                             lock (wrong) wrong.Add($"schema extraction on {i}");
 
-                        using var query = schema.CreateChild(c.Query);
+                        using var query = schema.CreateChild();
                         var q = query.Make(terms[k]);
                         query.Assume(c.WhereClause.Of(q));
                         query.Run(Schedule.Saturate(c.Horn, c.Lattice, c.Rewrite));
@@ -603,7 +601,6 @@ namespace Eggnog.Tests.Concurrency
             Assert.Empty(wrong);
             Assert.True(schema.Engine.IsDisposed);
             Assert.False(c.Graph.VariantsByDescription.ContainsKey(description));
-            Assert.Equal(0, c.Graph.Mirrors.FrozenCount(c.Schema));
             Assert.Equal(0, c.Graph.Root.Engine.Context.Context.ChildCount);
             Assert.Empty(c.Graph.Root.Children);
         }
@@ -622,7 +619,7 @@ namespace Eggnog.Tests.Concurrency
             {
                 var t = new ScopeTheory();
                 t.Root.Freeze();
-                var parent = t.Root.CreateChild(t.Outer);
+                var parent = t.Root.CreateChild();
                 parent.Assume(t.Fact.Of("a"));
                 var children = new Scope[Children];
                 for (var i = 0; i < Children; i++)
@@ -675,19 +672,19 @@ namespace Eggnog.Tests.Concurrency
             {
                 var c = new PredicateTheory(new EGraph(new EGraphOptions { DegreeOfParallelism = degree }));
                 c.Graph.Root.Freeze();
-                var schema = c.Graph.Root.CreateChild(c.Schema, degree > 1 ? new ScopeOptions { DegreeOfParallelism = degree } : null);
+                var schema = c.Graph.Root.CreateChild(degree > 1 ? new ScopeOptions { DegreeOfParallelism = degree } : null);
                 if (degree > 1)
                     schema.Engine.Context.Context.Database.ParallelRuleSetsOverride = true;
 
                 DiscriminatedSchema.Declare(c, schema);
-                schema.Run(Schedule.Saturate(c.Horn, c.Lattice));
+                schema.Run(c.PlainFacts);
                 schema.Freeze();
                 return (c, schema);
             }
 
             static IReadOnlyList<string> Ask(PredicateTheory c, Scope schema, ConstructorTerm<Pred> term, int degree)
             {
-                using var query = schema.CreateChild(c.Query, degree > 1 ? new ScopeOptions { DegreeOfParallelism = degree } : null);
+                using var query = schema.CreateChild(degree > 1 ? new ScopeOptions { DegreeOfParallelism = degree } : null);
                 if (degree > 1)
                     query.Engine.Context.Context.Database.ParallelRuleSetsOverride = true;
 
@@ -721,20 +718,21 @@ namespace Eggnog.Tests.Concurrency
         }
 
         /// <summary>
-        /// Two graphs, each with a frozen schema under load on its own threads, never see each other's frozen tags
-        /// or guards: tags of the same name in two graphs stay independent while both are queried and disposed.
+        /// Two graphs, each with a frozen schema under load on its own threads, never see each other's facts or guards:
+        /// tables of the same name in two graphs stay independent while both are queried, and one's schema is disposed
+        /// while the other's stays.
         /// </summary>
         [Fact]
-        public void TwoGraphsUnderConcurrentLoadKeepTheirTagCountsApart()
+        public void TwoGraphsUnderConcurrentLoadStayApart()
         {
             const int Threads = 4;
             var graphs = new[] { new ScopeTheory(), new ScopeTheory() };
-            var queries = graphs.Select(t => t.Graph.DefineQuery("outer facts", q => q.When(t.Fact.In(t.Outer).Of(q.Var<string>("x"))))).ToArray();
+            var queries = graphs.Select(t => t.Graph.DefineQuery("facts", q => q.When(t.Fact.Of(q.Var<string>("x"))))).ToArray();
             var schemas = new Scope[2];
             for (var g = 0; g < 2; g++)
             {
                 graphs[g].Root.Freeze();
-                schemas[g] = graphs[g].Root.CreateChild(graphs[g].Outer);
+                schemas[g] = graphs[g].Root.CreateChild();
                 schemas[g].Assume(graphs[g].Fact.Of("g" + g));
                 schemas[g].Freeze();
             }
@@ -746,7 +744,7 @@ namespace Eggnog.Tests.Concurrency
                 var g = i % 2;
                 for (var round = 0; round < 200; round++)
                 {
-                    using var child = schemas[g].CreateChild(graphs[g].Inner);
+                    using var child = schemas[g].CreateChild();
                     if (child.Count(queries[g]) != 1 || child.Check(graphs[g].Fact.Of("g" + (1 - g))))
                         Interlocked.Increment(ref wrong);
                 }
@@ -757,31 +755,17 @@ namespace Eggnog.Tests.Concurrency
             Assert.All(errors, Assert.Null);
             Assert.Equal(0, wrong);
             schemas[0].Dispose();
-            Assert.Equal(0, graphs[0].Graph.Mirrors.FrozenCount(graphs[0].Outer));
-            Assert.Equal(1, graphs[1].Graph.Mirrors.FrozenCount(graphs[1].Outer));
-
-            // The first graph's tag may gain a mirror again; the second's still refuses one.
-            graphs[0].Rules.DefineRule("late outer", r =>
-            {
-                var x = r.Var<string>("x");
-                r.When(graphs[0].Seen.In(graphs[0].Outer).Of(x));
-                r.Then(graphs[0].Fact.Of(x));
-            });
-            Assert.Throws<RuleDefinitionException>(() =>
-                graphs[1].Rules.DefineRule("late outer", r =>
-                {
-                    var x = r.Var<string>("x");
-                    r.When(graphs[1].Seen.In(graphs[1].Outer).Of(x));
-                    r.Then(graphs[1].Fact.Of(x));
-                }));
+            Assert.True(schemas[0].Engine.IsDisposed);
+            Assert.False(schemas[1].IsDisposed);
+            Assert.Equal(1, schemas[1].Count(queries[1]));
         }
 
         /// <summary>
         /// Each child of a frozen scope is its own thread domain, and a scope's guard is reassigned only while no call
-        /// of the domain is in progress. A child created on another thread in the window between the engine freeze and
-        /// <c>Freeze</c>'s reassignment of the child guards (held open here by holding the mirror registry's lock,
-        /// which <c>AddFrozen</c> takes) and already running keeps its domain: a third thread gets the rule layer's
-        /// refusal, and the run completes.
+        /// of the domain is in progress. A child created in the window between the engine freeze and <c>Freeze</c>'s
+        /// reassignment of the child guards (held open here by holding the parent's children lock, which the
+        /// reassignment takes; the lock is reentrant, so the thread that holds it creates the child) and already running
+        /// on another thread keeps its domain: a third thread gets the rule layer's refusal, and the run completes.
         /// </summary>
         [Fact]
         public void AChildCreatedWhileItsParentFreezesKeepsItsThreadDomain()
@@ -791,31 +775,29 @@ namespace Eggnog.Tests.Concurrency
             using var release = new ManualResetEventSlim();
             t.DefineBlocking(entered, release);
             t.Root.Freeze();
-            var parent = t.Root.CreateChild(t.Outer);
-            var registryLock = typeof(MirrorRegistry).GetField("sync", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
-                .GetValue(t.Graph.Mirrors)!;
+            var parent = t.Root.CreateChild();
+            var childrenLock = typeof(Scope).GetField("childrenLock", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .GetValue(parent)!;
 
             Task freeze;
             Scope? child = null;
             Task<RunReport>? run = null;
-            Monitor.Enter(registryLock);
+            Monitor.Enter(childrenLock);
             try
             {
                 freeze = Task.Factory.StartNew(parent.Freeze, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
                 Assert.True(SpinWait.SpinUntil(() => parent.IsFrozen, TimeSpan.FromSeconds(30)));
 
-                // The engine froze the parent; Freeze waits in AddFrozen. Another thread creates a child and runs it.
-                run = Task.Factory.StartNew(() =>
-                {
-                    child = parent.CreateChild();
-                    child.Assume(t.Fact.Of("a"));
-                    return child.Run(Schedule.Saturate(t.Rules));
-                }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+                // The engine froze the parent; Freeze waits for the children lock. This thread creates a child, and
+                // another runs it.
+                child = parent.CreateChild();
+                child.Assume(t.Fact.Of("a"));
+                run = Task.Factory.StartNew(() => child.Run(Schedule.Saturate(t.Rules)), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
                 Assert.True(entered.Wait(TimeSpan.FromSeconds(30)));
             }
             finally
             {
-                Monitor.Exit(registryLock);
+                Monitor.Exit(childrenLock);
             }
 
             Assert.True(freeze.Wait(TimeSpan.FromSeconds(30)));

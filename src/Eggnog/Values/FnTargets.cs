@@ -87,9 +87,6 @@ namespace Eggnog
                     if (ReferenceEquals(table.Graph, graph) == false)
                         throw new ArgumentException($"Table '{table.Name}' belongs to another graph.", nameof(target));
 
-                    if (table.ReadScope is not null)
-                        throw new ArgumentException($"'{table}' is a scoped view, which a function value does not apply.", nameof(target));
-
                     if (table.IsRelation)
                         throw FnValue.RelationIsNoTarget(table);
 

@@ -336,16 +336,16 @@ namespace Eggnog.Tests.Terms
         [Fact]
         public void ARefusedWriteFailsTheRuleEvenWhenCaught()
         {
-            // A write primitive that writes a scoped view, which a primitive does not use, and catches the refusal.
+            // A write primitive that writes a table of another graph, which a primitive does not use, and catches the
+            // refusal.
             var graph = new EGraph();
-            var tag = graph.DefineScopeTag("tagged");
-            var seen = graph.DefineRelation<long>("seen");
+            var seen = new EGraph().DefineRelation<long>("seen");
             var g = graph.DefineFunction<long, long>("g");
             var sneaky = Primitive.CreateWrite("sneaky", Long, (ITableWriter tables, ReadOnlySpan<object> args, out long result) =>
             {
                 try
                 {
-                    tables.Insert(seen.In(tag), args[0]);
+                    tables.Insert(seen, args[0]);
                 }
                 catch (ArgumentException)
                 {
@@ -459,47 +459,6 @@ namespace Eggnog.Tests.Terms
             Assert.Equal(0L, graph.Root.CountRows(seen));
             var run = Assert.Throws<RuleEvaluationException>(() => graph.Root.Run(rules));
             Assert.Contains("only reads them", run.Message, StringComparison.Ordinal);
-        }
-
-        [Fact]
-        public void APrimitiveThatReadsTablesNeedsTheRulesLicence()
-        {
-            // A licensed rule reads fact tables only through its licence; a read primitive reads any, as a full callback
-            // does, so it needs ReadsOwnFacts. A rule that writes an analysis table may not read a fact table through one.
-            var graph = new EGraph();
-            var tag = graph.DefineScopeTag("case");
-            var key = graph.DefineRelation<long>("key");
-            var f = graph.DefineFunction<long, long>("f");
-            var o = graph.DefineFunction<long, long>("o");
-            var an = graph.DefineFunction<long, long>("an", (ValueLattice<long>?)null, new FunctionOptions { Analysis = true });
-            var lookup = LookupOf(f);
-            var rules = graph.DefineRuleset("rules");
-
-            var licensed = Assert.Throws<RuleDefinitionException>(() => rules.DefineRule("licensed", r =>
-            {
-                var (k, v) = r.Vars<long, long>("k", "v");
-                r.Erasing(tag);
-                r.Naive();
-                r.When(key.In(tag).Of(k), v.Is(lookup.Of(k)));
-                r.Then(o.Of(k).Is(v));
-            }));
-            Assert.Contains("reads tables through primitive 'lookup-f', outside scope 'case'", licensed.Message, StringComparison.Ordinal);
-            rules.DefineRule("own", r =>
-            {
-                var (k, v) = r.Vars<long, long>("k", "v");
-                r.Erasing(tag);
-                r.ReadsOwnFacts("the test reads f on purpose");
-                r.Naive();
-                r.When(key.In(tag).Of(k), v.Is(lookup.Of(k)));
-                r.Then(o.Of(k).Is(v));
-            });
-
-            var analysis = Assert.Throws<RuleDefinitionException>(() => rules.DefineRule("analysis", r =>
-            {
-                r.Naive();
-                r.Then(an.Of(1L).Is(lookup.Of(1L)));
-            }));
-            Assert.Contains("reads tables through primitive 'lookup-f'", analysis.Message, StringComparison.Ordinal);
         }
 
         [Fact]

@@ -11,8 +11,7 @@ namespace Eggnog.Tests.Subsumption
     /// <summary>
     /// Subsumption in scopes. A subsumption is a sticky change of the row's subsumption cell, written in the scope that
     /// makes it: a child's shadows its ancestors' row, so the child and its descendants stop matching it while the
-    /// ancestors and the siblings still do, and an ancestor's reaches its descendants when they catch up. Scoped reads
-    /// skip the rows the tagged scope subsumed, through mirrors that copy the subsumptions too.
+    /// ancestors and the siblings still do, and an ancestor's reaches its descendants when they catch up.
     /// </summary>
     public sealed class SubsumeScopeTests
     {
@@ -152,67 +151,6 @@ namespace Eggnog.Tests.Subsumption
             grandchild.Run(Schedule.Saturate(t.Rules));
             Assert.Equal(new[] { true, false }, grandchild.Rows(t.Num).Select(row => row.Subsumed));
             Assert.False(grandchild.Check(t.Seen.Of(1L)));
-        }
-
-        [Fact]
-        public void AScopedReadSkipsRowsTheTaggedScopeSubsumed()
-        {
-            var t = new MathTheory();
-            var schema = t.Graph.DefineScopeTag("schema");
-            var fact = t.Graph.DefineRelation<string>("fact");
-            var copied = t.Graph.DefineRelation<string>("copied");
-            t.Rules.DefineRule("copy", r =>
-            {
-                var x = r.Var<string>("x");
-                r.When(fact.In(schema).Of(x));
-                r.Then(copied.Of(x));
-            });
-            var outer = t.Root.CreateChild(schema);
-            outer.Assume(fact.Of("a"), fact.Of("b"), fact.Of("c"));
-            outer.Subsume(fact.Of("b"));
-
-            // A row subsumed before the first sync is never copied as a match.
-            var first = outer.CreateChild();
-            first.Run(Schedule.Saturate(t.Rules));
-            Assert.True(first.Check(copied.Of("a"), copied.Of("c")));
-            Assert.False(first.Check(copied.Of("b")));
-
-            // A row subsumed after it was synced is subsumed in the mirror at the next sync.
-            outer.Subsume(fact.Of("c"));
-            var second = outer.CreateChild();
-            second.Run(Schedule.Saturate(t.Rules));
-            Assert.True(second.Check(copied.Of("a")));
-            Assert.False(second.Check(copied.Of("c")));
-
-            // The mirror holds every row, subsumed as the tagged scope's are; host reads read the tagged scope itself.
-            var mirror = t.Graph.Mirrors.Get(fact, schema);
-            Assert.NotNull(mirror.SubsumeRule);
-            Assert.Equal(3, outer.Engine.TableSize(mirror.Function));
-            Assert.True(second.Check(fact.In(schema).Of("b")));
-            Assert.Equal(new[] { false, true, true }, second.Rows(fact.In(schema)).Select(row => row.Subsumed));
-
-            // A query sees what the scoped atoms see.
-            var query = t.Graph.DefineQuery("schema facts", q => q.When(fact.In(schema).Of(q.Var<string>("x"))));
-            Assert.Equal(1, second.Count(query));
-        }
-
-        [Fact]
-        public void AFrozenTaggedScopesSubsumptionsReachItsMirror()
-        {
-            var t = new MathTheory();
-            var schema = t.Graph.DefineScopeTag("schema");
-            var fact = t.Graph.DefineRelation<string>("fact");
-            var query = t.Graph.DefineQuery("schema facts", q => q.When(fact.In(schema).Of(q.Var<string>("x"))));
-            t.Root.Freeze();
-            var outer = t.Root.CreateChild(schema);
-            outer.Assume(fact.Of("a"), fact.Of("b"));
-            Assert.Equal(2, outer.CreateChild().Count(query));
-            outer.Subsume(fact.Of("a"));
-
-            outer.Freeze();
-
-            Assert.Equal(1, outer.CreateChild().Count(query));
-            Assert.Equal(1, outer.Count(query));
         }
 
     }

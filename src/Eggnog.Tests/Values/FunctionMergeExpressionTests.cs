@@ -637,15 +637,14 @@ namespace Eggnog.Tests.Values
 
         /// <summary>
         /// The expression is checked when its function is defined: it may hold only its own old and new values, class
-        /// constants only from the root, as a global rule's, no table of another graph and no scoped view; and it is a
-        /// term, not <c>null</c>. A refused definition leaves no table behind.
+        /// constants only from the root, as a global rule's, and no table of another graph; and it is a term, not
+        /// <c>null</c>. A refused definition leaves no table behind.
         /// </summary>
         [Fact]
         public void AnExpressionIsCheckedWhenItsFunctionIsDefined()
         {
             var t = new NodeTheory();
             var other = new NodeTheory();
-            var values = t.Graph.DefineFunction<long, long>("values");
             Var<long> leaked = null!;
             t.Graph.DefineQuery("leak", q =>
             {
@@ -673,7 +672,6 @@ namespace Eggnog.Tests.Values
             var rejected = Assert.Throws<ArgumentException>(() => t.Graph.DefineFunction<string, Node>("g", FunctionMerge.Expression<Node>((old, @new) => uncommitted)));
             var disposed = Assert.Throws<ArgumentException>(() => t.Graph.DefineFunction<string, Node>("g", FunctionMerge.Expression<Node>((old, @new) => stale)));
             var graph = Assert.Throws<ArgumentException>(() => t.Graph.DefineFunction<string, Node>("i", FunctionMerge.Expression<Node>((old, @new) => other.Add.Of(old, @new))));
-            var scoped = Assert.Throws<ArgumentException>(() => t.Graph.DefineFunction<string, long>("j", FunctionMerge.Expression<long>((old, @new) => values.In(t.Graph.RootTag).Of(@new))));
             Assert.Throws<ArgumentException>(() => FunctionMerge.Expression<long>((old, @new) => null!));
 
             Assert.Contains("is not its old or new value", foreign.Message, StringComparison.Ordinal);
@@ -683,7 +681,6 @@ namespace Eggnog.Tests.Values
             Assert.Contains("was made by a Write batch that did not commit", rejected.Message, StringComparison.Ordinal);
             Assert.Contains("which is disposed", disposed.Message, StringComparison.Ordinal);
             Assert.Contains("a table of another graph", graph.Message, StringComparison.Ordinal);
-            Assert.Contains("a merge reads its own scope", scoped.Message, StringComparison.Ordinal);
             Assert.Equal(tables, t.Graph.Tables.Count);
             GC.KeepAlive(child);
         }
