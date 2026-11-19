@@ -8,11 +8,11 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// A later split step in a scope that already holds a live record. A step runs and lifts every record of its
-    /// driver, and the rule layer relies on it: the driver keeps a record until the run ends, the cases take in the
-    /// parent's new facts through their inherited watermarks, and a case opened for a value the facts later exclude
-    /// goes vacuous and is dropped. So a step whose requests are all covered by live records still brings those
-    /// records' cases up to date, runs them and lifts them again (the lift memo, keyed on the parent's version, makes
-    /// that free when nothing changed), and a step that finds nothing new reports no change.
+    /// driver, which keeps its records until it disposes them: the cases take in the parent's new facts through their
+    /// inherited watermarks, and a case opened for a value the facts later exclude goes vacuous and is dropped. So a
+    /// step whose requests are all covered by live records still brings those records' cases up to date, runs them and
+    /// lifts them again (the lift memo, keyed on the parent's version, makes that free when nothing changed), and a
+    /// step that finds nothing new reports no change.
     /// </summary>
     public class SplitStepRevisitTests
     {

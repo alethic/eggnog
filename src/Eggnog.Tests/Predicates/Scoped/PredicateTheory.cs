@@ -1,17 +1,21 @@
+using System.Collections.Generic;
+
 namespace Eggnog.Tests.Predicates.Scoped
 {
 
     /// <summary>
-    /// A theory of predicates over document paths, in which scopes are the contexts. Its facts are claims about a
-    /// path: presence, stored forms, refused values, string domains, JSON types, numeric bounds and integer domains.
-    /// Its terms are predicates (<see cref="Pred"/>) over paths. Its rules derive what a predicate's conjuncts claim,
-    /// settle the lattices, report a contradiction when no document can satisfy the claims, lower costly comparisons
-    /// and simplify the predicate. A schema scope (<see cref="Schema"/>) holds what every document satisfies; a query
-    /// scope (<see cref="Query"/>) under it adds one predicate; the cases of a discriminator split
-    /// (<see cref="Case"/>) assume one value each. Contexts carry no data argument and facts flow to a child by scope
-    /// inheritance (<see cref="Literal.ContextArgumentTheory"/> is the same theory with both written out). The theory
-    /// is defined once per graph and shared by every schema scope in it; there is one per graph, because it defines the
-    /// graph's scope tags.
+    /// A theory of predicates over document paths, in which scopes are the contexts. Its facts are claims about a path:
+    /// presence, stored forms, refused values, string domains, JSON types, numeric bounds and integer domains. Its
+    /// terms are predicates (<see cref="Pred"/>) over paths. Its rules derive what a predicate's conjuncts claim,
+    /// settle the lattices, report a contradiction when no document can satisfy the claims, reason by the cases of a
+    /// discriminator's domain over set lattices, lower costly comparisons and simplify the predicate. A schema scope
+    /// (<see cref="Schema"/>) holds what every document satisfies; a query scope (<see cref="Query"/>) under it adds
+    /// one predicate. Contexts carry no data argument and facts flow to a child by scope inheritance.
+    /// <see cref="Literal.ContextArgumentTheory"/> is the same theory with both written out, but for its cases: it opens
+    /// a context per value of a discriminator and runs the whole theory there, where this theory's case rules read only
+    /// what each value's branch declares, and so derive less (<see cref="DefineCaseRules"/>). The theory is defined once
+    /// per graph and shared by every schema scope in it; there is one per graph, because it defines the graph's scope
+    /// tags.
     /// </summary>
     public sealed partial class PredicateTheory
     {
@@ -63,11 +67,10 @@ namespace Eggnog.Tests.Predicates.Scoped
             UuidEq = graph.DefineConstructor<string, string, Pred>("UuidEq", cost: 1000);
             InstantGt = graph.DefineConstructor<string, string, Pred>("InstantGt", cost: 1000);
 
-            // Query bookkeeping is never lifted; the analyses are derived from terms alone.
-            var queryOnly = new RelationOptions { Lift = false };
+            // Query bookkeeping, and the analyses, which are derived from terms alone.
             var analysis = new FunctionOptions { Analysis = true };
-            WhereClause = graph.DefineRelation<Pred>("where", queryOnly);
-            Conjunct = graph.DefineRelation<Pred>("conjunct", queryOnly);
+            WhereClause = graph.DefineRelation<Pred>("where");
+            Conjunct = graph.DefineRelation<Pred>("conjunct");
             InSet = graph.DefineFunction<Pred, string, Set<string>>("inset", ValueLattice.Intersect<string>(), analysis);
             Admits = graph.DefineFunction<Pred, string, Set<string>>("admits", ValueLattice.Intersect<string>(), analysis);
 
@@ -82,7 +85,7 @@ namespace Eggnog.Tests.Predicates.Scoped
             DefineCases();
         }
 
-        /// <summary>Defines the split members (PredicateTheory.Cases.cs).</summary>
+        /// <summary>Defines the case members (PredicateTheory.Cases.cs).</summary>
         partial void DefineCases();
 
         /// <summary>Gets the graph.</summary>
@@ -103,7 +106,7 @@ namespace Eggnog.Tests.Predicates.Scoped
         /// <summary>Gets the relation "the path's value is not this".</summary>
         public Relation<string, string> Ne { get; }
 
-        /// <summary>Gets the paths a split may discriminate on.</summary>
+        /// <summary>Gets the paths the case rules may reason by the values of.</summary>
         public Relation<string> Discriminator { get; }
 
         /// <summary>Gets the values a path can hold, if present.</summary>
@@ -197,20 +200,54 @@ namespace Eggnog.Tests.Predicates.Scoped
         public Ruleset Rewrite { get; }
 
         /// <summary>
-        /// Declares one branch of a discriminated union: where the path holds the value, the consequences hold. The
-        /// rule is local to the schema scope, so schema scopes sharing this theory never see each other's branches.
+        /// Declares one branch of a discriminated union: where the path holds the value, the branch's claims hold:
+        /// paths present, stored forms, and domains. The claims are the head of a rule local to the schema scope, so
+        /// schema scopes sharing this theory never see each other's branches. They are also written to the schema as
+        /// what the branch of the value declares (<see cref="PresentCases"/>, <see cref="FormCases"/>,
+        /// <see cref="StringCases"/> and <see cref="CaseDom"/>), which the case rules (<see cref="SchemaCases"/>,
+        /// <see cref="QueryCases"/>) read.
         /// </summary>
         /// <param name="schema">The schema scope, not yet frozen.</param>
         /// <param name="path">The discriminator path.</param>
         /// <param name="value">The branch's value.</param>
-        /// <param name="consequences">What the branch declares.</param>
+        /// <param name="present">The paths the branch declares present; <c>null</c> for none.</param>
+        /// <param name="forms">The stored forms the branch declares, each with its path; <c>null</c> for none.</param>
+        /// <param name="domains">The domains the branch declares, each with its path; <c>null</c> for none.</param>
         /// <returns>The rule.</returns>
-        public Rule DeclareBranch(Scope schema, string path, string value, params Fact[] consequences) =>
-            schema.DefineRule(Horn, $"{path} = {value}", r =>
+        public Rule DeclareBranch(Scope schema, string path, string value, string[]? present = null,
+            (string Path, string Form)[]? forms = null, (string Path, Set<string> Domain)[]? domains = null)
+        {
+            var claims = new List<Fact>();
+            var declared = new List<Fact>();
+            var cases = Set.Of([value]);
+            foreach (var q in present ?? [])
+            {
+                claims.Add(Present.Of(q));
+                declared.Add(PresentCases.Of(path, q).Is(cases));
+            }
+
+            foreach (var (q, f) in forms ?? [])
+            {
+                claims.Add(Form.Of(q, f));
+                declared.Add(FormCases.Of(path, q, f).Is(cases));
+                declared.Add(StringCases.Of(path, q).Is(cases));
+            }
+
+            foreach (var (q, d) in domains ?? [])
+            {
+                claims.Add(Dom.Of(q).Is(d));
+                declared.Add(CaseDom.Of(path, value, q).Is(d));
+                declared.Add(StringCases.Of(path, q).Is(cases));
+            }
+
+            var rule = schema.DefineRule(Horn, $"{path} = {value}", r =>
             {
                 r.When(Present.Of(path), Dom.Of(path).Is(Set.Of([value])));
-                r.Then(consequences);
+                r.Then(claims.ToArray());
             });
+            schema.Assume(declared.ToArray());
+            return rule;
+        }
 
         void DefineHorn()
         {

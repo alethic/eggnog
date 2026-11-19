@@ -9,21 +9,14 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// Runs one top-level <see cref="Scope.Run(Schedule, RunOptions, CancellationToken)"/>: chooses the rules of each
-    /// iteration, checks cancellation and limits before each iteration and split step, runs it, records its step, and
-    /// accumulates the report. It also keeps one split driver per split node, the run's live cases, and the stack of split
-    /// steps in progress, whose lifts it records as steps.
+    /// Runs one <see cref="Scope.Run(Schedule, RunOptions, CancellationToken)"/>: chooses the rules of each iteration,
+    /// checks cancellation and limits before each iteration, runs it, records its step, and accumulates the report.
     /// </summary>
     internal sealed partial class ScheduleExecutor
     {
 
         readonly CancellationToken cancellationToken;
         readonly bool wantsSteps;
-        readonly List<Scope> cases = new();
-        readonly HashSet<Scope> caseSet = new(ReferenceEqualityComparer.Instance);
-        readonly Dictionary<SplitSchedule, Relations.SplitDriver> drivers = new(ReferenceEqualityComparer.Instance);
-        readonly List<SplitStepFrame> frames = new();
-        Relations.ContextOptions? caseOptions;
 
         /// <summary>
         /// Initializes a new instance.
@@ -48,24 +41,6 @@ namespace Eggnog
         /// <see cref="RunReport.Elapsed"/> read it.
         /// </summary>
         public Stopwatch Clock { get; }
-
-        /// <summary>
-        /// Gets the cases of this run that are alive, in the order they first ran, for
-        /// <see cref="RunOptions.RowLimit"/>: a snapshot. A case leaves once its engine set disposed it (a vacuous case, or
-        /// every case when the run ends).
-        /// </summary>
-        public IReadOnlyCollection<Scope> LiveCases
-        {
-            get
-            {
-                var live = new List<Scope>(cases.Count);
-                foreach (var @case in cases)
-                    if (@case.Engine.IsDisposed == false)
-                        live.Add(@case);
-
-                return live;
-            }
-        }
 
         /// <summary>
         /// Gets whether the run observer threw: its exception propagates out of the run without faulting the scope, even a
@@ -149,9 +124,9 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Checks, before an iteration or a split step, cancellation and then the limits: the iteration limit, the time
-        /// limit (the run's clock against <see cref="RunOptions.TimeLimit"/>), and the row limit (the own rows of the
-        /// top-level scope and of the run's live cases against <see cref="RunOptions.RowLimit"/>).
+        /// Checks, before an iteration, cancellation and then the limits: the iteration limit, the time limit (the
+        /// run's clock against <see cref="RunOptions.TimeLimit"/>), and the row limit (the own rows of the top-level
+        /// scope against <see cref="RunOptions.RowLimit"/>).
         /// </summary>
         /// <param name="scope">The scope about to iterate.</param>
         /// <exception cref="OperationCanceledException">The run was cancelled.</exception>
@@ -165,17 +140,8 @@ namespace Eggnog
             if (Options.TimeLimit is { } time && Clock.Elapsed > time)
                 throw new ScheduleStopException(RunStopReason.TimeLimit);
 
-            if (Options.RowLimit is { } limit)
-            {
-                // The top-level scope's own rows and the live cases'; no allocation.
-                var rows = Top.Engine.OwnRowCount;
-                foreach (var @case in cases)
-                    if (@case.Engine.IsDisposed == false)
-                        rows += @case.Engine.OwnRowCount;
-
-                if (rows > limit)
-                    throw new ScheduleStopException(RunStopReason.RowLimit);
-            }
+            if (Options.RowLimit is { } limit && Top.Engine.OwnRowCount > limit)
+                throw new ScheduleStopException(RunStopReason.RowLimit);
         }
 
         /// <summary>
@@ -183,11 +149,10 @@ namespace Eggnog
         /// </summary>
         /// <param name="scope">The scope.</param>
         /// <param name="rules">The rules.</param>
-        /// <param name="inCase">Whether the scope is a case.</param>
         /// <returns>Whether the iteration changed the scope (its rules' writes or the rebuild).</returns>
-        /// <exception cref="RuleEvaluationException">An evaluation failure: the run's own scope stays usable, and a case
-        /// of the run is faulted (<see cref="FailRun"/>).</exception>
-        public bool RunIteration(Scope scope, IReadOnlyList<CompiledRule> rules, bool inCase)
+        /// <exception cref="RuleEvaluationException">An evaluation failure, which leaves the scope usable
+        /// (<see cref="FailRun"/>).</exception>
+        public bool RunIteration(Scope scope, IReadOnlyList<CompiledRule> rules)
         {
             BeforeStep(scope);
             rules = Permitted(scope, Resolvable(scope, rules));
@@ -221,10 +186,9 @@ namespace Eggnog
         /// Fails an iteration that recorded a failure, a primitive's or a merge's, which stopped its join and which the
         /// engine merged and rebuilt before it threw, with its rules' progress committed: as egglog's failed run, which
         /// keeps what the matches it reached wrote and after which the e-graph goes on (<c>(fail (run 1))</c>), the scope
-        /// the run was called on stays usable, whether or not it is a case. Its own mirrors are reconciled first, as
-        /// after any iteration (<see cref="Account"/>), for every rule of the iteration that deletes, since a failed
-        /// iteration reports no matches. A case a split step of the run made is faulted, as a failure in a split's case
-        /// fails the split, which then faults the scope the run was called on.
+        /// the run was called on stays usable. Its own mirrors are reconciled first, as after any iteration
+        /// (<see cref="Account"/>), for every rule of the iteration that deletes, since a failed iteration reports no
+        /// matches.
         /// </summary>
         /// <param name="scope">The scope the iteration ran in.</param>
         /// <param name="rules">The iteration's rules, whose deletions merged; <c>null</c> for an iteration that deletes
@@ -233,9 +197,6 @@ namespace Eggnog
         /// <returns>The exception, to throw.</returns>
         RuleEvaluationException FailRun(Scope scope, IReadOnlyList<CompiledRule>? rules, Relations.PanicException panic)
         {
-            if (ReferenceEquals(scope, Top) == false)
-                return scope.FaultWith(panic);
-
             RunFailed = true;
             var failure = scope.FailWith(panic);
             var called = scope.Runtime.TakeCallbackDeletions();
@@ -295,12 +256,8 @@ namespace Eggnog
             Statistics.MergeTime += report.MergeTime;
             Statistics.RebuildTime += iteration.RebuildTime;
             var changed = iteration.Changed || iteration.RebuildChanged;
-            if (ReferenceEquals(scope, Top))
-            {
-                Statistics.LastTopStepChanged = changed;
-                Statistics.TopChanged |= changed;
-            }
-
+            Statistics.LastTopStepChanged = changed;
+            Statistics.TopChanged |= changed;
             RecordStep(RunStepKind.Iteration, scope, changed, elapsed, matched);
             return changed;
         }
@@ -379,12 +336,12 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Leaves out of an iteration the rules that may not run in <paramref name="scope"/>: one that deletes where the
-        /// scope may not delete (it has live descendants, such as a split's cases, or a writable parent, as a case has),
-        /// and one that writes a function whose merge is not a lattice below the root. <c>Run</c> refuses such a rule
-        /// before any work when the schedule reaches it at the start; one defined on another thread during the run takes
-        /// part only in the iterations where it may run, as a rule whose tag does not resolve does
-        /// (<see cref="Resolvable"/>). Returns <paramref name="rules"/> itself, allocation-free, when every rule may run.
+        /// Leaves out of an iteration the rules that may not run in <paramref name="scope"/>: one that deletes where
+        /// the scope may not delete (it has live descendants, or a writable parent), and one that writes a function
+        /// whose merge is not a lattice below the root. <c>Run</c> refuses such a rule before any work when the
+        /// schedule reaches it at the start; one defined on another thread during the run takes part only in the
+        /// iterations where it may run, as a rule whose tag does not resolve does (<see cref="Resolvable"/>). Returns
+        /// <paramref name="rules"/> itself, allocation-free, when every rule may run.
         /// </summary>
         /// <param name="scope">The scope the iteration runs in.</param>
         /// <param name="rules">The iteration's rules.</param>
@@ -480,14 +437,13 @@ namespace Eggnog
         /// <param name="changed">Whether it changed the scope.</param>
         /// <param name="elapsed">How long it took.</param>
         /// <param name="rules">For an iteration, the rules that matched in it; <c>null</c> when no step is wanted.</param>
-        /// <param name="casesOpened">For a split step, the cases it opened.</param>
-        public void RecordStep(RunStepKind kind, Scope scope, bool changed, TimeSpan elapsed, IReadOnlyList<RuleStatistics>? rules, int casesOpened = 0)
+        public void RecordStep(RunStepKind kind, Scope scope, bool changed, TimeSpan elapsed, IReadOnlyList<RuleStatistics>? rules)
         {
             var index = Statistics.StepCount++;
             if (wantsSteps == false)
                 return;
 
-            var step = new RunStep(kind, scope, index, changed, elapsed, rules ?? Array.Empty<RuleStatistics>(), casesOpened);
+            var step = new RunStep(kind, scope, index, changed, elapsed, rules ?? Array.Empty<RuleStatistics>());
             Statistics.Steps?.Add(step);
             if (Options.Observer is not { } observer)
                 return;
@@ -511,155 +467,6 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets the run's driver of a split node, made on first use and kept for the run: its sources are the node's rules'
-        /// sources at their positions (<see cref="SplitRule.SourceAt"/>), whose bodies decide which keys split, its
-        /// in-case schedule a <see cref="ScheduleCaseRunner"/> of the node's, its lift spec the graph's, and the run's
-        /// limits. Cases are made with <c>IsCase</c>, <c>StopOnContradiction</c>, and the graph's
-        /// <see cref="EGraph.InheritWatermarks"/>.
-        /// </summary>
-        /// <param name="node">The split node.</param>
-        /// <returns>The driver.</returns>
-        public Relations.SplitDriver DriverFor(SplitSchedule node)
-        {
-            if (drivers.TryGetValue(node, out var driver))
-                return driver;
-
-            var graph = Top.Graph;
-            var sources = new Relations.ISplitSource[node.Rules.Length];
-            for (var i = 0; i < sources.Length; i++)
-                sources[i] = node.Rules[i].SourceAt(i);
-
-            caseOptions ??= new Relations.ContextOptions
-            {
-                IsCase = true,
-                StopOnContradiction = true,
-                InheritWatermarks = graph.InheritWatermarks,
-            };
-
-            var options = new Relations.SplitOptions
-            {
-                DepthLimit = Options.SplitDepthLimit,
-                CaseLimit = Options.CaseLimit,
-                Lift = Options.Lift.Engine,
-                CaseOptions = caseOptions,
-            };
-
-            driver = new Relations.SplitDriver(sources, new ScheduleCaseRunner(this, node.InCase), LiftSpecBuilder.Build(graph), options);
-            drivers.Add(node, driver);
-            return driver;
-        }
-
-        /// <summary>
-        /// Brings current, just before a split step, the mirrors its rules' matchers read, recording a
-        /// <see cref="RunStepKind.MirrorSync"/> step for each sync; the matcher's own sync then finds them current. Allocates
-        /// only when a matcher reads a scope.
-        /// </summary>
-        /// <param name="scope">The scope split.</param>
-        /// <param name="rules">The step's split rules.</param>
-        public void SyncSplitMirrors(Scope scope, SplitRule[] rules)
-        {
-            List<ScopeTag>? tags = null;
-            foreach (var rule in rules)
-                foreach (var tag in rule.Program.Matcher.ReadScopes)
-                    if ((tags ??= new List<ScopeTag>()).Contains(tag) == false)
-                        tags.Add(tag);
-
-            if (tags is not null)
-                MirrorSync.Ensure(scope, tags, "A split rule of the run", this);
-        }
-
-        /// <summary>
-        /// Begins a split step: pushes its frame, from which its lifts are recorded as steps.
-        /// </summary>
-        /// <param name="scope">The scope split.</param>
-        /// <param name="report">The step's report, which the driver fills.</param>
-        public void BeginSplitStep(Scope scope, Relations.SplitReport report) =>
-            frames.Add(new SplitStepFrame(scope, report, scope.Version, Stopwatch.GetTimestamp()));
-
-        /// <summary>
-        /// Records, as <see cref="RunStepKind.Lift"/> steps of the split scope, the lifts the current split step made since
-        /// it last ran a case: the driver lifts between case runs. Each takes its share of the time since then, and
-        /// is marked changed when the scope's <see cref="Scope.Version"/> moved meanwhile (the in-case work changes only the
-        /// cases). Called when a case is about to run, and when the step ends.
-        /// </summary>
-        public void ObserveLifts()
-        {
-            if (frames.Count == 0)
-                return;
-
-            var frame = frames[^1];
-            var lifts = frame.Report.Lifts - frame.LiftsSeen;
-            if (lifts <= 0)
-                return;
-
-            var now = Stopwatch.GetTimestamp();
-            var version = frame.Scope.Version;
-            var changed = version != frame.Version;
-            var share = Stopwatch.GetElapsedTime(frame.Timestamp, now) / lifts;
-            frame.LiftsSeen = frame.Report.Lifts;
-            frame.Version = version;
-            frame.Timestamp = now;
-            for (var i = 0; i < lifts; i++)
-                RecordStep(RunStepKind.Lift, frame.Scope, changed, share, null);
-        }
-
-        /// <summary>
-        /// Notes that a case of the current split step finished running: the window of the next lifts begins.
-        /// </summary>
-        public void CaseRunEnded()
-        {
-            if (frames.Count == 0)
-                return;
-
-            var frame = frames[^1];
-            frame.Version = frame.Scope.Version;
-            frame.Timestamp = Stopwatch.GetTimestamp();
-        }
-
-        /// <summary>
-        /// Ends the current split step: records its remaining lifts as steps, pops its frame, and adds its report to the
-        /// run's statistics, also when the step threw, so that a run a limit stopped reports the cases it opened.
-        /// </summary>
-        public void EndSplitStep()
-        {
-            var frame = frames[^1];
-            try
-            {
-                ObserveLifts();
-            }
-            finally
-            {
-                frames.RemoveAt(frames.Count - 1);
-                var report = frame.Report;
-                Statistics.CasesOpened += report.CasesOpened;
-                Statistics.SplitsSkipped += report.SplitsSkipped;
-                Statistics.Lifts += report.Lifts;
-                Statistics.LiftRowsSkipped += report.LiftRowsSkipped;
-            }
-        }
-
-        /// <summary>
-        /// Registers a case of the run, once, among its live cases, whose rows count towards
-        /// <see cref="RunOptions.RowLimit"/>.
-        /// </summary>
-        /// <param name="case">The case.</param>
-        public void AddCase(Scope @case)
-        {
-            if (caseSet.Add(@case))
-                cases.Add(@case);
-        }
-
-        /// <summary>
-        /// Takes, when a split step in <paramref name="scope"/> ends, the first failure a case of the run under it
-        /// recorded in a catch-up the engine made inside the step and no later iteration of the case took
-        /// (<see cref="Scope.TakeCaseCatchUpFailure"/>). The case is faulted; the caller throws the exception, and the
-        /// run faults its scope with the same cause. Cost: one volatile read per case of <paramref name="scope"/>.
-        /// </summary>
-        /// <param name="scope">The scope the step split.</param>
-        /// <returns>The exception, to throw; <c>null</c> when nothing was recorded.</returns>
-        public RuleEvaluationException? TakeCaseCatchUpFailure(Scope scope) => scope.TakeCaseCatchUpFailure(caseSet);
-
-        /// <summary>
         /// Builds the run's report.
         /// </summary>
         /// <param name="reason">Why the run ended.</param>
@@ -675,7 +482,7 @@ namespace Eggnog
             IReadOnlyList<RunStep> steps = Statistics.Steps is { } recorded ? recorded.AsReadOnly() : Array.Empty<RunStep>();
             return new RunReport(Statistics.Iterations, Statistics.TopChanged, saturated, reason, clock.Elapsed,
                 new ReadOnlyDictionary<Rule, RuleStatistics>(rules), Statistics.SearchTime, Statistics.MergeTime, Statistics.RebuildTime, steps,
-                Statistics.CasesOpened, Statistics.SplitsSkipped, Statistics.Lifts, Statistics.LiftRowsSkipped, Statistics.HeldBack);
+                Statistics.HeldBack);
         }
 
         /// <summary>

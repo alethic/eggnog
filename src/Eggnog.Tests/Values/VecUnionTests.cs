@@ -291,44 +291,6 @@ namespace Eggnog.Tests.Values
         }
 
         [Fact]
-        public void ASplitsCasesUnionVectors()
-        {
-            // A split whose in-case ruleset runs vec-union: each case is a child of the root, where the rule unions (a)
-            // and (b), which the vectors hold, and the case's rebuild makes (p) and (q) one there; the lift carries (a)
-            // = (b), which every case proves, to the root, whose rebuild then makes the vectors one. egglog has no split,
-            // so the expected values are those of a fresh root running the rule's union itself (replay).
-            foreach (var replay in new[] { false, true })
-            {
-                var t = new Theory();
-                var choice = t.Graph.DefineFunction<string, Set<long>>("choice", ValueLattice.Intersect<long>());
-                var split = t.Graph.DefineSplit("pick", s =>
-                {
-                    var (k, d) = s.Vars<string, Set<long>>("k", "d");
-                    s.When(d.Is(choice.Of(k)));
-                    s.Where(Int64Primitives.Greater.Of(Primitives.SetLength<long>().Of(d), 1L));
-                    var v = s.Cases("v", d);
-                    s.Assume(choice.Of(k).Is(Primitives.SetOf<long>().Of(v)));
-                });
-                var unions = t.Graph.DefineRuleset("unions");
-                unions.DefineRule("union", r =>
-                {
-                    var (x, y) = r.Vars<Vec<Node>, Vec<Node>>("x", "y");
-                    r.When(x.Is(t.P.Of()), y.Is(t.Q.Of()));
-                    r.Then(Fact.Exists(Primitives.VecUnion<Node>().Of(x, y)));
-                });
-                t.Root.Assume(choice.Of("k").Is(Set.Of([1L, 2L])));
-
-                t.Root.Run(replay ? Schedule.Run(unions) : Schedule.Split(split, Schedule.Run(unions)));
-
-                Assert.False(t.Root.IsFaulted);
-                Assert.True(t.Merged);
-                Assert.True(t.Root.Check(t.P.Of().Is(t.Q.Of())));
-                Assert.Empty(t.Root.Children);
-                t.Root.Engine.Context.CheckInvariants();
-            }
-        }
-
-        [Fact]
         public void ABodyAQueryAndAReadDoNotWrite()
         {
             // egglog rejects a write primitive in a rule's query.
@@ -358,7 +320,7 @@ namespace Eggnog.Tests.Values
             // (fail (set (k 1) (+ (vec-length (vec-union (p) (q))) (/ 1 0)))): the command fails at (/ 1 0) before its
             // rebuild, so (check (= (a) (b))) fails and g holds both rows until the next (union (c) (d)), which fails
             // with "Illegal merge attempted for function g" and leaves one (probe r1.egg). Here the union is rebuilt with
-            // the batch: the classes are one at once, and g keeps one row (architecture 2.13, item 7).
+            // the batch: the classes are one at once, and g keeps one row (architecture 2.12, item 7).
             var t = new Theory();
             var c = t.Graph.DefineConstructor<Node>("c");
             var d = t.Graph.DefineConstructor<Node>("d");

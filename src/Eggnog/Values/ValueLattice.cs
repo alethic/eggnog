@@ -39,23 +39,23 @@ namespace Eggnog
         internal bool Ordered { get; init; }
 
         /// <summary>
-        /// The intersection lattice: merge ∩, case join ∪ (a domain: the values something can hold).
+        /// The intersection lattice: merge ∩ (a domain: the values something can hold).
         /// </summary>
         /// <typeparam name="T">The element type.</typeparam>
         /// <returns>The lattice.</returns>
         public static ValueLattice<Set<T>> Intersect<T>() where T : notnull =>
-            new("intersect", static (a, b) => a.Intersect(b), static (a, b) => a.Union(b));
+            new("intersect", static (a, b) => a.Intersect(b));
 
         /// <summary>
-        /// The union lattice: merge ∪, case join ∩ (a known set that only grows).
+        /// The union lattice: merge ∪ (a known set that only grows).
         /// </summary>
         /// <typeparam name="T">The element type.</typeparam>
         /// <returns>The lattice.</returns>
         public static ValueLattice<Set<T>> Union<T>() where T : notnull =>
-            new("union", static (a, b) => a.Union(b), static (a, b) => a.Intersect(b));
+            new("union", static (a, b) => a.Union(b));
 
         /// <summary>
-        /// The maximum lattice: merge max, case join min (a lower bound).
+        /// The maximum lattice: merge max (a lower bound).
         /// </summary>
         /// <remarks>
         /// Values are ordered as <see cref="Set{T}"/> orders its elements: strings by code point, as Rust's are,
@@ -69,15 +69,13 @@ namespace Eggnog
         /// <typeparam name="T">The value type.</typeparam>
         /// <returns>The lattice.</returns>
         public static ValueLattice<T> Max<T>() where T : IComparable<T> =>
-            new("max",
-                static (a, b) => ElementOrder<T>.Comparer.Compare(a, b) >= 0 ? a : b,
-                static (a, b) => ElementOrder<T>.Comparer.Compare(a, b) <= 0 ? a : b)
+            new("max", static (a, b) => ElementOrder<T>.Comparer.Compare(a, b) >= 0 ? a : b)
             {
                 Ordered = true,
             };
 
         /// <summary>
-        /// The minimum lattice: merge min, case join max (an upper bound).
+        /// The minimum lattice: merge min (an upper bound).
         /// </summary>
         /// <remarks>
         /// Values are ordered as for <see cref="Max{T}"/>: strings by code point, as <see cref="Set{T}"/> orders them,
@@ -87,9 +85,7 @@ namespace Eggnog
         /// <typeparam name="T">The value type.</typeparam>
         /// <returns>The lattice.</returns>
         public static ValueLattice<T> Min<T>() where T : IComparable<T> =>
-            new("min",
-                static (a, b) => ElementOrder<T>.Comparer.Compare(a, b) <= 0 ? a : b,
-                static (a, b) => ElementOrder<T>.Comparer.Compare(a, b) >= 0 ? a : b)
+            new("min", static (a, b) => ElementOrder<T>.Comparer.Compare(a, b) <= 0 ? a : b)
             {
                 Ordered = true,
             };
@@ -128,15 +124,6 @@ namespace Eggnog
         /// <param name="type">The function's output type.</param>
         /// <returns>The external function.</returns>
         internal abstract Relations.ExternalFunction CreateMerge(EGraph graph, string functionName, ColumnType type);
-
-        /// <summary>
-        /// Creates the case join a lift uses for a function with this lattice, over cells; <c>null</c> when the lattice
-        /// has none, so that a lift requires every live case to agree.
-        /// </summary>
-        /// <param name="type">The function's output type.</param>
-        /// <param name="functionName">The function's name, for messages.</param>
-        /// <returns>The case join, or <c>null</c>.</returns>
-        internal abstract Func<uint, uint, uint>? CreateCaseJoin(ColumnType type, string functionName);
 
     }
 

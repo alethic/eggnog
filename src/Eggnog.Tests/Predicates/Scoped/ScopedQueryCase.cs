@@ -4,10 +4,10 @@ namespace Eggnog.Tests.Predicates.Scoped
 {
 
     /// <summary>
-    /// One query of <see cref="PredicateTheory"/> that runs without a split, as data: how its schema is declared, the
-    /// predicate it asks, and what must hold in the query scope once it saturates with horn, lattice and rewrite rules.
-    /// <see cref="ScopedQueryCases"/> lists the cases, for the tests that run every query in another setting (two
-    /// graphs, parallel runs).
+    /// One query of <see cref="PredicateTheory"/> that runs without the case rules, as data: how its schema is
+    /// declared, the predicate it asks, and what must hold in the query scope once it saturates with horn, lattice and
+    /// rewrite rules. <see cref="ScopedQueryCases"/> lists the cases, for the tests that run every query in another
+    /// setting (two graphs, parallel runs).
     /// </summary>
     /// <param name="Name">What the case shows, for messages.</param>
     /// <param name="Declare">Declares the schema's facts and branch rules in a writable schema scope.</param>

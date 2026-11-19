@@ -26,9 +26,6 @@ Eggnog brings that to .NET:
 - **Scopes.** A child scope starts as a copy of its parent and costs in proportion to what it touches. Freeze a scope
   that holds a schema or a theory, and any number of threads can query it and extend it in children of their own, one
   per request. Rules can be local to a scope, and can read another scope's facts through tags.
-- **Case splits and lift.** Where a key can take only a few values, a split opens one case per value, runs rules in
-  each, and keeps in the scope what every case proves. Cases that reach a contradiction drop out. The host can drive
-  the same cases itself.
 - **Extraction** of the cheapest equivalent term under a cost model you can change per call.
 - **egglog's engine, in C#.** The engine is a faithful reimplementation of egglog's Rust engine (tables with
   functional dependencies, Free Join planning and execution, semi-naive evaluation, union-find with rebuilding).
@@ -95,10 +92,10 @@ ExtractedTerm best = root.Extract(e);                              // (Add (Var 
 
 `x * 1 + (2 + 3)` and `5 + x` are now in one class, and the cheapest term of that class is `x + 5`.
 
-## Scopes and case splits
+## Scopes
 
-Here a frozen root holds what every question shares, each question gets a child scope of its own, and a split
-reasons by cases over the colors a signal can still show:
+Here a frozen root holds what every question shares, and each question gets a child scope of its own, in which a rule
+reasons over the colors a signal can still show:
 
 ```csharp
 var graph = new EGraph();
@@ -106,41 +103,36 @@ var signal = graph.DefineRelation<string>("signal");
 var color = graph.DefineFunction<string, Set<string>>("color", ValueLattice.Intersect<string>());
 var stop = graph.DefineRelation<string>("stop");
 
+// A signal means stop when every color it can still show is red or amber.
 var rules = graph.DefineRuleset("traffic");
-foreach (var c in new[] { "red", "amber" })
+rules.DefineRule("only stop colors", r =>
 {
-    rules.DefineRule($"{c} means stop", r =>
-    {
-        var s = r.Var<string>("s");
-        r.When(signal.Of(s), color.Of(s).Is(Set.Of([c])));
-        r.Then(stop.Of(s));
-    });
-}
-
-// One case per color a signal can still show; each case assumes color(s) = {that color}.
-var byColor = graph.DefineDomainSplit("by color", color, [signal]);
-var schedule = Schedule.Saturate(rules, Schedule.Split(byColor, rules));
+    var (s, d) = r.Vars<string, Set<string>>("s", "d");
+    r.When(signal.Of(s), d.Is(color.Of(s)));
+    r.Where(Primitives.SetIsSubset<string>().Of(d, Set.Of(["red", "amber"])));
+    r.Then(stop.Of(s));
+});
 
 graph.Root.Assume(signal.Of("north"));
 graph.Root.Freeze();                       // a shared base: read-only, children on any thread
 
 using var q1 = graph.Root.CreateChild();
 q1.Assume(color.Of("north").Is(Set.Of(["red", "amber"])));
-q1.Run(schedule);
-bool mustStop = q1.Check(stop.Of("north"));            // true: both cases prove it
+q1.Run(Schedule.Saturate(rules));
+bool mustStop = q1.Check(stop.Of("north"));            // true: red and amber both mean stop
 
 using var q2 = graph.Root.CreateChild();
 q2.Assume(color.Of("north").Is(Set.Of(["red", "green"])));
-q2.Run(schedule);
-bool mayGo = q2.Check(stop.Of("north")) == false;      // true: the green case does not prove it
+q2.Run(Schedule.Saturate(rules));
+bool mayGo = q2.Check(stop.Of("north")) == false;      // true: the signal may show green
 
 bool atRoot = graph.Root.Check(stop.Of("north"));      // false: what a query learns stays in it
 ```
 
-`color` is a function whose values merge by intersection, so each fact about a color narrows it. Neither rule fires
-on `{red, amber}` directly; the split opens a red case and an amber case, each proves `stop`, and the lift writes
-`stop(north)` into `q1`. In `q2` the green case proves nothing, so nothing is lifted. Both queries leave the root
-unchanged, and could run on two threads at once.
+`color` is a function whose values merge by intersection, so each fact about a color narrows it. The rule's filter,
+`Primitives.SetIsSubset` (`set-subset`, an addition to egglog's set primitives), holds when every color the signal can
+still show is a stop color: in `q1` those are `{red, amber}`, so the rule writes `stop(north)` there; in `q2` they are
+`{red, green}`, so it does not. Both queries leave the root unchanged, and could run on two threads at once.
 
 Every example in this README is compiled and run by the test suite
 ([`ReadmeExampleTests`](src/Eggnog.Tests/Readme/ReadmeExampleTests.cs)).

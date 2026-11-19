@@ -11,8 +11,8 @@ namespace Eggnog.Tests.Rules
 
     /// <summary>
     /// Partial primitives, egglog's <c>-?&gt;</c>, at every place a rule calls one: a call with no result drops the match in
-    /// a body let, a filter and a query, and fails the rule in a head and in a split's case assumptions, where egglog
-    /// panics. And <c>BigInt</c> values through rules, rendering and extraction.
+    /// a body let, a filter and a query, and fails the rule in a head, where egglog panics. And <c>BigInt</c> values
+    /// through rules, rendering and extraction.
     /// </summary>
     public sealed class PartialPrimitiveTests
     {
@@ -155,35 +155,6 @@ namespace Eggnog.Tests.Rules
             t.Root.Assume(t.Num.Of(0L), t.Num.Of(8L));
 
             Assert.Equal(1, t.Root.Count(log));
-        }
-
-        [Fact]
-        public void ACaseAssumptionWithNoResultFailsTheRun()
-        {
-            var graph = new EGraph();
-            var dom = graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
-            var chosen = graph.DefineRelation<string, string>("chosen");
-            var rules = graph.DefineRuleset("rules");
-            var never = Primitive.CreatePartial("never", static (string s, out string result) =>
-            {
-                result = s;
-                return false;
-            });
-            var split = graph.DefineSplit("choose", s =>
-            {
-                var (p, d) = s.Vars<string, Set<string>>("p", "d");
-                s.When(d.Is(dom.Of(p)));
-                var v = s.Cases("v", d);
-                s.Assume(chosen.Of(p, never.Of(v)));
-            });
-            graph.Root.Freeze();
-            var scope = graph.Root.CreateChild();
-            scope.Assume(dom.Of("k").Is(Set.Of(["a", "b"])));
-
-            var e = Assert.Throws<RuleEvaluationException>(() => scope.Run(Schedule.Split(split, rules)));
-
-            Assert.Contains("primitive 'never' threw InvalidOperationException: Primitive 'never' has no result for these arguments.", e.Message);
-            Assert.True(scope.IsFaulted);
         }
 
         /// <summary>

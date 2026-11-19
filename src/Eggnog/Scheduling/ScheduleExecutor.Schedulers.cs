@@ -27,13 +27,12 @@ namespace Eggnog
         /// <param name="scope">The scope.</param>
         /// <param name="scheduler">The scheduler.</param>
         /// <param name="ruleset">The ruleset.</param>
-        /// <param name="inCase">Whether the scope is a case.</param>
         /// <returns>Whether the step changed the scope: a head's writes, or the rebuild.</returns>
-        /// <exception cref="RuleEvaluationException">An evaluation failure, which leaves the run's own scope usable, the
-        /// matches its queries found kept for the next step (<see cref="FailRun"/>); or the scheduler threw, and the
-        /// scope is faulted.</exception>
+        /// <exception cref="RuleEvaluationException">An evaluation failure, which leaves the scope usable, the matches
+        /// its queries found kept for the next step (<see cref="FailRun"/>); or the scheduler threw, and the scope is
+        /// faulted.</exception>
         /// <exception cref="InvalidOperationException">The scheduler was removed.</exception>
-        public bool RunSchedulerStep(Scope scope, RuleScheduler scheduler, Ruleset ruleset, bool inCase)
+        public bool RunSchedulerStep(Scope scope, RuleScheduler scheduler, Ruleset ruleset)
         {
             BeforeStep(scope);
             if (scheduler.IsRemoved)
@@ -190,9 +189,7 @@ namespace Eggnog
             }
             catch (Relations.PanicException panic)
             {
-                if (ReferenceEquals(scope, Top))
-                    KeepFound(scope, state, scheduled, queries, buffers);
-
+                KeepFound(scope, state, scheduled, queries, buffers);
                 throw FailRun(scope, null, panic);
             }
             finally
@@ -233,21 +230,17 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// After a step failed once its matches were chosen, as egglog's step whose worklist flush or action run panics:
-        /// marks each rule's worklist as one that may hold rows, and, in the run's own scope, records in each rule's state
-        /// the rows its worklist still holds, which the action rule did not reach or whose actions failed. The scope's
-        /// next step applies them from the worklist, as egglog 3.0.0's next step applies its <c>decided</c> rows; a child,
-        /// whose worklists are its own, stages them at its first step, as egglog's <c>push</c> clones the
-        /// <c>decided</c> tables (<see cref="StageDecided"/>). A case the step failed in is faulted, so its rows go with
-        /// it.
+        /// After a step failed once its matches were chosen, as egglog's step whose worklist flush or action run
+        /// panics: marks each rule's worklist as one that may hold rows, and records in each rule's state the rows its
+        /// worklist still holds, which the action rule did not reach or whose actions failed. The scope's next step
+        /// applies them from the worklist, as egglog 3.0.0's next step applies its <c>decided</c> rows; a child, whose
+        /// worklists are its own, stages them at its first step, as egglog's <c>push</c> clones the <c>decided</c>
+        /// tables (<see cref="StageDecided"/>).
         /// </summary>
-        void KeepDecided(Scope scope, SchedulerState state, ScheduledRule[] scheduled)
+        static void KeepDecided(Scope scope, SchedulerState state, ScheduledRule[] scheduled)
         {
             foreach (var rule in scheduled)
                 rule.WorklistMayHoldRows = true;
-
-            if (ReferenceEquals(scope, Top) == false)
-                return;
 
             var engine = scope.Engine;
             foreach (var rule in scheduled)
@@ -430,8 +423,7 @@ namespace Eggnog
                 return;
 
             HeldBack = true;
-            if (ReferenceEquals(scope, Top))
-                Statistics.HeldBack = true;
+            Statistics.HeldBack = true;
         }
 
         /// <summary>

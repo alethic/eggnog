@@ -31,7 +31,7 @@ layout and style rules below as well. How the engine is put together is in [`../
   type is `internal`; only the library's own types in the namespace `Eggnog` are public. `InternalsVisibleTo` covers
   `Eggnog.Tests` and `Eggnog.Benchmarks`. Library code names engine types through the child namespace
   (`Relations.EGraph`) and never writes `using Eggnog.Relations;`: several engine and library types share simple names
-  (`EGraph`, `CaseSet`, `Extractor`, `CostModel`), and the prefix shows at every use which one is meant.
+  (`EGraph`, `Extractor`, `ExtractedTerm`, `CostModel`), and the prefix shows at every use which one is meant.
 - XML doc comments on every public and internal type and member: say what it is for, its invariants and its cost.
 
 ## Representation

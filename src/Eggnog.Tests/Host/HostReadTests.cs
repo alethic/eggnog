@@ -269,6 +269,24 @@ namespace Eggnog.Tests.Host
             Assert.True(t.Root.Check(t.Graph.Contradiction.Of()));
         }
 
+        /// <summary>
+        /// A contradictory scope stays usable: it is written, read, extracted from and given children as any other.
+        /// </summary>
+        [Fact]
+        public void AContradictoryScopeStaysUsable()
+        {
+            var t = new NodeTheory();
+            var parent = t.Root.CreateChild();
+            var a = parent.Make(t.A.Of());
+            parent.Assume(t.Graph.Contradiction.Of());
+
+            Assert.True(parent.IsContradictory);
+            parent.Assume(t.Tag.Of(a));
+            Assert.True(parent.Check(t.Tag.Of(a)));
+            Assert.Equal("(A)", parent.Extract(a).ToString());
+            Assert.NotNull(parent.CreateChild());
+        }
+
         [Fact]
         public void ReadsAreGroundAndCompute()
         {

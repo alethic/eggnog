@@ -201,12 +201,11 @@ namespace Eggnog.Tests.Values
             graph.Values.RegisterPair<NumericBound, long>();
             var set = Assert.Throws<ArgumentException>(() => graph.Values.RegisterSet<Pair<NumericBound, long>>());
             Assert.Contains("implements neither", set.Message, StringComparison.Ordinal);
-            var unlifted = new FunctionOptions { Lift = false };
             var lattice = Assert.Throws<ArgumentException>(() =>
-                graph.DefineFunction<long, Pair<NumericBound, long>>("bounds", ValueLattice.Max<Pair<NumericBound, long>>(), unlifted));
+                graph.DefineFunction<long, Pair<NumericBound, long>>("bounds", ValueLattice.Max<Pair<NumericBound, long>>()));
             Assert.Contains("not comparable", lattice.Message, StringComparison.Ordinal);
 
-            var max = graph.DefineFunction<long, Pair<long, long>>("max", ValueLattice.Max<Pair<long, long>>(), unlifted);
+            var max = graph.DefineFunction<long, Pair<long, long>>("max", ValueLattice.Max<Pair<long, long>>());
             graph.Root.Assume(max.Of(1L).Is(new Pair<long, long>(1L, 9L)), max.Of(1L).Is(new Pair<long, long>(2L, 0L)));
             Assert.Equal(new Pair<long, long>(2L, 0L), graph.Root.Get(max.Of(1L)));
         }

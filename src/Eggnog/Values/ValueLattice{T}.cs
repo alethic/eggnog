@@ -5,9 +5,8 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// A merge for a function's values, with the case join a lift uses. Contract: <see cref="Merge"/> is associative,
-    /// commutative and idempotent; <c>Merge(a, CaseJoin(a, b)) == a</c> (absorption: the join claims no more than
-    /// either case). Both must be pure and thread-safe, and must not call into any graph; such a call throws an
+    /// A merge for a function's values. Contract: <see cref="Merge"/> is associative, commutative and idempotent. It
+    /// must be pure and thread-safe, and must not call into any graph; such a call throws an
     /// <see cref="InvalidOperationException"/>.
     /// </summary>
     /// <typeparam name="T">The value type.</typeparam>
@@ -19,16 +18,14 @@ namespace Eggnog
         /// </summary>
         /// <param name="name">The lattice's name, for rendering and messages.</param>
         /// <param name="merge">The merge: associative, commutative and idempotent.</param>
-        /// <param name="caseJoin">The case join; <c>null</c> when a lift requires every live case to agree.</param>
         /// <exception cref="ArgumentNullException"><paramref name="name"/> or <paramref name="merge"/> is
         /// <c>null</c>.</exception>
         /// <exception cref="ArgumentException"><paramref name="name"/> is empty.</exception>
-        public ValueLattice(string name, Func<T, T, T> merge, Func<T, T, T>? caseJoin = null)
+        public ValueLattice(string name, Func<T, T, T> merge)
             : base(Validate(name), typeof(T))
         {
             ArgumentNullException.ThrowIfNull(merge);
             Merge = merge;
-            CaseJoin = caseJoin;
         }
 
         /// <summary>
@@ -37,13 +34,8 @@ namespace Eggnog
         public Func<T, T, T> Merge { get; }
 
         /// <summary>
-        /// Gets the case join; <c>null</c> when a lift requires every live case to agree.
-        /// </summary>
-        public Func<T, T, T>? CaseJoin { get; }
-
-        /// <summary>
-        /// Checks the laws on every value, pair and triple of <paramref name="samples"/>: idempotence, commutativity,
-        /// associativity, and, with a case join, absorption. For consumers' tests.
+        /// Checks the laws on every value, pair and triple of <paramref name="samples"/>: idempotence, commutativity
+        /// and associativity. For consumers' tests.
         /// </summary>
         /// <param name="samples">The values to check.</param>
         /// <exception cref="InvalidOperationException">A law fails; the message names the law and the
@@ -62,14 +54,6 @@ namespace Eggnog
                     var ba = Merge(b, a);
                     if (equal.Equals(ab, ba) == false)
                         throw Law("commutativity", $"Merge({a}, {b}) is {ab} but Merge({b}, {a}) is {ba}");
-
-                    if (CaseJoin is not null)
-                    {
-                        var joined = CaseJoin(a, b);
-                        var absorbed = Merge(a, joined);
-                        if (equal.Equals(absorbed, a) == false)
-                            throw Law("absorption", $"Merge({a}, CaseJoin({a}, {b})) is {absorbed}, not {a}");
-                    }
 
                     foreach (var c in samples)
                     {
@@ -97,10 +81,6 @@ namespace Eggnog
             var typed = (ColumnType<T>)type;
             return typed.Encode(Merge(typed.Decode(stored, null), typed.Decode(incoming, null)));
         }
-
-        /// <inheritdoc />
-        internal override Func<uint, uint, uint>? CreateCaseJoin(ColumnType type, string functionName) =>
-            CaseJoinAdapter<T>.Create(this, (ColumnType<T>)type, functionName);
 
         /// <inheritdoc />
         internal override Relations.ExternalFunction CreateMerge(EGraph graph, string functionName, ColumnType type) =>

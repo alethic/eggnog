@@ -176,7 +176,7 @@ namespace Eggnog.Tests.Values
         public void RunningOutOfIdsForAPairFaultsNothing()
         {
             // A pair takes an id, so running out of ids while a rule or a write interns one is the store's limit, as for a
-            // term: OverflowException, the run's writes discarded, the scope unfaulted (architecture, section 2.12).
+            // term: OverflowException, the run's writes discarded, the scope unfaulted (architecture, section 2.11).
             var graph = new EGraph();
             graph.Values.RegisterPair<long, long>();
             var pair = Primitives.PairOf<long, long>();
@@ -232,26 +232,6 @@ namespace Eggnog.Tests.Values
             Assert.Throws<RuleEvaluationException>(() => graph.Root.Run(Schedule.Run(rules)));
         }
 
-        [Fact]
-        public void ALiftedPairCountsAsAValue()
-        {
-            var graph = new EGraph();
-            graph.Values.RegisterPair<long, long>();
-            var pair = Primitives.PairOf<long, long>();
-            var p = graph.DefineFunction<long, Pair<long, long>>("p");
-            var keyed = graph.DefineRelation<Pair<long, long>>("keyed");
-            using var cases = graph.Root.OpenCases();
-            foreach (var @case in new[] { cases.Add(), cases.Add() })
-                @case.Assume(p.Of(1L).Is(pair.Of(1L, 2L)), keyed.Of(pair.Of(8L, 8L)));
-
-            var report = cases.Lift();
-
-            Assert.Equal(1, report.Values);
-            Assert.Equal(1, report.Rows);
-            Assert.Equal(new Pair<long, long>(1, 2), graph.Root.Get(p.Of(1L)));
-            Assert.True(graph.Root.Check(keyed.Of(pair.Of(8L, 8L))));
-        }
-
         /// <summary>
         /// Moves the store's id counter so that <paramref name="left"/> ids remain.
         /// </summary>
@@ -260,18 +240,6 @@ namespace Eggnog.Tests.Values
             var store = graph.Engine.Store;
             store.Counters.IncrementBy(store.IdCounter, graph.Usage.IdLimit - left - store.Counters.Read(store.IdCounter));
             Assert.Equal(graph.Usage.IdLimit - left, graph.Usage.IdsReserved);
-        }
-
-        [Fact]
-        public void ALatticeOverAPairMayHaveACaseJoin()
-        {
-            // A pair of values is a value to a lift, as a set of values is: equal pairs have one cell in every scope, so
-            // the case join combines the cases' pairs.
-            var graph = new EGraph();
-            graph.Values.RegisterPair<long, long>();
-            var lattice = new ValueLattice<Pair<long, long>>("pick", static (a, _) => a, static (_, b) => b);
-            var m = graph.DefineFunction<Pair<long, long>>("m", lattice);
-            Assert.NotNull(m.CaseJoin);
         }
 
     }

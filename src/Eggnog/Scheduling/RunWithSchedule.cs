@@ -34,27 +34,19 @@ namespace Eggnog
         public Ruleset Ruleset { get; }
 
         /// <inheritdoc />
-        internal override bool Execute(ScheduleExecutor executor, Scope scope, int depth, bool inCase, bool splitsEnabled)
+        internal override bool Execute(ScheduleExecutor executor, Scope scope)
         {
-            if ((inCase || scope.IsCase || executor.Options.StopOnContradiction) && RunSchedule.IsContradictory(scope.Engine))
+            if (executor.Options.StopOnContradiction && RunSchedule.IsContradictory(scope.Engine))
             {
-                if (ReferenceEquals(scope, executor.Top))
-                    executor.Statistics.StopReason = RunStopReason.Contradiction;
-
+                executor.Statistics.StopReason = RunStopReason.Contradiction;
                 return false;
             }
 
-            return executor.RunSchedulerStep(scope, Scheduler, Ruleset, inCase);
+            return executor.RunSchedulerStep(scope, Scheduler, Ruleset);
         }
 
         /// <inheritdoc />
-        internal override void Collect(ISet<Ruleset> rulesets, ICollection<Fact> conditions, ISet<SplitRule> splits, ISet<Ruleset> inCases,
-            bool inCase)
-        {
-            rulesets.Add(Ruleset);
-            if (inCase)
-                inCases.Add(Ruleset);
-        }
+        internal override void Collect(ISet<Ruleset> rulesets, ICollection<Fact> conditions) => rulesets.Add(Ruleset);
 
         /// <inheritdoc />
         internal override void CollectSchedulerSteps(ICollection<RunWithSchedule> steps) => steps.Add(this);

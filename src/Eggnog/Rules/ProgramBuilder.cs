@@ -27,7 +27,6 @@ namespace Eggnog
         readonly string ruleName;
         readonly bool query;
         readonly ScopeTag? licence;
-        readonly Term? caseVariable;
 
         /// <summary>
         /// The context of the body's primitives, and the body as a refusal names it.
@@ -89,23 +88,19 @@ namespace Eggnog
         /// scope it runs in, rather than against an owner here.</param>
         /// <param name="licence">The rule's licence, under which it is erasing: its own <c>Erasing</c> tag, else its
         /// ruleset's; <c>null</c> for none.</param>
-        /// <param name="caseVariable">A split rule's case variable (<see cref="SplitBuilder.Cases{T}"/>): bound per case,
-        /// so its use in the body is an error; <c>null</c> for any other draft.</param>
-        public ProgramBuilder(EGraph graph, RuleDraft draft, Scope? owner, bool query = false, ScopeTag? licence = null, Term? caseVariable = null)
+        public ProgramBuilder(EGraph graph, RuleDraft draft, Scope? owner, bool query = false, ScopeTag? licence = null)
         {
             this.graph = graph;
             this.draft = draft;
             this.owner = owner;
             this.query = query;
             this.licence = licence;
-            this.caseVariable = caseVariable;
             ruleName = draft.Name;
 
             // egglog's contexts: a semi-naive rule's body pure and its head write, a naive rule's body read and its head
-            // full, a check-shaped query read; a split rule's matcher is a semi-naive rule's body.
+            // full, a check-shaped query read.
             (bodyContext, bodySite, headContext, headSite) =
                 query ? (PrimitiveAccess.Read, "a query", PrimitiveAccess.Read, "a query")
-                : caseVariable is not null ? (PrimitiveAccess.Pure, "a split rule's body", PrimitiveAccess.Pure, "a split rule's body")
                 : draft.Naive ? (PrimitiveAccess.Read, "a naive rule's body", PrimitiveAccess.Full, "a naive rule's head")
                 : (PrimitiveAccess.Pure, "a semi-naive rule's body", PrimitiveAccess.Write, "a semi-naive rule's head");
         }
@@ -198,32 +193,6 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Compiles a split rule's matcher: the body checked and normalized as a rule's, and a head of one
-        /// <see cref="HeadOpKind.Collect"/> of <paramref name="columns"/>, the key variables, the set variable and every other
-        /// variable an assumption uses. Each must be bound by the body, or equated with a constant, which the collector then
-        /// collects. Class constants follow the global-rule rule: only classes from the root.
-        /// </summary>
-        /// <param name="columns">The declared variables to collect, in column order.</param>
-        /// <returns>The matcher's program.</returns>
-        /// <exception cref="RuleDefinitionException">The draft is not a valid split body.</exception>
-        public RuleProgram BuildSplit(IReadOnlyList<Term> columns)
-        {
-            InternLiterals(builder => builder.LowerCollect(columns));
-            var operands = LowerCollect(columns);
-            ReadMirrors();
-            var named = new int[operands.Length];
-            for (var i = 0; i < named.Length; i++)
-                named[i] = operands[i].IsRegister ? operands[i].Index : -1;
-
-            return new RuleProgram(ruleName, registers.ToArray(), atoms, steps, head.ToArray(), idCells.ToArray(), idOrigins.ToArray(),
-                named, false, readScopes.ToArray())
-            {
-                BodyContext = bodyContext,
-                HeadContext = headContext,
-            };
-        }
-
-        /// <summary>
         /// Lowers a query's draft short of its mirrors: the body checked and normalized as a rule's, and the head's
         /// collector of the declared variables.
         /// </summary>
@@ -238,8 +207,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Lowers a draft whose head collects <paramref name="columns"/>, short of its mirrors: a query's or a split
-        /// rule's matcher.
+        /// Lowers a draft whose head collects <paramref name="columns"/>, short of its mirrors: a query's.
         /// </summary>
         /// <returns>The collected operands.</returns>
         Operand[] LowerCollect(IReadOnlyList<Term> columns)
@@ -268,7 +236,7 @@ namespace Eggnog
         /// <exception cref="RuleDefinitionException">The draft is not valid.</exception>
         void InternLiterals(Action<ProgramBuilder> lower)
         {
-            lower(new ProgramBuilder(graph, draft, owner, query, licence, caseVariable) { interns = false });
+            lower(new ProgramBuilder(graph, draft, owner, query, licence) { interns = false });
             var order = new LiteralOrder(InternConstant, Parts);
             foreach (var bound in order.Query(draft.Body))
                 InternConstant(bound);
@@ -446,9 +414,6 @@ namespace Eggnog
 
                     if (makeVariables.TryGetValue(term, out var made))
                         throw Error($"head variable '{made}' made by Make appears in When");
-
-                    if (ReferenceEquals(term, caseVariable))
-                        throw Error($"case variable '{shape.Name}' is bound per case; use it only in Assume");
 
                     throw Error($"variable '{shape.Name}' belongs to another rule");
                 }

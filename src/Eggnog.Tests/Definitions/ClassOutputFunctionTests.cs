@@ -12,7 +12,7 @@ namespace Eggnog.Tests.Definitions
     /// Functions whose output is a class, as egglog's function of an e-class sort: a class written for a key is held
     /// without union, two different classes for one key are a conflict unless a merge makes them equal, the rebuild
     /// keeps the output canonical, and <c>New</c> and <c>Old</c> pick a class. Ported from egglog's
-    /// <c>tests/set_sort_function.egg</c> at 5e655cae, with what the batch, rules, children and splits do with them.
+    /// <c>tests/set_sort_function.egg</c> at 5e655cae, with what the batch, rules and children do with them.
     /// </summary>
     public sealed class ClassOutputFunctionTests
     {
@@ -343,63 +343,6 @@ namespace Eggnog.Tests.Definitions
             var f = t.Graph.DefineFunction<long, Node>("f");
 
             Assert.Throws<ArgumentException>(() => f.In(t.Graph.RootTag));
-        }
-
-        /// <summary>
-        /// A split rule may assume a class of a function of a sort, as a host write makes it, alongside a union, in either
-        /// order: a case writes its functions before its unions. A class every case assumes is lifted to the parent.
-        /// </summary>
-        [Fact]
-        public void ASplitAssumesAClassOfAFunctionAndTheLiftKeepsIt()
-        {
-            var t = new NodeTheory();
-            var choice = t.Graph.DefineFunction<string, Set<long>>("choice", ValueLattice.Intersect<long>());
-            var picked = t.Graph.DefineFunction<string, Node>("picked");
-            var split = t.Graph.DefineSplit("pick", s =>
-            {
-                var (k, d) = s.Vars<string, Set<long>>("k", "d");
-                s.When(d.Is(choice.Of(k)));
-                s.Where(Int64Primitives.Greater.Of(Primitives.SetLength<long>().Of(d), 1L));
-                var v = s.Cases("v", d);
-                s.Assume(choice.Of(k).Is(Primitives.SetOf<long>().Of(v)), t.B.Of().Is(t.Lit.Of(v)), picked.Of(k).Is(t.A.Of()));
-            });
-            var a = t.Root.Make(t.A.Of());
-            t.Root.Assume(choice.Of("k").Is(Set.Of([1L, 2L])));
-
-            var report = t.Root.Run(Schedule.Split(split, Schedule.Run(t.Rules)));
-
-            Assert.Equal(2, report.CasesOpened);
-            Assert.False(t.Root.IsFaulted);
-            Assert.True(t.Root.AreEqual(t.Root.Get(picked.Of("k")), t.A.Of()));
-            Assert.Equal(t.Root.Find(a), t.Root.Find(t.Root.Get(picked.Of("k"))));
-        }
-
-        /// <summary>
-        /// A case whose assumption makes two rows of a function of a sort meet holding different classes fails the run, and
-        /// faults its scope, as a conflicting assumption does.
-        /// </summary>
-        [Fact]
-        public void ACaseWhoseAssumptionMakesClassesMeetFailsTheRun()
-        {
-            var t = new NodeTheory();
-            var choice = t.Graph.DefineFunction<string, Set<long>>("choice", ValueLattice.Intersect<long>());
-            var f = t.Graph.DefineFunction<Node, Node>("f");
-            var split = t.Graph.DefineSplit("join", s =>
-            {
-                var (k, d) = s.Vars<string, Set<long>>("k", "d");
-                s.When(d.Is(choice.Of(k)));
-                s.Where(Int64Primitives.Greater.Of(Primitives.SetLength<long>().Of(d), 1L));
-                var v = s.Cases("v", d);
-                s.Assume(choice.Of(k).Is(Primitives.SetOf<long>().Of(v)), t.A.Of().Is(t.B.Of()));
-            });
-            var a = t.Root.Make(t.A.Of());
-            var b = t.Root.Make(t.B.Of());
-            t.Root.Assume(f.Of(a).Is(t.Lit.Of(1L)), f.Of(b).Is(t.Lit.Of(2L)), choice.Of("k").Is(Set.Of([1L, 2L])));
-
-            var e = Assert.Throws<RuleEvaluationException>(() => t.Root.Run(Schedule.Split(split, Schedule.Run(t.Rules))));
-
-            Assert.IsType<FactConflictException>(e.InnerException);
-            Assert.True(t.Root.IsFaulted);
         }
 
     }

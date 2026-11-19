@@ -14,12 +14,6 @@ namespace Eggnog
         /// </summary>
         public bool Analysis { get; init; }
 
-        /// <summary>
-        /// Gets whether lifts copy the function into a case's parent. <c>null</c>, the default: a fact yes, an analysis
-        /// no.
-        /// </summary>
-        public bool? Lift { get; init; }
-
     }
 
 }

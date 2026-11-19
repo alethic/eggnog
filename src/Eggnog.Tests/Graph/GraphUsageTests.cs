@@ -205,23 +205,20 @@ namespace Eggnog.Tests.Graph
         }
 
         /// <summary>
-        /// A query whose run, plain or split, runs out of epochs part-way throws <see cref="OverflowException"/>
-        /// unfaulted; a split's cases are disposed with the run, and the query is disposed as any other.
+        /// A query whose run runs out of epochs part-way throws <see cref="OverflowException"/> unfaulted, and the query
+        /// is disposed as any other.
         /// </summary>
-        [Theory]
-        [InlineData(false, 3)]
-        [InlineData(true, 3)]
-        [InlineData(true, 20)]
-        public void ARunThatRunsOutOfEpochsPartWayThrowsOverflowUnfaulted(bool split, int epochsLeft)
+        [Fact]
+        public void ARunThatRunsOutOfEpochsPartWayThrowsOverflowUnfaulted()
         {
             var churn = new ScopeChurn();
             var c = churn.Theory;
             var query = churn.Schema.CreateChild(c.Query);
             var p = query.Make(c.Not.Of(c.StrEq.Of("kind", "zz")));
             query.Assume(c.WhereClause.Of(p));
-            LeaveEpochs(churn.Graph, epochsLeft);
+            LeaveEpochs(churn.Graph, 3);
 
-            Assert.Throws<OverflowException>(() => query.Run(split ? churn.Split : churn.Plain));
+            Assert.Throws<OverflowException>(() => query.Run(churn.Plain));
             Assert.False(query.IsFaulted);
             Assert.Empty(query.Children);
             query.Dispose();
@@ -348,53 +345,6 @@ namespace Eggnog.Tests.Graph
             Assert.Throws<OverflowException>(() => t.Root.Count(query));
             Assert.Throws<OverflowException>(() => t.Root.ForEachMatch(query, _ => true));
             Assert.True(t.Root.Check(t.Tag.Of(t.A.Of())));
-        }
-
-        /// <summary>
-        /// Once the epochs are out, <see cref="CaseSet.Add"/> creates no case and leaves the parent unfaulted; the set is
-        /// disposed as any other.
-        /// </summary>
-        [Fact]
-        public void ACaseSetAddsNoCaseOnceTheEpochsRunOut()
-        {
-            var t = new NodeTheory();
-            var cases = t.Root.OpenCases();
-            LeaveEpochs(t.Graph, 0);
-
-            Assert.Throws<OverflowException>(() => cases.Add());
-            Assert.Empty(cases.Cases);
-            Assert.False(t.Root.IsFaulted);
-            cases.Dispose();
-            Assert.Empty(t.Root.Children);
-        }
-
-        /// <summary>
-        /// A lift whose round runs out of epochs, or of ids for a term it lifts, merges nothing of that round: the parent
-        /// and the cases are not faulted, the parent still reads without what the round would have lifted, and the set
-        /// is disposed as any other.
-        /// </summary>
-        [Theory]
-        [InlineData(false)]
-        [InlineData(true)]
-        public void ALiftThatRunsOutMergesNothingOfItsRound(bool ids)
-        {
-            var t = new NodeTheory();
-            var cases = t.Root.OpenCases();
-            foreach (var @case in new[] { cases.Add(), cases.Add() })
-                @case.Assume(t.Num.Of(1), t.Tag.Of(t.A.Of()));
-
-            if (ids)
-                LeaveIds(t.Graph, 0);
-            else
-                LeaveEpochs(t.Graph, 0);
-
-            Assert.Throws<OverflowException>(() => cases.Lift());
-            Assert.False(t.Root.IsFaulted);
-            Assert.All(cases.Cases, @case => Assert.False(@case.IsFaulted));
-            Assert.False(t.Root.Check(t.Num.Of(1)));
-            Assert.Equal(0, t.Root.CountRows(t.Tag));
-            cases.Dispose();
-            Assert.Empty(t.Root.Children);
         }
 
         /// <summary>

@@ -26,7 +26,7 @@ Several 3.0.0 changelog entries were already in `5e655cae`, in its "Unreleased" 
 nothing new to evaluate:
 
 - relations as non-unionable constructors (#770); Eggnog keeps them as unit-valued functions
-  ([`architecture.md`](architecture.md), section 2.13, item 4);
+  ([`architecture.md`](architecture.md), section 2.12, item 4);
 - the capability-specific primitive traits (#856; decisions row 12) and the `:naive` rule option;
 - typed extension state (#884), the body-defined primitive APIs (#881, #889), f64 `exp`, `log` and `sqrt` and BigRat
   to i64 (#890, #891), `RunReport::can_stop` (#882), full source paths (#886), the nested-container semi-naive fix
@@ -150,7 +150,7 @@ Eggnog follows egglog at 5e655cae in its schedulers (`Schedule.RunWith`, [`archi
 - [ ] **Panics made errors** (#920). New error variants include `RuleAlreadyExists`, `DesugarError`,
   `UnsupportedInputType`, `ExtractError` for a negative count or a deleted or subsumed value, `BadPresortArguments`,
   `AmbiguousPrimitive` and `UnresolvedPrimitive`. Most are frontend errors. Upstream: `src/lib.rs:2887-2950`,
-  `src/typechecking.rs:1211-1255`. Eggnog's errors: [`architecture.md`](architecture.md), sections 2.5 and 2.12.
+  `src/typechecking.rs:1211-1255`. Eggnog's errors: [`architecture.md`](architecture.md), sections 2.5 and 2.11.
 
 ## Performance
 
@@ -210,7 +210,7 @@ Eggnog follows egglog at 5e655cae in its schedulers (`Schedule.RunWith`, [`archi
   `:naive`. Function lookups in rule heads, refused for every rule at the pin, are now allowed in `:naive` and
   `:unsafe-seminaive` rules. Upstream: `egglog-ast/src/generic_ast.rs:83-121`, `src/typechecking.rs:889-950`. Eggnog:
   rule heads never read tables but in a full callback (`ThenCallFull`, egglog's `rust_rule_full`, at the pin already)
-  ([`architecture.md`](architecture.md), section 2.13, item 2), and `RuleBuilder.Naive()`
+  ([`architecture.md`](architecture.md), section 2.12, item 2), and `RuleBuilder.Naive()`
   (`src/Eggnog/Rules/RuleBuilder.cs`).
 
 ## Nothing to evaluate
@@ -231,7 +231,7 @@ release:
 - a scheduler runner that applies each rule's matches before the next rule's `filter_matches`, with the bridge's
   `run_rules_no_rebuild`, `flush_updates_no_rebuild` and `rebuild_now`;
 - rule-action errors that keep the effects already applied, without rollback (compare defect 22 and
-  [`architecture.md`](architecture.md), section 2.12);
+  [`architecture.md`](architecture.md), section 2.11);
 - a `SchedulerContext` for schedulers, and `EGraph::total_size` and `num_nodes`;
 - subsuming a constructor row created earlier in the same rule, which goes on to run the rule's later actions
   (compare defect 19);

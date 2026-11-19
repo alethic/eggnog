@@ -9,10 +9,10 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// A set of fixed-width <see cref="uint"/> tuples, which query and split-matcher collectors fill during an engine
-    /// call, and which <see cref="Scope.Rows(TableHandle)"/> fills from a table. <see cref="Add"/> is thread-safe (rule
-    /// tasks may run in parallel) and drops duplicates; after <see cref="SortByCells"/> the indexer reads in lexicographic
-    /// order of the cells, after <see cref="SortByContent"/> in content order, and otherwise in insertion order.
+    /// A set of fixed-width <see cref="uint"/> tuples, which query collectors fill during an engine call, and which
+    /// <see cref="Scope.Rows(TableHandle)"/> fills from a table. <see cref="Add"/> is thread-safe (rule tasks may run
+    /// in parallel) and drops duplicates; after <see cref="SortByCells"/> the indexer reads in lexicographic order of
+    /// the cells, after <see cref="SortByContent"/> in content order, and otherwise in insertion order.
     /// </summary>
     /// <remarks>
     /// <para>

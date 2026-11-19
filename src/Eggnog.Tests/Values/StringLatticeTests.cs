@@ -10,8 +10,8 @@ namespace Eggnog.Tests.Values
 
     /// <summary>
     /// The built-in <see cref="ValueLattice.Max{T}"/> and <see cref="ValueLattice.Min{T}"/> over strings: they order
-    /// ordinally, as <see cref="Set{T}"/> does, so merges and case joins give the same result under every current
-    /// culture and obey the lattice laws on strings that a culture collates as equal.
+    /// ordinally, as <see cref="Set{T}"/> does, so merges give the same result under every current culture and obey the
+    /// lattice laws on strings that a culture collates as equal.
     /// </summary>
     public sealed class StringLatticeTests
     {
@@ -105,12 +105,11 @@ namespace Eggnog.Tests.Values
         }
 
         /// <summary>
-        /// The merges and case joins of pairs that cultures order differently give the ordinal result under every
-        /// culture.
+        /// The merges of pairs that cultures order differently give the ordinal result under every culture.
         /// </summary>
         [Theory]
         [MemberData(nameof(Cultures))]
-        public void MergesAndCaseJoinsAreTheSameUnderEveryCulture(string culture)
+        public void MergesAreTheSameUnderEveryCulture(string culture)
         {
             InCulture(culture, () =>
             {
@@ -120,12 +119,8 @@ namespace Eggnog.Tests.Values
                 {
                     Assert.Equal(high, max.Merge(low, high));
                     Assert.Equal(high, max.Merge(high, low));
-                    Assert.Equal(low, max.CaseJoin!(low, high));
-                    Assert.Equal(low, max.CaseJoin!(high, low));
                     Assert.Equal(low, min.Merge(low, high));
                     Assert.Equal(low, min.Merge(high, low));
-                    Assert.Equal(high, min.CaseJoin!(low, high));
-                    Assert.Equal(high, min.CaseJoin!(high, low));
                 }
             });
         }
@@ -158,19 +153,16 @@ namespace Eggnog.Tests.Values
                     var set = Set.From(samples);
                     Assert.Equal(set[set.Count - 1], samples.Aggregate(max.Merge));
                     Assert.Equal(set[0], samples.Aggregate(min.Merge));
-                    Assert.Equal(set[0], samples.Aggregate(max.CaseJoin!));
-                    Assert.Equal(set[set.Count - 1], samples.Aggregate(min.CaseJoin!));
                 }
             });
         }
 
         /// <summary>
-        /// A lift joins the cases' values of a <c>Min&lt;string&gt;</c> function by the ordinal maximum, under every
-        /// culture.
+        /// Writes of a <c>Min&lt;string&gt;</c> function merge by the ordinal minimum, under every culture.
         /// </summary>
         [Theory]
         [MemberData(nameof(Cultures))]
-        public void ALiftJoinsAMinOfStringsOrdinally(string culture)
+        public void WritesMergeAMinOfStringsOrdinally(string culture)
         {
             InCulture(culture, () =>
             {
@@ -178,17 +170,11 @@ namespace Eggnog.Tests.Values
                 var bound = graph.DefineFunction<string, string>("bound", ValueLattice.Min<string>());
                 var root = graph.Root;
 
-                using var cases = root.OpenCases();
-                cases.Add().Assume(bound.Of("letter").Is("z"), bound.Of("dotted").Is("I"), bound.Of("case").Is("B"));
-                cases.Add().Assume(bound.Of("letter").Is("\u00E4"), bound.Of("dotted").Is("\u0131"), bound.Of("case").Is("a"));
-                var lifted = cases.Lift();
+                root.Assume(bound.Of("letter").Is("\u00E4"), bound.Of("dotted").Is("\u0131"), bound.Of("case").Is("a"));
+                root.Assume(bound.Of("letter").Is("z"), bound.Of("dotted").Is("I"), bound.Of("case").Is("B"));
 
-                Assert.Equal(3, lifted.Values);
-                Assert.Equal("\u00E4", root.Get(bound.Of("letter")));
-                Assert.Equal("\u0131", root.Get(bound.Of("dotted")));
-                Assert.Equal("a", root.Get(bound.Of("case")));
-
-                root.Assume(bound.Of("case").Is("B"));   // and the merge is the ordinal minimum
+                Assert.Equal("z", root.Get(bound.Of("letter")));
+                Assert.Equal("I", root.Get(bound.Of("dotted")));
                 Assert.Equal("B", root.Get(bound.Of("case")));
             });
         }

@@ -1,5 +1,3 @@
-using System;
-
 namespace Eggnog
 {
 
@@ -31,15 +29,6 @@ namespace Eggnog
         /// <c>null</c> for a function with a lattice or none.
         /// </summary>
         internal FunctionMergeDefinition? Merge { get; set; }
-
-        /// <summary>
-        /// Gets the case join a lift uses for the function's values, over cells: its lattice's
-        /// (<see cref="ValueLattice{T}.CaseJoin"/>), made once when the function is defined, so every lift spec built
-        /// after that holds the same delegate and the engine's lift memo, which compares specs by content, still hits;
-        /// <c>null</c> when the function has no lattice or its lattice no case join, and a lift then requires every
-        /// live case to agree.
-        /// </summary>
-        internal Func<uint, uint, uint>? CaseJoin { get; set; }
 
         /// <summary>
         /// The untyped application, of any arity: the function's value at <paramref name="arguments"/>.

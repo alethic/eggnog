@@ -66,11 +66,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The rule layer caches one <see cref="SplitDriver"/> per split schedule node
-        /// (<c>executor.DriverFor(this)</c>), so a program such as <c>Saturate(Split(r1, inCaseA), Split(r2,
-        /// inCaseB))</c> has two drivers over one scope. A step revisits the live records of the scope that its own
-        /// driver opened: driver B's step does not run driver B's in-case schedule in the cases of driver A's split,
-        /// which were opened for split A, whose in-case schedule is A's.
+        /// Two <see cref="SplitDriver"/>s may serve one scope, each with its own in-case schedule. A step revisits the
+        /// live records of the scope that its own driver opened: driver B's step does not run driver B's in-case
+        /// schedule in the cases of driver A's split, which were opened for split A, whose in-case schedule is A's.
         /// </summary>
         [Fact]
         public void AStepRunsItsScheduleOnlyInTheCasesOfItsOwnSplits()

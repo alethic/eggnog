@@ -58,11 +58,6 @@ namespace Eggnog
         public ColumnType? Output { get; internal set; }
 
         /// <summary>
-        /// Gets whether lifts copy the table into a case's parent.
-        /// </summary>
-        public bool Lift { get; internal set; }
-
-        /// <summary>
         /// Gets whether rows of the table may be subsumed (<see cref="RelationOptions.Subsumable"/>,
         /// <see cref="ConstructorOptions.Subsumable"/>).
         /// </summary>
@@ -156,7 +151,6 @@ namespace Eggnog
             view.Role = table.Role;
             view.KeyArray = table.KeyArray;
             view.Output = table.Output;
-            view.Lift = table.Lift;
             view.Subsumable = table.Subsumable;
             view.Function = table.Function;
             view.Columns = table.Columns;

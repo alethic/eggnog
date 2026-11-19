@@ -61,8 +61,9 @@ namespace Eggnog
         /// <exception cref="InvalidOperationException">No finite term exists, or the scope changed since the extractor
         /// was created.</exception>
         /// <exception cref="ArgumentException">The class value is not usable in the scope.</exception>
-        /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it since the
-        /// extractor was made, or lies under one, the contradiction of the case's parent included.</exception>
+        /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction since the extractor
+        /// was made, or lies under a stopped scope, a scope stopped through its parent included; no scope the library
+        /// makes stops.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up a query of a writable scope makes
         /// first, in the scope or a writable ancestor; the scope is faulted, and so is the ancestor.</exception>
         public ExtractedTerm Extract<TSort>(TSort root) where TSort : struct, ISort<TSort>
@@ -82,8 +83,9 @@ namespace Eggnog
         /// <returns>Whether a finite term exists.</returns>
         /// <exception cref="InvalidOperationException">The scope changed since the extractor was created.</exception>
         /// <exception cref="ArgumentException">The class value is not usable in the scope.</exception>
-        /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it since the
-        /// extractor was made, or lies under one, the contradiction of the case's parent included.</exception>
+        /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction since the extractor
+        /// was made, or lies under a stopped scope, a scope stopped through its parent included; no scope the library
+        /// makes stops.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up a query of a writable scope makes
         /// first, in the scope or a writable ancestor; the scope is faulted, and so is the ancestor.</exception>
         public bool TryExtract<TSort>(TSort root, [NotNullWhen(true)] out ExtractedTerm? term) where TSort : struct, ISort<TSort>
@@ -138,8 +140,9 @@ namespace Eggnog
         /// call of this extractor failed midway; or the scope is faulted; or it is writable and in use on another thread;
         /// or the call comes from a primitive, lattice, filter or cost function.</exception>
         /// <exception cref="ArgumentException">The class value is not usable in the scope.</exception>
-        /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it since the
-        /// extractor was made, or lies under one, the contradiction of the case's parent included.</exception>
+        /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction since the extractor
+        /// was made, or lies under a stopped scope, a scope stopped through its parent included; no scope the library
+        /// makes stops.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up a query of a writable scope makes
         /// first, in the scope or a writable ancestor; the scope is faulted, and so is the ancestor.</exception>
         public IReadOnlyList<ExtractedTerm> ExtractVariants<TSort>(TSort root, int count) where TSort : struct, ISort<TSort>
@@ -180,8 +183,9 @@ namespace Eggnog
         /// <returns>Whether a finite term exists.</returns>
         /// <exception cref="InvalidOperationException">The scope changed since the extractor was created.</exception>
         /// <exception cref="ArgumentException">The class value is not usable in the scope.</exception>
-        /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it since the
-        /// extractor was made, or lies under one, the contradiction of the case's parent included.</exception>
+        /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction since the extractor
+        /// was made, or lies under a stopped scope, a scope stopped through its parent included; no scope the library
+        /// makes stops.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up a query of a writable scope makes
         /// first, in the scope or a writable ancestor; the scope is faulted, and so is the ancestor.</exception>
         public bool TryGetCost<TSort>(TSort root, out ulong cost) where TSort : struct, ISort<TSort>
@@ -207,16 +211,16 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Refuses a query of a scope with no model: a stopped case, or a scope under one. A writable scope is brought
-        /// up to date first, so that a contradiction reaching its case through the case's parent since the case's last
-        /// call stops the case here, as on the structural entry points, rather than being missed on a stale stop flag;
-        /// the catch-up is left out of <see cref="Scope.Version"/>. A frozen scope is never under a case and is only
-        /// checked. Called inside <see cref="Scope.EnterExtraction"/>, with the guard held when <paramref name="held"/>
-        /// is true. Cost: the entry catch-up of a writable call, then one volatile read per writable scope up to the
-        /// first frozen one.
+        /// Refuses a query of a scope with no model: a stopped scope, or a scope under one. A writable scope is brought
+        /// up to date first, so that a contradiction reaching it through its parent since its last call stops it here,
+        /// as on the structural entry points, rather than being missed on a stale stop flag; the catch-up is left out
+        /// of <see cref="Scope.Version"/>. A frozen scope is never under a stopped scope and is only checked. Called
+        /// inside <see cref="Scope.EnterExtraction"/>, with the guard held when <paramref name="held"/> is true. Cost:
+        /// the entry catch-up of a writable call, then one volatile read per writable scope up to the first frozen one.
         /// </summary>
         /// <param name="held">Whether the extraction entry took the scope's guard (the scope is writable).</param>
-        /// <exception cref="ScopeContradictedException">The scope is a stopped case, or lies under one.</exception>
+        /// <exception cref="ScopeContradictedException">The scope is stopped, or lies under a stopped
+        /// scope.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up a query of a writable scope makes
         /// first, in the scope or a writable ancestor; the scope is faulted, and so is the ancestor.</exception>
         void ThrowIfStopped(bool held)
