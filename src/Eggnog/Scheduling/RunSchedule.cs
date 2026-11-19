@@ -4,8 +4,7 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// One iteration over the union of rulesets' rules: skipped on a contradictory scope when the run stops on
-    /// contradiction.
+    /// One iteration over the union of rulesets' rules.
     /// </summary>
     internal sealed class RunSchedule : Schedule
     {
@@ -25,27 +24,8 @@ namespace Eggnog
         public Ruleset[] Rulesets { get; }
 
         /// <inheritdoc />
-        internal override bool Execute(ScheduleExecutor executor, Scope scope)
-        {
-            // The scope is brought up to date first, as the iteration would bring it anyway, so this costs nothing
-            // more, and nothing at all when the run does not stop on contradiction.
-            if (executor.Options.StopOnContradiction && IsContradictory(scope.Engine))
-            {
-                executor.Statistics.StopReason = RunStopReason.Contradiction;
-                return false;
-            }
-
-            return executor.RunIteration(scope, ScheduleExecutor.RulesFor(Rulesets, scope));
-        }
-
-        /// <summary>
-        /// Gets whether a scope is contradictory once brought up to date (a no-op when it is current or stopped).
-        /// </summary>
-        internal static bool IsContradictory(EngineScope engine)
-        {
-            engine.EnsureClean();
-            return engine.IsStopped || engine.IsContradictory;
-        }
+        internal override bool Execute(ScheduleExecutor executor, Scope scope) =>
+            executor.RunIteration(scope, ScheduleExecutor.RulesFor(Rulesets, scope));
 
         /// <inheritdoc />
         internal override void Collect(ISet<Ruleset> rulesets, ICollection<Fact> conditions)

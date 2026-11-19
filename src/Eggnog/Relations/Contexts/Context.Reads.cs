@@ -18,8 +18,8 @@ namespace Eggnog.Relations
         /// <param name="table">A registered function table.</param>
         /// <returns>The view.</returns>
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
-        /// <exception cref="InvalidOperationException">The context is faulted, contradicted or not clean, or its domain is
-        /// held by another thread.</exception>
+        /// <exception cref="InvalidOperationException">The context is faulted or not clean, or its domain is held by
+        /// another thread.</exception>
         /// <exception cref="NotSupportedException">The table is the union-find, which is read through
         /// <see cref="Find"/> and lookups.</exception>
         /// <exception cref="System.Collections.Generic.KeyNotFoundException">The table is not registered.</exception>
@@ -47,8 +47,8 @@ namespace Eggnog.Relations
         /// <param name="destination">Receives the row; at least as many cells as the table has columns.</param>
         /// <returns><c>true</c> if the context sees a row with the key.</returns>
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
-        /// <exception cref="InvalidOperationException">The context is faulted, contradicted or not clean, or its domain is
-        /// held by another thread.</exception>
+        /// <exception cref="InvalidOperationException">The context is faulted or not clean, or its domain is held by
+        /// another thread.</exception>
         public bool TryGetRow(TableId table, ReadOnlySpan<uint> key, Span<uint> destination)
         {
             if (frozen)
@@ -60,28 +60,6 @@ namespace Eggnog.Relations
             using var scope = Domain.Enter();
             ThrowIfNotReadable();
             return TryGetRowCore(table, key, destination);
-        }
-
-        /// <summary>
-        /// Gets whether the context is contradictory: a contradiction stopped it, or a row of the store's contradiction
-        /// table is visible in it. The one read a stopped context still answers.
-        /// </summary>
-        /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
-        /// <exception cref="InvalidOperationException">The context is not stopped and is faulted or not clean, or its
-        /// domain is held by another thread.</exception>
-        public bool IsContradictory
-        {
-            get
-            {
-                ThrowIfDisposed();
-                if (contradicted)
-                    return true;
-
-                if (store.Schema.Contradiction is not { } table)
-                    return false;
-
-                return GetView(table).FindRow(ReadOnlySpan<uint>.Empty, out _) >= 0;
-            }
         }
 
         /// <summary>

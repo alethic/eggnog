@@ -26,7 +26,7 @@ namespace Eggnog.Relations.Tests
             var root = store.Root;
             store.AdvanceClock();
             var child = root.CreateChild();
-            var options = new ContextOptions { StopOnContradiction = true };
+            var options = new ContextOptions { InheritWatermarks = false };
             var grandchild = child.CreateChild(options);
 
             Assert.Equal(0, root.Depth);
@@ -41,8 +41,7 @@ namespace Eggnog.Relations.Tests
             Assert.False(child.IsRoot);
             Assert.Same(ContextOptions.Default, child.Options);
             Assert.Same(options, grandchild.Options);
-            Assert.True(grandchild.Options.StopOnContradiction);
-            Assert.False(child.Options.StopOnContradiction);
+            Assert.False(grandchild.Options.InheritWatermarks);
             Assert.True(child.Options.InheritWatermarks);
             Assert.Same(store, grandchild.Store);
             Assert.Equal(1, root.ChildCount);
@@ -67,7 +66,6 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(store.ClockCounter.Rep, grandchild.Database.ClockCounterRep);
             Assert.False(child.IsFrozen);
             Assert.False(child.IsFaulted);
-            Assert.False(child.IsContradicted);
         }
 
         /// <summary>

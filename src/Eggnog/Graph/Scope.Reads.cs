@@ -9,38 +9,6 @@ namespace Eggnog
     {
 
         /// <summary>
-        /// Gets whether <see cref="EGraph.Contradiction"/> holds here. Always answers, on a stopped scope and on a
-        /// scope under one too: <c>true</c> there (no scope the library makes stops).
-        /// </summary>
-        /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
-        /// <exception cref="InvalidOperationException">The scope is faulted; or it is writable and in use on another
-        /// thread, or has a <c>Write</c> batch open; or the call comes from a primitive, lattice, filter or cost
-        /// function.</exception>
-        /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
-        /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
-        /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>) and the scope,
-        /// which is not frozen, has catch-up work, which takes one: an ancestor that changed since it last caught up, or
-        /// a rebuild of its own that ran out before it finished. The scope is not faulted. A frozen scope, and one with
-        /// nothing to catch up, reads without an epoch.</exception>
-        public bool IsContradictory
-        {
-            get
-            {
-                var held = EnterRead();
-                try
-                {
-                    // A stopped scope, and a scope under one, answer this one read: the stop flag says it is
-                    // contradictory.
-                    return IsStopped || Engine.IsContradictory;
-                }
-                finally
-                {
-                    Exit(held);
-                }
-            }
-        }
-
-        /// <summary>
         /// Gets whether every ground fact holds. Never creates terms and never interns, and holds where egglog's
         /// <c>check</c>, which interns, holds: a value no write interned, a constant or a computation's result,
         /// equals only itself, and as a key is in no row. A scoped view (<c>T.In(tag)</c>) or a <see cref="Fact.In"/> reads the nearest
@@ -59,8 +27,6 @@ namespace Eggnog
         /// batch open; or the call comes from a primitive, lattice, filter or cost function.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
-        /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction, or lies under a
-        /// stopped scope; no scope the library makes stops.</exception>
         /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>) and the scope,
         /// which is not frozen, has catch-up work, which takes one: an ancestor that changed since it last caught up, or
         /// a rebuild of its own that ran out before it finished. The scope is not faulted. A frozen scope, and one with
@@ -70,7 +36,6 @@ namespace Eggnog
             var held = EnterRead();
             try
             {
-                ThrowIfStopped();
                 foreach (var fact in facts)
                     if (TermReader.Check(this, fact ?? throw new ArgumentNullException(nameof(facts), "A fact is null.")) == false)
                         return false;
@@ -99,8 +64,6 @@ namespace Eggnog
         /// use.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
-        /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction, or lies under a
-        /// stopped scope; no scope the library makes stops.</exception>
         /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>) and the scope,
         /// which is not frozen, has catch-up work, which takes one: an ancestor that changed since it last caught up, or
         /// a rebuild of its own that ran out before it finished. The scope is not faulted. A frozen scope, and one with
@@ -129,8 +92,6 @@ namespace Eggnog
         /// use.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
-        /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction, or lies under a
-        /// stopped scope; no scope the library makes stops.</exception>
         /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>) and the scope,
         /// which is not frozen, has catch-up work, which takes one: an ancestor that changed since it last caught up, or
         /// a rebuild of its own that ran out before it finished. The scope is not faulted. A frozen scope, and one with
@@ -141,7 +102,6 @@ namespace Eggnog
             var held = EnterRead();
             try
             {
-                ThrowIfStopped();
                 if (TermReader.TryReadValue(this, term, out var cell, out var unencoded))
                 {
                     value = unencoded is null ? Graph.Values.TypeOf<T>().Decode(cell, this) : (T)unencoded;
@@ -170,8 +130,6 @@ namespace Eggnog
         /// <exception cref="ArgumentException">The class value is not usable in this scope.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
-        /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction, or lies under a
-        /// stopped scope; no scope the library makes stops.</exception>
         /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>) and the scope,
         /// which is not frozen, has catch-up work, which takes one: an ancestor that changed since it last caught up, or
         /// a rebuild of its own that ran out before it finished. The scope is not faulted. A frozen scope, and one with
@@ -181,7 +139,6 @@ namespace Eggnog
             var held = EnterRead();
             try
             {
-                ThrowIfStopped();
                 var cell = ClassChecks.Require(this, value.Id, nameof(value));
                 return TSort.FromId(new ClassId(Engine.Find(cell), Origin));
             }
@@ -205,8 +162,6 @@ namespace Eggnog
         /// <exception cref="ArgumentException">A class value is not usable in this scope.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
-        /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction, or lies under a
-        /// stopped scope; no scope the library makes stops.</exception>
         /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>) and the scope,
         /// which is not frozen, has catch-up work, which takes one: an ancestor that changed since it last caught up, or
         /// a rebuild of its own that ran out before it finished. The scope is not faulted. A frozen scope, and one with
@@ -216,7 +171,6 @@ namespace Eggnog
             var held = EnterRead();
             try
             {
-                ThrowIfStopped();
                 var x = ClassChecks.Require(this, a.Id, nameof(a));
                 var y = ClassChecks.Require(this, b.Id, nameof(b));
                 return Engine.Find(x) == Engine.Find(y);
@@ -241,8 +195,6 @@ namespace Eggnog
         /// <exception cref="ArgumentException">A class value is not usable in this scope.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
-        /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction, or lies under a
-        /// stopped scope; no scope the library makes stops.</exception>
         /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>) and the scope,
         /// which is not frozen, has catch-up work, which takes one: an ancestor that changed since it last caught up, or
         /// a rebuild of its own that ran out before it finished. The scope is not faulted. A frozen scope, and one with
@@ -253,7 +205,6 @@ namespace Eggnog
             var held = EnterRead();
             try
             {
-                ThrowIfStopped();
                 var x = ClassChecks.Require(this, a.Id, nameof(a));
                 return TermReader.TryRead(this, b, out var y) && Engine.Find(x) == y;
             }
@@ -276,8 +227,6 @@ namespace Eggnog
         /// from a primitive, lattice, filter or cost function.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
-        /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction, or lies under a
-        /// stopped scope; no scope the library makes stops.</exception>
         /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>) and the scope,
         /// which is not frozen, has catch-up work, which takes one: an ancestor that changed since it last caught up, or
         /// a rebuild of its own that ran out before it finished. The scope is not faulted. A frozen scope, and one with
@@ -288,7 +237,6 @@ namespace Eggnog
             var held = EnterRead();
             try
             {
-                ThrowIfStopped();
                 return RowReader.Count(this, table);
             }
             finally
@@ -312,8 +260,6 @@ namespace Eggnog
         /// from a primitive, lattice, filter or cost function.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
-        /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction, or lies under a
-        /// stopped scope; no scope the library makes stops.</exception>
         /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>) and the scope,
         /// which is not frozen, has catch-up work, which takes one: an ancestor that changed since it last caught up, or
         /// a rebuild of its own that ran out before it finished. The scope is not faulted. A frozen scope, and one with
@@ -324,7 +270,6 @@ namespace Eggnog
             var held = EnterRead();
             try
             {
-                ThrowIfStopped();
                 return RowReader.Read(this, table);
             }
             finally
@@ -350,8 +295,6 @@ namespace Eggnog
         /// function.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
-        /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction, or lies under a
-        /// stopped scope; no scope the library makes stops.</exception>
         /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>) and the scope,
         /// which is not frozen, has catch-up work, which takes one. The scope is not faulted.</exception>
         public SerializedGraph Serialize(SerializeOptions? options = null)
@@ -369,7 +312,6 @@ namespace Eggnog
             var held = EnterRead();
             try
             {
-                ThrowIfStopped();
                 return GraphSerializer.Serialize(this, options);
             }
             finally
@@ -394,8 +336,6 @@ namespace Eggnog
         /// <exception cref="RuleEvaluationException">A primitive or filter of the query failed; the scope stays usable.
         /// Or a lattice merge threw in the catch-up the call makes first, here or in a writable ancestor: that is a
         /// merge into the scope, so the scope is faulted, and so is the ancestor.</exception>
-        /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction, or lies under a
-        /// stopped scope; no scope the library makes stops.</exception>
         /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>): a query runs as
         /// a rule, here or in a transient child of a frozen scope, and takes an epoch. Nothing is read and the scope is
         /// not faulted, but every later query throws the same way.</exception>
@@ -419,8 +359,6 @@ namespace Eggnog
         /// <exception cref="RuleEvaluationException">A primitive or filter of the query failed; the scope stays usable.
         /// Or a lattice merge threw in the catch-up the call makes first, here or in a writable ancestor: that is a
         /// merge into the scope, so the scope is faulted, and so is the ancestor.</exception>
-        /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction, or lies under a
-        /// stopped scope; no scope the library makes stops.</exception>
         /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>): a query runs as
         /// a rule, here or in a transient child of a frozen scope, and takes an epoch. Nothing is read and the scope is
         /// not faulted, but every later query throws the same way.</exception>
@@ -448,8 +386,6 @@ namespace Eggnog
         /// <exception cref="RuleEvaluationException">A primitive or filter of the query failed; the scope stays usable.
         /// Or a lattice merge threw in the catch-up the call makes first, here or in a writable ancestor: that is a
         /// merge into the scope, so the scope is faulted, and so is the ancestor.</exception>
-        /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction, or lies under a
-        /// stopped scope; no scope the library makes stops.</exception>
         /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>): a query runs as
         /// a rule, here or in a transient child of a frozen scope, and takes an epoch. Nothing is read and the scope is
         /// not faulted, but every later query throws the same way.</exception>
@@ -461,7 +397,6 @@ namespace Eggnog
             var held = EnterRead();
             try
             {
-                ThrowIfStopped();
                 var compiled = query.Compiled;
                 compiled.Acquire();
                 try
@@ -492,7 +427,6 @@ namespace Eggnog
             var held = EnterRead();
             try
             {
-                ThrowIfStopped();
                 return QueryRunner.Run(this, query.Compiled, stopAtFirst, false);
             }
             finally

@@ -233,6 +233,7 @@ namespace Eggnog.Tests.Deletion
             var host = Assert.Throws<InvalidOperationException>(() => t.Root.Delete(t.Num.Of(1L)));
             var run = Assert.Throws<InvalidOperationException>(() => t.Root.Run(t.Rules));
 
+            Assert.StartsWith("Scope 'root' may not delete rows of 'num': ", host.Message, StringComparison.Ordinal);
             Assert.Contains("live descendant", host.Message, StringComparison.Ordinal);
             Assert.Contains("Rule 'drop' deletes rows of 'num'", run.Message, StringComparison.Ordinal);
             Assert.Equal(version, t.Root.Version);
@@ -251,7 +252,8 @@ namespace Eggnog.Tests.Deletion
             t.Rules.DefineRule("drop", r => r.Delete(t.Num.Of(2L)));
             t.Root.Assume(t.Num.Of(1L), t.Num.Of(2L));
             var writable = t.Root.CreateChild();
-            Assert.Throws<InvalidOperationException>(() => writable.Delete(t.Num.Of(1L)));
+            var deletion = Assert.Throws<InvalidOperationException>(() => writable.Delete(t.Num.Of(1L)));
+            Assert.Contains("may not delete rows of 'num': its parent is writable", deletion.Message, StringComparison.Ordinal);
             var refused = Assert.Throws<InvalidOperationException>(() => writable.Run(t.Rules));
             Assert.Contains("its parent is writable", refused.Message, StringComparison.Ordinal);
             Assert.False(writable.IsFaulted);
@@ -270,7 +272,8 @@ namespace Eggnog.Tests.Deletion
 
         /// <summary>
         /// Only the root writes a function whose merge is not a lattice, so a child cannot delete from one either: the
-        /// deletion would hide the row in a layer of the child.
+        /// deletion would hide the row in a layer of the child. A rule local to the child that deletes from one is
+        /// refused as it is defined, since it never runs at the root.
         /// </summary>
         [Fact]
         public void AChildCannotDeleteFromAFunctionWithAMerge()
@@ -284,9 +287,13 @@ namespace Eggnog.Tests.Deletion
 
             var host = Assert.Throws<InvalidOperationException>(() => child.Delete(total.Of("k")));
             var run = Assert.Throws<InvalidOperationException>(() => child.Run(t.Rules));
+            var local = Assert.Throws<RuleDefinitionException>(() =>
+                child.DefineRule(t.Rules, "local reset", r => r.Delete(total.Of("k"))));
 
             Assert.Contains("only the root may write it", host.Message, StringComparison.Ordinal);
             Assert.Contains("only the root may run it", run.Message, StringComparison.Ordinal);
+            Assert.Contains("only the root may write it, and a rule local to", local.Message, StringComparison.Ordinal);
+            Assert.Empty(child.LocalRules);
             Assert.Equal(5L, child.Get(total.Of("k")));
         }
 
@@ -419,17 +426,6 @@ namespace Eggnog.Tests.Deletion
             child.Run(t.Rules);
 
             Assert.False(child.Check(big.Of(5L)));
-        }
-
-        [Fact]
-        public void TheContradictionIsNotDeleted()
-        {
-            var t = new NodeTheory();
-            t.Root.Assume(t.Graph.Contradiction.Of());
-
-            Assert.Throws<ArgumentException>(() => t.Root.Delete(t.Graph.Contradiction.Of()));
-            Assert.Throws<RuleDefinitionException>(() => t.Rules.DefineRule("undo", r => r.Delete(t.Graph.Contradiction.Of())));
-            Assert.True(t.Root.Check(t.Graph.Contradiction.Of()));
         }
     }
 

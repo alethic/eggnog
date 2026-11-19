@@ -11,8 +11,8 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// Tests for egglog-level panics (egglog-bridge/src/lib.rs:1435-1515): the panic functions, the side channel, the
-    /// interning of messages, and how an <see cref="EGraph"/> and its contexts report them, a failure recorded by a run
-    /// that also stopped its context or by the rebuild after a run included.
+    /// interning of messages, and how an <see cref="EGraph"/> and its contexts report them, a failure recorded by the
+    /// merge of a child's run or by the rebuild after a run included.
     /// </summary>
     public class PanicTests
     {
@@ -226,33 +226,37 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A failure recorded by a run that also stopped the context is thrown as <see cref="PanicException"/>; the
-        /// stop does not hide it. In a child that stops on contradictions, a rule derives the contradiction and, in the
-        /// same run, writes an assert-eq conflict.
+        /// A failure a merge records in a child's run is thrown as <see cref="PanicException"/> once the run's writes
+        /// merged: a rule writes an assert-eq conflict and, in the same run, the rows of two nullary relations, one
+        /// declared before the conflicting table and one declared after it, which merges after the table whose merge
+        /// records the failure. Both rows stand, and the child is not faulted.
         /// </summary>
         [Fact]
-        public void APanicInTheRunThatStopsAContextIsThrown()
+        public void AConflictTheMergeOfAChildsRunRecordsIsThrownOnceItsWritesMerged()
         {
             var g = new ContextGraph();
-            g.EGraph.DesignateContradiction(g.Bottom);
             var keyed = AssertEqFunction(g);
+            var late = g.Relation("late");
             var a = g.Root.FreshId();
             g.Root.AddValues([(keyed, [a, g.Int(1)])]);
 
-            var rb = g.EGraph.NewRule("stop-and-conflict", true);
+            var rb = g.EGraph.NewRule("bottom-and-conflict", true);
             var x = rb.NewVar(ColumnTy.Id);
             rb.QueryTable(g.Mark, [x, rb.NewVar(g.UnitType)], false);
             rb.Set(keyed, [x, RuleEntry.Const(g.Int(2), g.I64)]);
             rb.Set(g.Bottom, [RuleEntry.Const(g.Unit, g.UnitType)]);
+            rb.Set(late, [RuleEntry.Const(g.Unit, g.UnitType)]);
             var rule = rb.Build();
             g.Root.Freeze();
 
-            using var stopping = g.Root.CreateChild(new ContextOptions { StopOnContradiction = true });
-            g.Assert(stopping, g.Mark, a);
-            stopping.FlushUpdates();
-            Assert.Throws<PanicException>(() => stopping.RunRules(rule));
-            Assert.True(stopping.IsStopped);
-            Assert.False(stopping.IsFaulted);
+            using var child = g.Root.CreateChild();
+            g.Assert(child, g.Mark, a);
+            child.FlushUpdates();
+            Assert.Throws<PanicException>(() => child.RunRules(rule));
+            Assert.False(child.IsFaulted);
+            Assert.Equal(1, child.TableSize(g.Bottom));
+            Assert.Equal(1, child.TableSize(late));
+            child.CheckInvariants();
         }
 
         /// <summary>

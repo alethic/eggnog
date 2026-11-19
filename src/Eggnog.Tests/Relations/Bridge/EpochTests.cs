@@ -66,7 +66,6 @@ namespace Eggnog.Relations.Tests
             Assert.True(report.Changed);
             Assert.True(report.RebuildChanged);
             Assert.Equal(2, report.RebuildPasses);
-            Assert.False(report.Stopped);
             Assert.Equal(8u, egraph.NextTimestamp);
             var c = egraph.GetCanonInUf(b);
             Assert.Equal(a, c);

@@ -293,6 +293,8 @@ namespace Eggnog.Tests.Rules
             AssertScopedRefused(t, "scoped insert", r => r.Then(t.Fact.In(t.Outer).Of("a")), "'fact @outer' is read-only");
             AssertScopedRefused(t, "scoped write", r => r.Then(t.Best.In(t.Outer).Of("k").Is(1L)), "'best @outer' is read-only");
             AssertScopedRefused(t, "scoped head", r => r.Then(Fact.In(t.Outer, t.Fact.Of("a"))), "head facts are writes; Fact.In('outer') is read-only");
+            AssertScopedRefused(t, "scoped row deletion", r => r.Delete(t.Fact.In(t.Outer).Of("a")), "'fact @outer' is read-only");
+            AssertScopedRefused(t, "scoped deletion", r => r.Delete(t.Best.In(t.Outer).Of("k")), "'best @outer' is read-only");
         }
 
         [Fact]

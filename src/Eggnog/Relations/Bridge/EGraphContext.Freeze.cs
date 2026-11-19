@@ -30,9 +30,8 @@ namespace Eggnog.Relations
         /// <param name="planRules">The rules to plan and warm, or <c>null</c> for every live rule.</param>
         /// <exception cref="ArgumentException">A rule in <paramref name="planRules"/> is not registered.</exception>
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
-        /// <exception cref="InvalidOperationException">The parent is not frozen; the context is faulted or stopped (or its
-        /// rebuild stopped it); the call comes from inside another operation of the same thread domain; or the domain is
-        /// held by another thread.</exception>
+        /// <exception cref="InvalidOperationException">The parent is not frozen; the context is faulted; the call comes
+        /// from inside another operation of the same thread domain; or the domain is held by another thread.</exception>
         /// <exception cref="PanicException">A failure was recorded (before the call, or by the flush or the
         /// rebuild).</exception>
         public void Freeze(IReadOnlyCollection<EGraphRuleId>? planRules = null)
@@ -42,7 +41,6 @@ namespace Eggnog.Relations
 
             context.ThrowIfDisposed();
             context.ThrowIfFaulted();
-            context.ThrowIfContradicted();
             ThrowIfReentrant(nameof(Freeze));
             if (parent is { IsFrozen: false })
                 throw new InvalidOperationException("A context can be frozen only once its parent is.");
@@ -64,7 +62,6 @@ namespace Eggnog.Relations
                 FlushCore(throwOnFailure: true);
 
             context.Rebuild();
-            context.ThrowIfContradicted();
             if (TakeFailure(out var message))
                 throw new PanicException(message);
 

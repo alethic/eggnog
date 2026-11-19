@@ -41,9 +41,9 @@ namespace Eggnog.Relations
         /// <param name="action">The batch: stages writes through the state it is given.</param>
         /// <returns>The action's result.</returns>
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
-        /// <exception cref="InvalidOperationException">The context is frozen, faulted or contradicted; its domain is held
-        /// by another thread; or the call comes from inside a write batch's action or another callback of the same
-        /// domain (<see cref="ThreadAffinityGuard.InCallback"/>).</exception>
+        /// <exception cref="InvalidOperationException">The context is frozen or faulted; its domain is held by another
+        /// thread; or the call comes from inside a write batch's action or another callback of the same domain
+        /// (<see cref="ThreadAffinityGuard.InCallback"/>).</exception>
         public TResult Write<TResult>(Func<ExecutionState, TResult> action)
         {
             ArgumentNullException.ThrowIfNull(action);
@@ -110,19 +110,13 @@ namespace Eggnog.Relations
         /// child's own pending rebuild work (unions merged since its last rebuild, and the ancestor containers its scan
         /// kept for the catch-up) is left for <see cref="Rebuild"/>. Nothing at the root.
         /// </summary>
-        /// <exception cref="InvalidOperationException">The parent was stopped by a contradiction: a child that stops on
-        /// contradictions is then stopped, any other is refused; neither is faulted.</exception>
         internal void PrepareForWrite()
         {
             if (parent is null)
                 return;
 
             if (parent.IsFrozen == false)
-            {
                 parent.Rebuild();
-                StopIfParentStopped(parent);
-                ThrowIfContradicted();
-            }
 
             if (IsUnionFindCurrent == false || tables!.NeedsCatchUp)
                 Rebuild();
@@ -141,10 +135,10 @@ namespace Eggnog.Relations
         /// </remarks>
         /// <param name="table">The table.</param>
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
-        /// <exception cref="InvalidOperationException">The context is frozen, faulted or contradicted; the clear is
-        /// refused (by the retraction guard, or because the table's merge is not a lattice merge, which only the root
-        /// may write); the domain is held by another thread; or the call comes from inside a write batch's action or
-        /// another callback of the same domain (<see cref="ThreadAffinityGuard.InCallback"/>).</exception>
+        /// <exception cref="InvalidOperationException">The context is frozen or faulted; the clear is refused (by the
+        /// retraction guard, or because the table's merge is not a lattice merge, which only the root may write); the
+        /// domain is held by another thread; or the call comes from inside a write batch's action or another callback
+        /// of the same domain (<see cref="ThreadAffinityGuard.InCallback"/>).</exception>
         public void ClearTable(TableId table)
         {
             ThrowIfNotWritable();

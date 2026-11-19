@@ -42,7 +42,6 @@ namespace Eggnog.Relations.Tests
         {
             var store = new Store(ParallelHeuristics.Serial);
             var bottom = store.AddTable(Relation(0), name: "bottom");
-            store.DesignateContradiction(bottom);
             var values = store.AddTable(ValueOnly(), name: "values");
             var f = store.AddTable(MaxFunction(1), name: "f");
             var root = store.Root;
@@ -74,7 +73,7 @@ namespace Eggnog.Relations.Tests
             Assert.True(child.Tables!.TryGetLayer(values)!.Own.IsShared);
             Assert.Null(child.Tables.TryGetLayer(values)!.Own.RebuildIndex);
             Assert.NotNull(child.Tables.TryGetLayer(f)!.Own.RebuildIndex);
-            Assert.True(child.IsContradictory);
+            Assert.NotNull(Row(child, bottom));
             Assert.Equal(20u, Row(child, values, 1)![1]);
 
             // Frozen databases refuse every write; the frozen views fold every hide.
@@ -393,9 +392,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Freezing refuses a writable parent, a stopped or faulted context and a failure nobody took, and changes
-        /// nothing; a second freeze is a no-op; freezing a context with live children is allowed, and the children
-        /// catch up once.
+        /// Freezing refuses a writable parent, a faulted context and a failure nobody took, and changes nothing; a
+        /// second freeze is a no-op; freezing a context with live children is allowed, and the children catch up once.
         /// </summary>
         [Fact]
         public void FreezeRefusesWhatItCannotShare()

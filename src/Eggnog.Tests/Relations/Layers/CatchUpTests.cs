@@ -10,23 +10,12 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// Tests for the catch-up of ancestor rows, one per branch: (a) a row naming an id not canonical in the child, (b)
-    /// a row whose key the child holds, (c′) a row stamped below the child's semi-naive floor, (c) a row visible as it
-    /// is; plus the contradiction trigger, the generation check, the cursors, an ancestor change that only tombstones,
-    /// a parent that wrote and froze, and the refusal to catch up with a parent a contradiction stopped.
+    /// a row whose key the child holds, the empty key of a nullary relation included, (c′) a row stamped below the
+    /// child's semi-naive floor, (c) a row visible as it is; plus the generation check, the cursors, a grandchild under
+    /// two unsettled ancestors, a table added after the child, and a parent that wrote and froze.
     /// </summary>
     public class CatchUpTests
     {
-
-        readonly ITestOutputHelper output;
-
-        /// <summary>
-        /// Initializes a new instance.
-        /// </summary>
-        /// <param name="output">The test output.</param>
-        public CatchUpTests(ITestOutputHelper output)
-        {
-            this.output = output;
-        }
 
         /// <summary>
         /// (a): an ancestor appends a row naming an id the child displaced; the child copies it canonically and hides
@@ -87,6 +76,37 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(2, statistics.RowsCopied);
             Assert.Equal(2, child.GetView(f).VisibleCount);
             Assert.Equal(3u, Row(root, f, a)![1]);
+            child.CheckInvariants();
+            LookupPaths.Check(child);
+        }
+
+        /// <summary>
+        /// (b) under the empty key of a nullary relation: a child that holds the relation's one row when its ancestor
+        /// writes it sees the row once. So does a child that writes the row after its ancestor did, as its write first
+        /// catches up and sees the ancestor's row.
+        /// </summary>
+        /// <param name="childFirst">Whether the child writes the row before the ancestor does.</param>
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void ANullaryRowTheChildAndItsAncestorBothWriteIsSeenOnce(bool childFirst)
+        {
+            var store = new Store(ParallelHeuristics.Serial);
+            var flag = store.AddTable(Relation(0), name: "flag");
+            var root = store.Root;
+            var child = root.CreateChild();
+            if (childFirst)
+                Insert(child, flag, 0);
+
+            Insert(root, flag, 0);
+            if (childFirst == false)
+                Insert(child, flag, 0);
+
+            child.Rebuild();
+
+            Assert.NotNull(Row(child, flag));
+            Assert.Equal(1, child.GetView(flag).VisibleCount);
+            Assert.NotNull(Row(root, flag));
             child.CheckInvariants();
             LookupPaths.Check(child);
         }
@@ -158,45 +178,6 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(0, layer);
             Assert.Equal(created + 5, Row(child, f, b)![2]);
             child.CheckInvariants();
-        }
-
-        /// <summary>
-        /// A child that stops on contradictions, whose ancestor asserts the contradiction, catches it up and stops,
-        /// unfaulted, and its change stamp moves; it then answers only <see cref="Context.IsContradictory"/>. The stop
-        /// ends the catch-up: a row naming the child's loser in a table the catch-up reads after the contradiction
-        /// table, which it would copy into a new layer of the child, is not read.
-        /// </summary>
-        [Fact]
-        public void AStoppingChildStopsWhenItCatchesUpAContradiction()
-        {
-            var store = new Store(ParallelHeuristics.Serial);
-            var bottom = store.AddTable(Relation(0), name: "bottom");
-            store.DesignateContradiction(bottom);
-            var g = store.AddTable(Relation(2), name: "g");
-            var root = store.Root;
-            var a = root.NewId();
-            var b = root.NewId();
-            var plain = root.CreateChild();
-            var stopping = root.CreateChild(new ContextOptions { StopOnContradiction = true });
-            stopping.Union(a, b);
-            stopping.Rebuild();
-
-            // The contradiction row, then, in a table the catch-up reads after it, a row naming the loser b.
-            Insert(root, bottom, 0);
-            Insert(root, g, b, b, 0);
-            var before = stopping.Version;
-            stopping.Rebuild();
-            Assert.True(stopping.IsContradicted);
-            Assert.False(stopping.IsFaulted);
-            Assert.True(stopping.Version > before, "the stop moved the change stamp");
-            Assert.True(stopping.IsContradictory);
-            Assert.Throws<InvalidOperationException>(() => stopping.Find(a));
-
-            // Without the option, the contradiction is an ordinary fact.
-            plain.Rebuild();
-            Assert.False(plain.IsContradicted);
-            Assert.True(plain.IsContradictory);
-            Assert.Equal(a, plain.Find(a));
         }
 
         /// <summary>
@@ -354,102 +335,6 @@ namespace Eggnog.Relations.Tests
             Assert.True(child.IsFrozen);
             Assert.Equal(1u, Row(child, f, a)![1]);
             Assert.Equal(0, child.Tables!.Statistics.RowsCopied);
-        }
-
-        /// <summary>
-        /// A child of a context that a contradiction stopped: the stopped context answers only <c>IsContradicted</c>
-        /// and stays as its merge left it (writes pending). A child catches up only with a parent that is frozen or
-        /// clean, so its rebuild is refused cleanly with <see cref="InvalidOperationException"/>, before any pass: it
-        /// neither trips the debug assertion of <c>CatchUpUnionFind</c> (a process crash without a listener) nor runs
-        /// passes it can never become clean through.
-        /// </summary>
-        [Fact]
-        public void AChildOfAStoppedContextIsNotCaughtUpWithItsUncleanParent()
-        {
-            var store = new Store(ParallelHeuristics.Serial);
-            var bottom = store.AddTable(Relation(0), name: "bottom");
-            store.DesignateContradiction(bottom);
-            var g = store.AddTable(Constructor(store), [], [store.UnionFindTable], "g");
-            var root = store.Root;
-            var a = root.NewId();
-            var x = root.NewId();
-            var y = root.NewId();
-            Insert(root, g, a, x, 0);
-            root.Freeze();
-
-            var stopping = root.CreateChild(new ContextOptions { StopOnContradiction = true });
-            var child = stopping.CreateChild();
-
-            // The stopping context stops with the union x = y staged and unmerged.
-            stopping.Write(state =>
-            {
-                state.StageInsert(bottom, [state.Timestamp]);
-                state.StageInsert(g, [a, y, state.Timestamp]);
-                return 0;
-            });
-            Assert.True(stopping.IsContradicted);
-            Assert.False(stopping.IsClean);
-
-            using var scope = new DebugAssertScope();
-            Exception? thrown = null;
-            try
-            {
-                child.Rebuild();
-            }
-            catch (Exception e)
-            {
-                thrown = e;
-            }
-
-            output.WriteLine($"child.Rebuild() threw {thrown?.GetType().Name}: {thrown?.Message}");
-            Assert.False(thrown is DebugAssertFailedException, $"the child caught up with a stopped, unclean parent: {thrown?.Message}");
-            Assert.True(thrown is InvalidOperationException, "the child of a stopped context should be refused");
-        }
-
-        /// <summary>
-        /// The same with no assertion to trip, as in a release build: the child of the stopped context is refused
-        /// cleanly and not faulted (or is clean), rather than running passes on every <c>Rebuild</c> (each taking an
-        /// epoch) that never make it clean, while accepting writes that merge against the half-merged parent.
-        /// </summary>
-        [Fact]
-        public void AChildOfAStoppedContextIsNeitherRefusedNorEverClean()
-        {
-            var store = new Store(ParallelHeuristics.Serial);
-            var bottom = store.AddTable(Relation(0), name: "bottom");
-            store.DesignateContradiction(bottom);
-            var g = store.AddTable(Constructor(store), [], [store.UnionFindTable], "g");
-            var root = store.Root;
-            var a = root.NewId();
-            var x = root.NewId();
-            var y = root.NewId();
-            Insert(root, g, a, x, 0);
-            root.Freeze();
-
-            var stopping = root.CreateChild(new ContextOptions { StopOnContradiction = true });
-            var child = stopping.CreateChild();
-            stopping.Write(state =>
-            {
-                state.StageInsert(bottom, [state.Timestamp]);
-                state.StageInsert(g, [a, y, state.Timestamp]);
-                return 0;
-            });
-
-            using var scope = new DebugAssertScope();
-            var clock = store.ReadClock();
-            Exception? first = null;
-            try
-            {
-                child.Rebuild();
-                child.Rebuild();
-            }
-            catch (Exception e)
-            {
-                first = e;
-            }
-
-            output.WriteLine($"threw: {first?.GetType().Name}: {first?.Message}; clean: {child.IsClean}; faulted: {child.IsFaulted}; clock {clock} -> {store.ReadClock()}");
-            var refusedCleanly = first is InvalidOperationException && first is not DebugAssertFailedException && child.IsFaulted == false;
-            Assert.True(refusedCleanly || child.IsClean, "the child of a stopped context is neither refused nor ever clean");
         }
 
     }

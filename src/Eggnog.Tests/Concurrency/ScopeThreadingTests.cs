@@ -373,7 +373,6 @@ namespace Eggnog.Tests.Concurrency
                     ("Any", () => scope.Any(nums)),
                     ("Count", () => scope.Count(nums)),
                     ("ForEachMatch", () => scope.ForEachMatch(nums, _ => true)),
-                    ("IsContradictory", () => _ = scope.IsContradictory),
                     ("CreateChild", () => scope.CreateChild()),
                     ("CreateExtractor", () => scope.CreateExtractor()),
                     ("DefineRule", () => scope.DefineRule(noRules, "late", r =>

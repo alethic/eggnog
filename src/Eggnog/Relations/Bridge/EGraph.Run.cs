@@ -51,8 +51,8 @@ namespace Eggnog.Relations
         /// <param name="runRuleSet">Runs the rule set against the root database at the given timestamp and merges its
         /// writes.</param>
         /// <returns>The report.</returns>
-        /// <exception cref="InvalidOperationException">The root is frozen, faulted or contradicted; its domain is held by
-        /// another thread; or the call comes from inside a callback of the root's domain.</exception>
+        /// <exception cref="InvalidOperationException">The root is frozen or faulted; its domain is held by another
+        /// thread; or the call comes from inside a callback of the root's domain.</exception>
         /// <exception cref="PanicException">A panic was recorded.</exception>
         internal IterationReport RunIteration(Func<uint, RuleSetReport> runRuleSet)
         {
@@ -89,7 +89,7 @@ namespace Eggnog.Relations
             }
 
             ThrowIfPanicked();
-            return new IterationReport(report, rebuildTime, rebuildChanged, context.LastRebuildPasses, false);
+            return new IterationReport(report, rebuildTime, rebuildChanged, context.LastRebuildPasses);
         }
 
         /// <summary>

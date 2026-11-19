@@ -6,14 +6,13 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// What every context of a store knows about one function table, independent of any context's rows: its id and
-    /// name, the root's table and <see cref="TableInfo"/>, whether it is context-private or the store's contradiction
-    /// table, its stratum, and the shape every layer of it shares.
+    /// name, the root's table and <see cref="TableInfo"/>, whether it is context-private, its stratum, and the shape
+    /// every layer of it shares.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Built once by <see cref="LayeredSchema.Register"/> and immutable afterwards, apart from
-    /// <see cref="IsContradiction"/>, which <see cref="Store.DesignateContradiction"/> sets once. Child databases
-    /// answer schema questions from it instead of from their own table maps, which hold only their own layers.
+    /// Built once by <see cref="LayeredSchema.Register"/> and immutable afterwards. Child databases answer schema
+    /// questions from it instead of from their own table maps, which hold only their own layers.
     /// </para>
     /// <para>
     /// <see cref="RootInfo"/> is the root database's entry held by reference, so it stays valid while the root takes
@@ -22,8 +21,6 @@ namespace Eggnog.Relations
     /// </remarks>
     internal sealed class LayeredTableSchema
     {
-
-        volatile bool isContradiction;
 
         /// <summary>
         /// Initializes the schema of table <paramref name="id"/>.
@@ -67,11 +64,6 @@ namespace Eggnog.Relations
         /// retraction and compaction gates.
         /// </summary>
         public bool IsContextPrivate { get; }
-
-        /// <summary>
-        /// Gets whether the table is the store's designated contradiction table, a nullary relation.
-        /// </summary>
-        public bool IsContradiction => isContradiction;
 
         /// <summary>
         /// Gets the table's merge stratum (<see cref="DependencyGraph.LevelOf"/>).
@@ -129,11 +121,6 @@ namespace Eggnog.Relations
             FunctionTableMerge { Output.Kind: MergeFnKind.UnionId } function => function.Math.OutputColumn,
             _ => -1,
         };
-
-        /// <summary>
-        /// Marks the table as the store's contradiction table.
-        /// </summary>
-        internal void MarkContradiction() => isContradiction = true;
 
     }
 

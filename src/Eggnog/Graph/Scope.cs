@@ -32,16 +32,13 @@ namespace Eggnog
     /// scope first catches it up: it brings the rows the scope holds itself (its own rows, as against those it reads
     /// from its ancestors) in line with what a writable ancestor wrote since. The catch-up merges into the scope, so a
     /// lattice merge can run in it, and an exception it throws faults the scope and the ancestor: this is the
-    /// "catch-up the call makes first" of the members' exception clauses. A scoped read (<c>T.In(tag)</c>) in a rule
-    /// or query reads a mirror: an internal copy of the table that copy rules keep equal to the view of the nearest
-    /// ancestor-or-self carrying the tag, synced just before a rule, query or freeze reads it.
-    /// </para>
-    /// <para>
-    /// A contradictory scope (<see cref="IsContradictory"/>) stays fully usable: <see cref="EGraph.Contradiction"/> is
-    /// an ordinary fact, and a run that stops on it (<see cref="RunOptions.StopOnContradiction"/>) skips its steps once
-    /// the scope is contradictory, and leaves the scope as it is. No scope the library makes stops, so the members'
-    /// clauses on a scope whose contradiction stopped it, or a scope under one
-    /// (<see cref="ScopeContradictedException"/>), never apply.
+    /// "catch-up the call makes first" of the members' exception clauses. <see cref="DefineRule"/>,
+    /// <see cref="DefineBiRewrite{TSort}"/> and the queries of an <see cref="Extractor"/> make it only while the
+    /// scope's parent is writable: a child of a frozen scope that still owes the catch-up for what its ancestors wrote
+    /// before they froze makes it at its next read, write, run, <see cref="CreateChild"/> or <see cref="Freeze"/>. A
+    /// scoped read (<c>T.In(tag)</c>) in a rule or query reads a mirror: an internal copy of the table that copy rules
+    /// keep equal to the view of the nearest ancestor-or-self carrying the tag, synced just before a rule, query or
+    /// freeze reads it.
     /// </para>
     /// <para>
     /// Every member that enters the scope (its reads, writes, runs, extraction and tree operations) throws
@@ -268,71 +265,20 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets the stopped scope this scope is or lies under: this scope when its contradiction stopped it, else the
-        /// nearest writable ancestor that is one; <c>null</c> when there is none. A scope under a stopped scope has no
-        /// model either, and the engine refuses to catch it up with its stopped ancestor, so it answers as the stopped
-        /// scope does. Current once the scope has caught up (<see cref="CatchUp"/>).
+        /// Brings a scope whose parent is writable up to date, for the entry points that enter without a catch-up
+        /// (<see cref="DefineRule"/>, <see cref="DefineBiRewrite{TSort}"/>, <see cref="Freeze"/>, and the queries of an
+        /// <see cref="Extractor"/> of a writable scope), so that they report a failure of the catch-up as a read does.
+        /// The root, and a scope whose parent is frozen, are not caught up here: <see cref="DefineRule"/>,
+        /// <see cref="DefineBiRewrite{TSort}"/> and an extractor's queries leave the catch-up a child of a frozen scope
+        /// owes for what its ancestors wrote before they froze, and its failure, to the child's next read, write, run,
+        /// <see cref="CreateChild"/> or <see cref="Freeze"/>. Called on the domain's thread, with its guard held.
         /// </summary>
-        /// <remarks>
-        /// Cost: one volatile read per scope from here up to the first frozen one or the root; one at the root, and at a
-        /// child of a frozen scope. A frozen scope is never stopped or under a stopped scope: a stopped scope cannot
-        /// freeze, and only a scope whose parent is frozen can freeze.
-        /// </remarks>
-        internal Scope? StoppedCase
-        {
-            get
-            {
-                for (var scope = this; ;)
-                {
-                    if (scope.Engine.IsStopped)
-                        return scope;
-
-                    if (scope.Parent is not { IsFrozen: false } parent)
-                        return null;
-
-                    scope = parent;
-                }
-            }
-        }
-
-        /// <summary>
-        /// Gets whether the scope has no model because it is, or lies under, a stopped scope
-        /// (<see cref="StoppedCase"/>).
-        /// </summary>
-        internal bool IsStopped => StoppedCase is not null;
-
-        /// <summary>
-        /// Throws <see cref="ScopeContradictedException"/> when the scope's contradiction stopped it, or it lies under
-        /// a stopped scope: every entry point that needs a model checks it after <see cref="ThrowIfNotUsable"/> and the
-        /// catch-up of its entry. One volatile read per writable scope up to the first frozen one
-        /// (<see cref="StoppedCase"/>).
-        /// </summary>
-        /// <exception cref="ScopeContradictedException">The scope is stopped, or lies under a stopped
-        /// scope.</exception>
-        internal void ThrowIfStopped()
-        {
-            if (StoppedCase is { } stopped)
-                throw ReferenceEquals(stopped, this) ? new ScopeContradictedException(Path) : new ScopeContradictedException(Path, stopped.Path);
-        }
-
-        /// <summary>
-        /// Brings the scope up to date, then throws <see cref="ScopeContradictedException"/> when that left it stopped:
-        /// for the entry points that enter without a catch-up (<see cref="DefineRule"/>, <see cref="Freeze"/>, and the
-        /// queries of an <see cref="Extractor"/> of a writable scope), so that a scope stopped through its parent since
-        /// its last call answers as stopped. A scope whose parent is frozen, or the root, is never under a stopped
-        /// scope and is not caught up here. Called on the domain's thread, with its guard held.
-        /// </summary>
-        /// <exception cref="ScopeContradictedException">The scope is stopped, or lies under a stopped
-        /// scope.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge the catch-up ran threw, in this scope or a writable
         /// ancestor, or a failure the catch-up's flush recorded; the scope is faulted.</exception>
-        internal void CatchUpAndThrowIfStopped()
+        internal void CatchUpUnderWritableParent()
         {
             if (Parent is not { IsFrozen: false })
-            {
-                ThrowIfStopped();
                 return;
-            }
 
             Runtime.TakeFailure();
             try
@@ -343,8 +289,6 @@ namespace Eggnog
             {
                 throw FaultWith(panic);
             }
-
-            ThrowIfStopped();
         }
 
         /// <summary>
@@ -385,21 +329,15 @@ namespace Eggnog
         /// <exception cref="RuleEvaluationException">A merge of a scope's catch-up recorded a failure: a lattice delegate that
         /// threw while the rebuild merged an ancestor's rows into that scope's layer, which the engine records and does not
         /// throw. The scope whose catch-up failed and this scope are faulted with it; the walk stops there.</exception>
-        /// <remarks>
-        /// A scope under a stopped scope is not caught up: the engine refuses to catch a context up with a stopped
-        /// parent unless it stops too, and such a scope has no model anyway, so it answers as stopped
-        /// (<see cref="StoppedCase"/>). The walk stops at the first stopped ancestor.
-        /// </remarks>
         internal void CatchUp() => CatchUpCore(this);
 
         /// <summary>
         /// Brings the scope up to date as <see cref="CatchUp"/> describes.
         /// </summary>
         /// <param name="called">The scope the call was made on: this scope or a descendant in its thread domain.</param>
-        /// <returns>Whether the scope is stopped or lies under a stopped scope, once caught up.</returns>
         /// <exception cref="RuleEvaluationException">A merge of this scope's catch-up, or of an ancestor's, recorded a
         /// failure; the scope where it happened and <paramref name="called"/> are faulted.</exception>
-        bool CatchUpCore(Scope called)
+        void CatchUpCore(Scope called)
         {
             // The writable scopes from here up, caught up root first in a loop rather than by a recursion through the
             // parent, so a chain of any depth needs no more stack than one level.
@@ -408,7 +346,10 @@ namespace Eggnog
                 count++;
 
             if (count == 1)
-                return CatchUpLevel(called);
+            {
+                CatchUpLevel(called);
+                return;
+            }
 
             var chain = ArrayPool<Scope>.Shared.Rent(count);
             try
@@ -417,12 +358,8 @@ namespace Eggnog
                 for (var i = count - 1; i >= 0; i--, at = at.Parent!)
                     chain[i] = at;
 
-                // A stopped ancestor cannot be caught up with, and leaves the scopes below it without a model.
                 for (var i = 0; i < count; i++)
-                    if (chain[i].CatchUpLevel(called))
-                        return true;
-
-                return false;
+                    chain[i].CatchUpLevel(called);
             }
             finally
             {
@@ -436,17 +373,18 @@ namespace Eggnog
         /// <see cref="CatchUpCore"/>'s walk.
         /// </summary>
         /// <param name="called">The scope the call was made on.</param>
-        /// <returns>Whether the scope is stopped or lies under a stopped scope, once caught up.</returns>
         /// <exception cref="RuleEvaluationException">A merge of this scope's catch-up recorded a failure; the scope and
         /// <paramref name="called"/> are faulted.</exception>
-        bool CatchUpLevel(Scope called)
+        void CatchUpLevel(Scope called)
         {
-            // The root is never behind its own writes: every flush there rebuilds and takes what its merges recorded, so its
-            // catch-up records nothing and is not checked.
+            // The root is behind its own writes only after a rebuild that ran out of epochs before it finished: every
+            // other flush there rebuilds to the end and takes what its merges recorded. Its catch-up is then that
+            // rebuild, which throws OverflowException, since the epochs never come back: it records nothing and is not
+            // checked.
             if (IsRoot)
             {
                 Engine.EnsureClean();
-                return false;
+                return;
             }
 
             // The walk has just brought every writable ancestor up to date, root first, so only this level is left.
@@ -460,8 +398,6 @@ namespace Eggnog
             // failure is taken here, at the call that ran the merge, rather than left for the scope's next write.
             if (Engine.TryTakeRecordedFailure(out var message))
                 throw FaultCatchUp(message, called);
-
-            return Engine.IsStopped;
         }
 
         /// <summary>

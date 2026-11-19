@@ -225,7 +225,7 @@ namespace Eggnog.Tests.Differential
         /// <returns>The facts.</returns>
         static CaseRuleFacts Read(PredicateTheory c, Scope scope, CaseRuleProgram program)
         {
-            var facts = new CaseRuleFacts { Contradictory = scope.IsContradictory };
+            var facts = new CaseRuleFacts { Contradictory = c.IsContradictory(scope) };
             foreach (var path in program.Discriminators.SelectMany(d => CaseRuleProgram.Governed(d.Path).Prepend(d.Path)))
             {
                 if (scope.Check(c.Present.Of(path)))

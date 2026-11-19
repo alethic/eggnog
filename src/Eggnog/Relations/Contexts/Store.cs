@@ -270,20 +270,6 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Designates <paramref name="table"/>, a registered nullary relation, as the store's contradiction table. Once
-        /// per store.
-        /// </summary>
-        /// <param name="table">The table.</param>
-        /// <exception cref="InvalidOperationException">A contradiction table is designated already.</exception>
-        /// <exception cref="ArgumentException">The table has key columns.</exception>
-        /// <exception cref="System.Collections.Generic.KeyNotFoundException">The table is not registered.</exception>
-        public void DesignateContradiction(TableId table)
-        {
-            lock (definitionLock)
-                Schema.DesignateContradiction(table);
-        }
-
-        /// <summary>
         /// Records that a child context has been created, which seals the counters.
         /// </summary>
         internal void NoteChildCreated() => hasHadChildren = true;

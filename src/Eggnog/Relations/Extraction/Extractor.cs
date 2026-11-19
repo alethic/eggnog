@@ -322,8 +322,8 @@ namespace Eggnog.Relations
         /// <returns>The extractor.</returns>
         /// <exception cref="ArgumentException">The context belongs to another e-graph.</exception>
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
-        /// <exception cref="InvalidOperationException">The context is faulted, stopped or not clean, or its domain is held
-        /// by another thread.</exception>
+        /// <exception cref="InvalidOperationException">The context is faulted or not clean, or its domain is held by
+        /// another thread.</exception>
         public static Extractor CreateOnDemand(ExtractionSchema schema, EGraphContext context, CostModel? costs = null, ExtractionOptions? options = null)
         {
             ArgumentNullException.ThrowIfNull(schema);
@@ -636,8 +636,8 @@ namespace Eggnog.Relations
         /// </summary>
         /// <returns>The query's hold on the context's thread domain, to dispose when the query ends.</returns>
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
-        /// <exception cref="InvalidOperationException">The extractor is stale or broken, the context is faulted or stopped,
-        /// or its domain is held by another thread.</exception>
+        /// <exception cref="InvalidOperationException">The extractor is stale or broken, the context is faulted, or its
+        /// domain is held by another thread.</exception>
         ExtractionQueryScope Enter()
         {
             if (busy)

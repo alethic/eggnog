@@ -387,23 +387,6 @@ namespace Eggnog.Tests.Diagnostics
         }
 
         /// <summary>
-        /// egglog has no contradiction relation, so the built-in one is left out, rows and all, and counts toward no limit.
-        /// </summary>
-        [Fact]
-        public void TheContradictionRelationIsLeftOut()
-        {
-            var graph = new EGraph();
-            var r = graph.DefineRelation<long>("R");
-            graph.Root.Assume(graph.Contradiction.Of(), r.Of(1L));
-
-            var serialized = graph.Root.Serialize(new SerializeOptions { MaxTables = 1 });
-
-            Assert.True(serialized.IsComplete);
-            Assert.DoesNotContain(serialized.Nodes, n => n.Op == "contradiction");
-            Assert.Contains(serialized.Nodes, n => n.Op == "R");
-        }
-
-        /// <summary>
         /// The JSON escapes what serde_json escapes and nothing more: the quote, the backslash and the control characters
         /// below U+0020, in lowercase hex where they have no short form; an emoji stays as it is.
         /// </summary>

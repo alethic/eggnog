@@ -22,18 +22,6 @@ namespace Eggnog
         public abstract long Version { get; }
 
         /// <summary>
-        /// Gets whether the graph's <see cref="EGraph.Contradiction"/> holds in the scope.
-        /// </summary>
-        public abstract bool IsContradictory { get; }
-
-        /// <summary>
-        /// Gets whether the scope's contradiction set its stop flag: it has no model, the engine refuses every read but
-        /// whether it is contradictory, and its writes and runs are no-ops. Only a context made to stop on
-        /// contradiction can stop, and no scope's context is. One volatile read.
-        /// </summary>
-        public abstract bool IsStopped { get; }
-
-        /// <summary>
         /// Gets the number of rows in the scope's own layers, the engine's row-count estimate (the context database's
         /// <c>TotalSizeEstimate</c>): what <see cref="RunOptions.RowLimit"/> bounds. O(1).
         /// </summary>
@@ -289,7 +277,7 @@ namespace Eggnog
         /// </summary>
         /// <param name="options">The child's options.</param>
         /// <returns>The child's engine side.</returns>
-        /// <exception cref="InvalidOperationException">The context is faulted or stopped.</exception>
+        /// <exception cref="InvalidOperationException">The context is faulted.</exception>
         /// <exception cref="Relations.PanicException">A failure was recorded on this context.</exception>
         public abstract ContextEngineScope CreateChild(Relations.ContextOptions options);
 

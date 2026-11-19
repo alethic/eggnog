@@ -149,12 +149,6 @@ namespace Eggnog.Relations
             dirty = default;
             while (true)
             {
-                if (contradicted)
-                {
-                    found.Clear();
-                    return default;
-                }
-
                 var summary = containerLayers!.RebuildPass(epoch, inherited);
                 inherited = null;
                 if (summary.Changed)

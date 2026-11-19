@@ -157,9 +157,8 @@ namespace Eggnog.Relations
         /// </summary>
         /// <param name="table">The table staged into.</param>
         /// <returns>The table.</returns>
-        /// <exception cref="InvalidOperationException">The layer cannot be created: the context is frozen, disposed,
-        /// faulted or contradicted, or the table's merge is not a lattice merge, which only the root may
-        /// write.</exception>
+        /// <exception cref="InvalidOperationException">The layer cannot be created: the context is frozen, disposed or
+        /// faulted, or the table's merge is not a lattice merge, which only the root may write.</exception>
         /// <exception cref="KeyNotFoundException">The table is not registered with the store.</exception>
         internal Table ResolveForStaging(TableId table)
         {
@@ -185,9 +184,9 @@ namespace Eggnog.Relations
         /// </summary>
         /// <param name="table">The table.</param>
         /// <returns>The layer.</returns>
-        /// <exception cref="InvalidOperationException">The layer cannot be created: the context is frozen, disposed,
-        /// faulted or contradicted, or the table is shared and its merge is not a lattice merge, which only the root
-        /// may write (copying a row on touch counts as a write).</exception>
+        /// <exception cref="InvalidOperationException">The layer cannot be created: the context is frozen, disposed or
+        /// faulted, or the table is shared and its merge is not a lattice merge, which only the root may write (copying
+        /// a row on touch counts as a write).</exception>
         /// <exception cref="KeyNotFoundException">The table is not registered with the store.</exception>
         internal TableLayer GetOrCreateLayer(TableId table)
         {
@@ -367,7 +366,6 @@ namespace Eggnog.Relations
 
                 owner.ThrowIfDisposed();
                 owner.ThrowIfFaulted();
-                owner.ThrowIfContradicted();
                 var s = schema[table] ?? throw new KeyNotFoundException($"Table {table} is not registered with the store.");
                 if (s.IsLattice == false && s.IsContextPrivate == false)
                     ThrowNotLattice(s);

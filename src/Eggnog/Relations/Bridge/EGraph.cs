@@ -24,10 +24,10 @@ namespace Eggnog.Relations
     /// </para>
     /// <para>
     /// Definitions and contexts. The e-graph holds the definitions: functions, rules (a <see cref="RuleTable"/>),
-    /// panic functions, the contradiction function, and context-local slots. Everything a context runs, writes and reads
-    /// lives in an <see cref="EGraphContext"/>: <see cref="Root"/>, and the children created from it. The root-only
-    /// egglog API of this type (<see cref="RunRules"/>, <see cref="FlushUpdates"/>, <see cref="AddValues"/>,
-    /// <see cref="AddTerm"/>, <see cref="LookupId"/>, <see cref="TableSize"/>, <see cref="ForEach(FunctionId, FunctionRowCallback)"/>,
+    /// panic functions and context-local slots. Everything a context runs, writes and reads lives in an
+    /// <see cref="EGraphContext"/>: <see cref="Root"/>, and the children created from it. The root-only egglog API of
+    /// this type (<see cref="RunRules"/>, <see cref="FlushUpdates"/>, <see cref="AddValues"/>, <see cref="AddTerm"/>,
+    /// <see cref="LookupId"/>, <see cref="TableSize"/>, <see cref="ForEach(FunctionId, FunctionRowCallback)"/>,
     /// <see cref="WithExecutionState{TResult}"/>, <see cref="FreshId"/>, <see cref="ClearTable"/>, <see cref="Rebuild"/>)
     /// runs on <see cref="Root"/> with egglog's semantics: rows are written as given and read as committed, and a panic a
     /// flush records is reported by the next run. It departs from egglog in two ways: a rule's semi-naive progress is
@@ -87,7 +87,7 @@ namespace Eggnog.Relations
         readonly EGraphContext root;
 
         /// <summary>
-        /// Serializes definitions: functions and the contradiction function.
+        /// Serializes definitions of functions.
         /// </summary>
         readonly object definitionGate = new();
 

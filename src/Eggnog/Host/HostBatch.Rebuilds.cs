@@ -43,12 +43,6 @@ namespace Eggnog
         bool opaqueMerges;
 
         /// <summary>
-        /// Whether a rebuild stopped the scope, a scope its contradiction stopped: the batch's later calls plan
-        /// nothing, as a stopped scope's writes change nothing.
-        /// </summary>
-        bool stopped;
-
-        /// <summary>
         /// Gets whether a fact may need the facts before it rebuilt.
         /// </summary>
         bool Unsettled => mergedBeforeFact || unknownTables is not null || expressionReads is not null;
@@ -287,16 +281,12 @@ namespace Eggnog
         /// <summary>
         /// Flushes and rebuilds what the batch planned before the fact being planned, as egglog's commands so far, and
         /// starts planning afresh against the rebuilt scope, with a new origin; the classes the flushed part made are the
-        /// scope's. A rejected batch writes nothing more, and forgets its plan instead. A flush that stops the scope, a
-        /// scope it contradicts that stops on contradiction, leaves the batch's later calls nothing to plan.
+        /// scope's. A rejected batch writes nothing more, and forgets its plan instead.
         /// </summary>
         /// <exception cref="InvalidOperationException">A scope under this one has a <see cref="Scope.Write"/> batch open,
         /// whose plan the flush would change, as a write here would.</exception>
         void Rebuild()
         {
-            if (stopped)
-                return;
-
             // A rejected batch writes nothing more, so it forgets its plan instead.
             if (rejected)
             {
@@ -317,7 +307,6 @@ namespace Eggnog
             catch (RuleEvaluationException)
             {
                 ClearPlan();
-                stopped = scope.IsStopped;
                 throw;
             }
             catch
@@ -328,7 +317,6 @@ namespace Eggnog
             }
 
             ClearPlan();
-            stopped = scope.IsStopped;
         }
 
         /// <summary>

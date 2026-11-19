@@ -19,8 +19,8 @@ namespace Eggnog.Relations
         /// <param name="id">The id.</param>
         /// <returns>The canonical id.</returns>
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
-        /// <exception cref="InvalidOperationException">The context is faulted, stopped or not clean, or its domain is held
-        /// by another thread.</exception>
+        /// <exception cref="InvalidOperationException">The context is faulted or not clean, or its domain is held by
+        /// another thread.</exception>
         public Value Find(Value id)
         {
             var current = context.IsFrozen ? null : context.Domain;
@@ -54,8 +54,8 @@ namespace Eggnog.Relations
         /// <returns><c>true</c> if the context sees a row for the key.</returns>
         /// <exception cref="ArgumentException">The function is not declared, or the key's width is not its key
         /// count.</exception>
-        /// <exception cref="InvalidOperationException">The context is faulted, stopped or not clean, or its domain is held
-        /// by another thread.</exception>
+        /// <exception cref="InvalidOperationException">The context is faulted or not clean, or its domain is held by
+        /// another thread.</exception>
         public bool TryLookup(FunctionId function, ReadOnlySpan<Value> key, out Value value) =>
             TryLookupCore(function, key, out value, false, out _);
 
@@ -71,8 +71,8 @@ namespace Eggnog.Relations
         /// <returns><c>true</c> if the context sees a row for the key.</returns>
         /// <exception cref="ArgumentException">The function is not declared, or the key's width is not its key
         /// count.</exception>
-        /// <exception cref="InvalidOperationException">The context is faulted, stopped or not clean, or its domain is
-        /// held by another thread.</exception>
+        /// <exception cref="InvalidOperationException">The context is faulted or not clean, or its domain is held by
+        /// another thread.</exception>
         public bool TryLookup(FunctionId function, ReadOnlySpan<Value> key, out Value value, out bool subsumed) =>
             TryLookupCore(function, key, out value, true, out subsumed);
 
@@ -220,12 +220,6 @@ namespace Eggnog.Relations
 
             visitor = sink.Visitor;
         }
-
-        /// <summary>
-        /// Gets whether the context is contradictory: a contradiction stopped it, or a row of the
-        /// e-graph's contradiction function is visible in it. The one read a stopped context answers.
-        /// </summary>
-        public bool IsContradictory => context.IsContradictory;
 
         /// <summary>
         /// Scans one table's rows, hidden ones skipped, into <paramref name="sink"/> in batches, until it stops.

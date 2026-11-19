@@ -259,35 +259,6 @@ namespace Eggnog.Tests.Host
         }
 
         [Fact]
-        public void IsContradictoryReadsTheContradictionRelation()
-        {
-            var t = new NodeTheory();
-            Assert.False(t.Root.IsContradictory);
-            Assert.False(t.Root.Check(t.Graph.Contradiction.Of()));
-            t.Root.Assume(t.Graph.Contradiction.Of());
-            Assert.True(t.Root.IsContradictory);
-            Assert.True(t.Root.Check(t.Graph.Contradiction.Of()));
-        }
-
-        /// <summary>
-        /// A contradictory scope stays usable: it is written, read, extracted from and given children as any other.
-        /// </summary>
-        [Fact]
-        public void AContradictoryScopeStaysUsable()
-        {
-            var t = new NodeTheory();
-            var parent = t.Root.CreateChild();
-            var a = parent.Make(t.A.Of());
-            parent.Assume(t.Graph.Contradiction.Of());
-
-            Assert.True(parent.IsContradictory);
-            parent.Assume(t.Tag.Of(a));
-            Assert.True(parent.Check(t.Tag.Of(a)));
-            Assert.Equal("(A)", parent.Extract(a).ToString());
-            Assert.NotNull(parent.CreateChild());
-        }
-
-        [Fact]
         public void ReadsAreGroundAndCompute()
         {
             var t = new NodeTheory();
@@ -303,12 +274,13 @@ namespace Eggnog.Tests.Host
         {
             var t = new NodeTheory();
             var f = t.Graph.DefineFunction<string, long>("f");
+            var flag = t.Graph.DefineRelation("flag");
             Assert.Equal(0, t.Root.CountRows(t.Num));
             t.Root.Assume(t.Num.Of(3L), t.Num.Of(1L), t.Num.Of(3L), f.Of("a").Is(1L), f.Of("b").Is(2L));
             Assert.Equal(2, t.Root.CountRows(t.Num));
             Assert.Equal(2, t.Root.CountRows(f));
             Assert.Equal(0, t.Root.CountRows(t.Lit));
-            Assert.Equal(0, t.Root.CountRows(t.Graph.Contradiction));
+            Assert.Equal(0, t.Root.CountRows(flag));
 
             t.Root.Make(t.Add.Of(t.Lit.Of(1L), t.Lit.Of(2L)));
             Assert.Equal(2, t.Root.CountRows(t.Lit));
@@ -433,6 +405,7 @@ namespace Eggnog.Tests.Host
         public void CountRowsAndRowsAgree()
         {
             var t = new NodeTheory();
+            var flag = t.Graph.DefineRelation("flag");
             var a = t.Root.Make(t.Lit.Of(1L));
             var b = t.Root.Make(t.Lit.Of(2L));
             t.Root.Make(t.Wrap.Of(a));
@@ -441,10 +414,10 @@ namespace Eggnog.Tests.Host
             Assert.Equal(t.Root.Rows(t.Wrap).Count, t.Root.CountRows(t.Wrap));
             Assert.Equal(1, t.Root.CountRows(t.Wrap));
             Assert.Equal(2, t.Root.CountRows(t.Lit));
-            Assert.Equal(0, t.Root.CountRows(t.Graph.Contradiction));
-            t.Root.Assume(t.Graph.Contradiction.Of());
-            Assert.Equal(1, t.Root.CountRows(t.Graph.Contradiction));
-            Assert.Equal("($contradiction)", t.Root.Rows(t.Graph.Contradiction)[0].ToString());
+            Assert.Equal(0, t.Root.CountRows(flag));
+            t.Root.Assume(flag.Of());
+            Assert.Equal(1, t.Root.CountRows(flag));
+            Assert.Equal("(flag)", t.Root.Rows(flag)[0].ToString());
         }
 
     }

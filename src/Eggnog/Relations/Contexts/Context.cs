@@ -162,7 +162,6 @@ namespace Eggnog.Relations
         volatile bool frozen;
         volatile bool disposed;
         volatile bool faulted;
-        volatile bool contradicted;
         object? host;
 
         /// <summary>
@@ -184,9 +183,8 @@ namespace Eggnog.Relations
             finderForChildren = finder;
             journalMark = store.RootUnionFind.UnionFind.Count;
 
-            // Set later by Freeze and by the contradiction stop.
+            // Set later by Freeze.
             frozen = false;
-            contradicted = false;
             database.AttachRoot(this, store.IdCounter, store.ClockCounter);
             database.RetractionGuard = store.Schema.RootGuard;
             store.Schema.RootGuard.AttachRoot(this);
@@ -239,10 +237,6 @@ namespace Eggnog.Relations
             // parent wrote at an earlier epoch is already part of the child's starting view.
             createdAt = store.ReadClock();
             semiNaiveFloor = createdAt;
-
-            // A child that stops on contradictions, created where a contradiction is already visible, starts stopped.
-            if (options.StopOnContradiction && store.Schema.Contradiction is { } contradiction && tables.GetView(contradiction).FindRow(ReadOnlySpan<uint>.Empty, out _) >= 0)
-                tables.SetContradicted();
         }
 
         /// <summary>
@@ -320,8 +314,8 @@ namespace Eggnog.Relations
         /// <summary>
         /// Gets a stamp of the rows the context's views show: the sum of <see cref="Version"/> over the context and its
         /// ancestors. Each only grows, so the sum moves whenever any of them merges rows in or out (a compaction
-        /// included), hides, clears or stops, and only then. A rule set records it when its first header is evaluated,
-        /// and a child's run refuses the rule set once it moved (<see cref="Database.RunRuleSet"/>). O(depth).
+        /// included), hides or clears, and only then. A rule set records it when its first header is evaluated, and a
+        /// child's run refuses the rule set once it moved (<see cref="Database.RunRuleSet"/>). O(depth).
         /// </summary>
         internal long ViewStamp
         {
@@ -366,12 +360,6 @@ namespace Eggnog.Relations
         /// because a hide whose copy was never merged cannot be repaired.
         /// </summary>
         public bool IsFaulted => faulted;
-
-        /// <summary>
-        /// Gets whether a contradiction stopped the context (only with
-        /// <see cref="ContextOptions.StopOnContradiction"/>).
-        /// </summary>
-        public bool IsContradicted => contradicted;
 
         /// <summary>
         /// Gets whether the context may be read: not disposed or faulted, and either frozen or caught up with
@@ -500,7 +488,7 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Throws unless the context may be written: not disposed, frozen, faulted or contradicted.
+        /// Throws unless the context may be written: not disposed, frozen or faulted.
         /// </summary>
         internal void ThrowIfNotWritable()
         {
@@ -509,20 +497,17 @@ namespace Eggnog.Relations
                 throw new InvalidOperationException("A frozen context cannot be written.");
 
             ThrowIfFaulted();
-            ThrowIfContradicted();
         }
 
         /// <summary>
         /// Throws unless the context's views may be read by rule building, planning or a rule run: disposed →
-        /// <see cref="ObjectDisposedException"/>; faulted or contradicted → <see cref="InvalidOperationException"/>;
-        /// views not current (<see cref="IsViewCurrent"/>) → <see cref="InvalidOperationException"/> naming
-        /// <see cref="Rebuild"/>.
+        /// <see cref="ObjectDisposedException"/>; faulted → <see cref="InvalidOperationException"/>; views not current
+        /// (<see cref="IsViewCurrent"/>) → <see cref="InvalidOperationException"/> naming <see cref="Rebuild"/>.
         /// </summary>
         internal void ThrowIfViewNotCurrent()
         {
             ThrowIfDisposed();
             ThrowIfFaulted();
-            ThrowIfContradicted();
             if (IsViewCurrent == false)
                 ThrowNotClean();
 
@@ -530,25 +515,19 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Throws unless the context may be read: disposed → <see cref="ObjectDisposedException"/>; faulted or
-        /// contradicted → <see cref="InvalidOperationException"/>; not clean → <see cref="InvalidOperationException"/>
-        /// naming <see cref="Rebuild"/>.
+        /// Throws unless the context may be read: disposed → <see cref="ObjectDisposedException"/>; faulted →
+        /// <see cref="InvalidOperationException"/>; not clean → <see cref="InvalidOperationException"/> naming
+        /// <see cref="Rebuild"/>.
         /// </summary>
         internal void ThrowIfNotReadable()
         {
             ThrowIfDisposed();
             ThrowIfFaulted();
-            ThrowIfContradicted();
             if (IsClean == false)
                 ThrowNotClean();
 
             Debug.Assert(tables is null || tables.UnsealedCount == 0, "a context was read with a hidden set not sealed");
         }
-
-        /// <summary>
-        /// Sets the sticky contradiction stop; <see cref="ContextTables.SetContradicted"/> decides when.
-        /// </summary>
-        internal void MarkContradicted() => contradicted = true;
 
         /// <summary>
         /// Marks a child faulted: an exception escaped one of its operations and may have left a hide without its copy,
@@ -568,15 +547,6 @@ namespace Eggnog.Relations
         {
             if (faulted)
                 throw new InvalidOperationException("An operation of this context failed and left it inconsistent; it can only be disposed.");
-        }
-
-        /// <summary>
-        /// Throws <see cref="InvalidOperationException"/> once a contradiction stopped the context.
-        /// </summary>
-        internal void ThrowIfContradicted()
-        {
-            if (contradicted)
-                throw new InvalidOperationException("The context is contradicted; only IsContradictory may be read.");
         }
 
         [DoesNotReturn]

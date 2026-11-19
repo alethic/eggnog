@@ -82,8 +82,8 @@ namespace Eggnog.Relations
         /// <param name="id">Any id.</param>
         /// <returns>The canonical id.</returns>
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
-        /// <exception cref="InvalidOperationException">The context is faulted, contradicted or not clean, or its domain is
-        /// held by another thread.</exception>
+        /// <exception cref="InvalidOperationException">The context is faulted or not clean, or its domain is held by
+        /// another thread.</exception>
         public uint Find(uint id)
         {
             if (frozen)
@@ -106,8 +106,8 @@ namespace Eggnog.Relations
         /// <param name="b">Another id.</param>
         /// <returns><c>true</c> if they are equal here.</returns>
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
-        /// <exception cref="InvalidOperationException">The context is faulted, contradicted or not clean, or its domain is
-        /// held by another thread.</exception>
+        /// <exception cref="InvalidOperationException">The context is faulted or not clean, or its domain is held by
+        /// another thread.</exception>
         public bool AreEqual(uint a, uint b)
         {
             if (frozen)
@@ -127,7 +127,7 @@ namespace Eggnog.Relations
         /// </summary>
         /// <returns>The id.</returns>
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
-        /// <exception cref="InvalidOperationException">The context is frozen, faulted or contradicted.</exception>
+        /// <exception cref="InvalidOperationException">The context is frozen or faulted.</exception>
         /// <exception cref="OverflowException">The store has run out of ids: the next one would exceed
         /// <see cref="Relations.UnionFind.MaxId"/>.</exception>
         public uint NewId()
@@ -168,9 +168,9 @@ namespace Eggnog.Relations
         /// <param name="b">Another id.</param>
         /// <returns><c>true</c> if the classes were distinct: the displaced count grew.</returns>
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
-        /// <exception cref="InvalidOperationException">The context is frozen, faulted or contradicted; its domain is
-        /// held by another thread; or the call comes from inside a write batch's action or another callback of the same
-        /// domain (<see cref="ThreadAffinityGuard.InCallback"/>).</exception>
+        /// <exception cref="InvalidOperationException">The context is frozen or faulted; its domain is held by another
+        /// thread; or the call comes from inside a write batch's action or another callback of the same domain
+        /// (<see cref="ThreadAffinityGuard.InCallback"/>).</exception>
         public bool Union(uint a, uint b)
         {
             var before = Write((Context: this, A: a, B: b), static (state, args) =>

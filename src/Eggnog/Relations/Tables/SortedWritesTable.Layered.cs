@@ -109,8 +109,7 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Merges the staged writes of a child context's layer: removals, then inserts, then a gated compaction; a row
-        /// added to the store's contradiction table stops the context when its options ask for it.
+        /// Merges the staged writes of a child context's layer: removals, then inserts, then a gated compaction.
         /// </summary>
         /// <param name="state">The merge state.</param>
         /// <param name="owner">The layer.</param>
@@ -120,9 +119,6 @@ namespace Eggnog.Relations
             var removed = DeleteLayered(owner);
             var added = InsertLayered(state, owner);
             MaybeRehash();
-            if (added && owner.Schema.IsContradiction)
-                owner.Owner.SetContradicted();
-
             return new TableChange(added, removed);
         }
 

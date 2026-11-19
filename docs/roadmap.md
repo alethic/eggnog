@@ -216,6 +216,10 @@ Considered and not planned. Each line says what would reopen it.
 - Case splits, lifts and host-driven cases, in the library and in the engine: a theory reasons by the cases of a domain
   in its own rules, over set lattices, as the `PredicateTheory` fixture's case rules do. Reopen only by a decision to
   make reasoning by cases a library feature.
+- A built-in contradiction relation, and scopes or runs that stop on it: a theory derives a nullary relation of its own,
+  reads it with `Check` and stops a schedule on it with `Schedule.Until` wrapped around each step
+  (`Saturate(Until(rules, c))`, [`architecture.md`](architecture.md), section 2.3), as the `PredicateTheory` fixture
+  derives and reads its own. Reopen only by a decision to make a scope's lack of a model a library feature.
 - Guarded terms as a feature, a term that differs by case built by the library: for a user who reasons over
   if-then-else guards in volume; the recipe with children is in [`architecture.md`](architecture.md), section 2.8.
 - Pairing a catch-up failure with the run's own in `RunRulesCore`: if an engine caller outside the library appears.

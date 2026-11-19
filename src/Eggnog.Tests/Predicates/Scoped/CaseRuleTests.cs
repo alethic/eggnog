@@ -78,7 +78,7 @@ namespace Eggnog.Tests.Predicates.Scoped
             var (query, q) = Ask(c, schema, c.And.Of(c.NumGt.Of("body.ref", 0L), c.StrGe.Of("kind", "a")));
             using (query)
             {
-                Assert.False(query.IsContradictory);
+                Assert.False(c.IsContradictory(query));
                 Assert.Equal(Set.Of(["c"]), query.Get(c.Dom.Of("kind")));
                 Assert.True(query.Check(c.Present.Of("body.pos")));
                 var best = query.Extract(q);
@@ -107,7 +107,7 @@ namespace Eggnog.Tests.Predicates.Scoped
                 c.DeclareBranch(s, "kind", "b", forms: [("ref", "uuid-lower")]);
                 c.DeclareBranch(s, "kind", "c", forms: [("ref", "uuid-lower")], domains: [("m", Set.Of(["x"]))]);
             });
-            Assert.False(schema.IsContradictory);
+            Assert.False(c.IsContradictory(schema));
             Assert.Equal(Set.Of(["b", "c"]), schema.Get(c.Dom.Of("kind")));
             Assert.True(schema.Check(c.Form.Of("ref", "uuid-lower")));
 
@@ -117,7 +117,7 @@ namespace Eggnog.Tests.Predicates.Scoped
                 c.DeclareBranch(s, "kind", "a", present: ["n"], domains: [("n", Set.Of(["x"]))]);
                 c.DeclareBranch(s, "kind", "c", domains: [("n", Set.Of(["x"]))]);
             });
-            Assert.False(schema.IsContradictory);
+            Assert.False(c.IsContradictory(schema));
             Assert.Equal(Set.Of(["b", "c"]), schema.Get(c.Dom.Of("kind")));
 
             (c, schema) = Compile((c, s) =>
@@ -130,7 +130,7 @@ namespace Eggnog.Tests.Predicates.Scoped
             var (query, q) = Ask(c, schema, c.And.Of(c.And.Of(c.Not.Of(c.StrEq.Of("n", "zz")), c.StrGe.Of("kind", "a")), c.UuidEq.Of("ref", DiscriminatedSchema.Ref)));
             using (query)
             {
-                Assert.False(query.IsContradictory);
+                Assert.False(c.IsContradictory(query));
                 Assert.Equal(Set.Of(["b"]), query.Get(c.Dom.Of("kind")));
                 var best = query.Extract(q);
                 Assert.Equal($"(And (And (Not (StrEq \"n\" \"zz\")) (StrGe \"kind\" \"a\")) (StrEq \"ref\" \"{DiscriminatedSchema.Ref}\"))", best.ToString());
@@ -149,7 +149,7 @@ namespace Eggnog.Tests.Predicates.Scoped
             var (query, q) = Ask(c, schema, c.And.Of(c.And.Of(c.NumGt.Of("ref", 0L), c.NumGt.Of("at", 0L)), c.Not.Of(c.StrEq.Of("kind", "zz"))));
             using (query)
             {
-                Assert.True(query.IsContradictory);
+                Assert.True(c.IsContradictory(query));
                 var best = query.Extract(q);
                 Assert.Equal("(PFalse)", best.ToString());
                 Assert.Equal<ulong>(0, best.Cost);
@@ -203,7 +203,7 @@ namespace Eggnog.Tests.Predicates.Scoped
             var (query, _) = Ask(c, schema, c.And.Of(c.StrEq.Of("status", "archived"), c.IsDefined.Of("$anyOf/0")));
             using (query)
             {
-                Assert.False(query.IsContradictory);
+                Assert.False(c.IsContradictory(query));
                 Assert.Equal(Set.Of(["0"]), query.Get(c.Dom.Of("$anyOf/0")));
                 Assert.True(query.Check(c.Present.Of("legacyId")));
                 Assert.False(query.Check(c.Present.Of("id2")));
@@ -225,7 +225,7 @@ namespace Eggnog.Tests.Predicates.Scoped
             var (query, _) = Ask(c, schema, c.And.Of(c.Or.Of(c.StrEq.Of("kind", "a"), c.StrEq.Of("kind", "b")), c.Not.Of(c.StrEq.Of("status", "x"))));
             using (query)
             {
-                Assert.False(query.IsContradictory);
+                Assert.False(c.IsContradictory(query));
                 Assert.Equal(Set.Of(["b"]), query.Get(c.Dom.Of("kind")));
             }
         }
@@ -246,7 +246,7 @@ namespace Eggnog.Tests.Predicates.Scoped
                 c.DeclareBranch(s, "kind", "c", forms: [("n", "uuid-lower")]);
             });
             Assert.Equal(Set.Of(["b", "c"]), schema.Get(c.Dom.Of("kind")));
-            Assert.False(schema.IsContradictory);
+            Assert.False(c.IsContradictory(schema));
 
             (c, schema) = Compile((c, s) =>
             {
@@ -255,7 +255,7 @@ namespace Eggnog.Tests.Predicates.Scoped
                 c.DeclareBranch(s, "kind", "c", domains: [("status", Set.Of(["y"]))]);
             });
             Assert.Equal(Set.Of(["b", "c"]), schema.Get(c.Dom.Of("kind")));
-            Assert.False(schema.IsContradictory);
+            Assert.False(c.IsContradictory(schema));
         }
 
         /// <summary>
@@ -290,7 +290,7 @@ namespace Eggnog.Tests.Predicates.Scoped
                 c.DeclareBranch(s, "kind", "b", forms: [("ref", "uuid-lower")]);
                 c.DeclareBranch(s, "kind", "c", present: ["m"], forms: [("ref", "uuid-lower")]);
             });
-            Assert.False(schema.IsContradictory);
+            Assert.False(c.IsContradictory(schema));
             Assert.Equal(Set.Of(["b", "c"]), schema.Get(c.Dom.Of("kind")));
             Assert.True(schema.Check(c.Form.Of("ref", "uuid-lower")));
         }
@@ -313,7 +313,7 @@ namespace Eggnog.Tests.Predicates.Scoped
             var (refuted, q) = Ask(c, schema, c.And.Of(c.Or.Of(c.StrEq.Of("kind", "a"), c.StrEq.Of("kind", "b")), c.StrEq.Of("status", "z")));
             using (refuted)
             {
-                Assert.True(refuted.IsContradictory);
+                Assert.True(c.IsContradictory(refuted));
                 Assert.Equal("(PFalse)", refuted.Extract(q).ToString());
             }
         }
@@ -336,7 +336,7 @@ namespace Eggnog.Tests.Predicates.Scoped
 
             var (query, _) = Ask(c, schema, c.StrEq.Of("status", "z"));
             using (query)
-                Assert.True(query.IsContradictory);
+                Assert.True(c.IsContradictory(query));
         }
 
         /// <summary>
@@ -392,7 +392,7 @@ namespace Eggnog.Tests.Predicates.Scoped
 
             var (refuted, _) = Ask(c, schema, c.And.Of(c.NumGt.Of("x", 0L), c.StrGe.Of("kind", "a")));
             using (refuted)
-                Assert.True(refuted.IsContradictory);
+                Assert.True(c.IsContradictory(refuted));
         }
 
         /// <summary>
@@ -474,14 +474,14 @@ namespace Eggnog.Tests.Predicates.Scoped
             var (query, _) = Ask(c, schema, c.NumGt.Of("ref", 0L));
             using (query)
             {
-                Assert.False(query.IsContradictory);
+                Assert.False(c.IsContradictory(query));
                 Assert.Equal(Set.Of(["a", "b", "c"]), query.Get(c.Dom.Of("kind")));
             }
 
             var (mentioning, _) = Ask(c, schema, c.And.Of(c.NumGt.Of("ref", 0L), c.StrGe.Of("kind", "a")));
             using (mentioning)
             {
-                Assert.False(mentioning.IsContradictory);
+                Assert.False(c.IsContradictory(mentioning));
                 Assert.Equal(Set.Of(["c"]), mentioning.Get(c.Dom.Of("kind")));
             }
         }

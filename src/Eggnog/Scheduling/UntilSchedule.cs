@@ -36,11 +36,8 @@ namespace Eggnog
         /// <inheritdoc />
         internal override bool Execute(ScheduleExecutor executor, Scope scope)
         {
-            // A stopped scope answers no read and runs nothing: the body would do nothing either.
+            // The condition reads the scope brought up to date, as a host check does.
             scope.Engine.EnsureClean();
-            if (scope.Engine.IsStopped)
-                return false;
-
             foreach (var fact in Condition)
                 if (TermReader.Check(scope, fact) == false)
                     return Body.Execute(executor, scope);

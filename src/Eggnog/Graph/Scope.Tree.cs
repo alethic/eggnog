@@ -113,8 +113,6 @@ namespace Eggnog
         /// from a run observer (a structural call), or from a primitive, lattice, filter or cost function.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
-        /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction, or lies under a
-        /// stopped scope; no scope the library makes stops.</exception>
         /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>): no child is
         /// created, the scope is not faulted, and from then on the graph creates no child at all.</exception>
         public Scope CreateChild(ScopeTag? tag = null, ScopeOptions? options = null)
@@ -135,8 +133,6 @@ namespace Eggnog
                 // Only a writable scope can be running, so only its guard can be inside a run observer.
                 if (held && Guard.InObserver)
                     throw new InvalidOperationException("Not allowed inside a run observer");
-
-                ThrowIfStopped();
 
                 var contextOptions = new Relations.ContextOptions
                 {
@@ -179,8 +175,6 @@ namespace Eggnog
         /// its thread domain (a query callback, a write), or from a primitive, lattice, filter or cost function.</exception>
         /// <exception cref="RuleEvaluationException">A merge the freeze ran failed, or a lattice merge threw in the catch-up
         /// the freeze makes first; the scope is then faulted.</exception>
-        /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction, or lies under a
-        /// stopped scope; no scope the library makes stops.</exception>
         /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>) while the freeze
         /// brought the scope up to date: the scope is neither frozen nor faulted.</exception>
         public void Freeze()
@@ -203,10 +197,8 @@ namespace Eggnog
                 if (IsFrozen)
                     return;
 
-                // A scope with a writable parent is caught up for the check (a scope stopped through its parent answers
-                // as stopped), and is refused either way; the root and children of frozen scopes are never under a
-                // stopped scope.
-                CatchUpAndThrowIfStopped();
+                // A scope with a writable parent is caught up first, as a call into a scope is, and then refused.
+                CatchUpUnderWritableParent();
                 if (Parent is { IsFrozen: false })
                     throw new InvalidOperationException("A scope can be frozen only once its parent is");
 
@@ -279,8 +271,6 @@ namespace Eggnog
         /// <exception cref="RuleDefinitionException">The rule is not valid; nothing is registered.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
-        /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction, or lies under a
-        /// stopped scope; no scope the library makes stops.</exception>
         public Rule DefineRule(Ruleset ruleset, string name, Action<RuleBuilder> define)
         {
             ArgumentNullException.ThrowIfNull(ruleset);
@@ -303,8 +293,10 @@ namespace Eggnog
                 if (Guard.InObserver)
                     throw new InvalidOperationException("Not allowed inside a run observer");
 
-                // Brought up to date first: a scope its parent's contradiction reached since its last call is stopped.
-                CatchUpAndThrowIfStopped();
+                // A scope whose parent is writable is brought up to date first, so that a failure of its catch-up fails
+                // the definition; a child of a frozen scope is caught up at its next read, write, run, CreateChild or
+                // Freeze (see the remarks on Scope).
+                CatchUpUnderWritableParent();
                 var builder = new RuleBuilder(Graph, name);
                 try
                 {
@@ -345,8 +337,6 @@ namespace Eggnog
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
         /// <exception cref="RuleDefinitionException">A rule is not valid; nothing is registered.</exception>
         /// <exception cref="RuleEvaluationException">As for <see cref="DefineRule"/>.</exception>
-        /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction, or lies under a
-        /// stopped scope; no scope the library makes stops.</exception>
         public (Rule Forward, Rule Backward) DefineBiRewrite<TSort>(Ruleset ruleset, string name,
             Func<RuleBuilder, (Term<TSort> Left, Term<TSort> Right)> define)
             where TSort : struct, ISort<TSort>
@@ -371,7 +361,7 @@ namespace Eggnog
                 if (Guard.InObserver)
                     throw new InvalidOperationException("Not allowed inside a run observer");
 
-                CatchUpAndThrowIfStopped();
+                CatchUpUnderWritableParent();
                 var (forward, backward) = BiRewrite.Draft(Graph, name, define);
                 lock (Graph.DefinitionLock)
                 {

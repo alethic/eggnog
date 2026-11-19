@@ -58,14 +58,15 @@ namespace Eggnog.Tests.Rules
             }));
             Assert.Contains("rule reads fact table 'fact' outside scope 'outer'", e.Message);
 
-            // The contradiction relation is a fact table too.
-            e = Assert.Throws<RuleDefinitionException>(() => licensed.DefineRule("contradicted", r =>
+            // A nullary relation is a fact table too.
+            var flag = t.Graph.DefineRelation("flag");
+            e = Assert.Throws<RuleDefinitionException>(() => licensed.DefineRule("flagged", r =>
             {
                 var n = r.Var<Node>("n");
-                r.When(n.Is(term.Of("a")), t.Graph.Contradiction.Of());
+                r.When(n.Is(term.Of("a")), flag.Of());
                 r.Then(n.Is(term.Of("false")));
             }));
-            Assert.Contains("rule reads fact table '$contradiction' outside scope 'outer'", e.Message);
+            Assert.Contains("rule reads fact table 'flag' outside scope 'outer'", e.Message);
         }
 
         [Fact]

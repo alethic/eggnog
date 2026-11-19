@@ -313,7 +313,7 @@ namespace Eggnog.Relations
         /// <exception cref="KeyNotFoundException">No such table.</exception>
         /// <exception cref="InvalidOperationException">The database is frozen; or, in a child context, the layer of the
         /// table cannot be created (the table is shared and its merge is not a lattice merge, which only the root may
-        /// write, or the context is faulted or contradicted).</exception>
+        /// write, or the context is faulted).</exception>
         public MutationBuffer NewBuffer(TableId table)
         {
             ThrowIfFrozen();

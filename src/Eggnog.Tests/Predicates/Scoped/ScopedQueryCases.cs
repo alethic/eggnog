@@ -66,11 +66,11 @@ namespace Eggnog.Tests.Predicates.Scoped
                     c.DeclareBranch(s, "$anyOf/0", "1", present: ["id2"], domains: [("status", Set.Of(["draft", "active"]))]);
                 },
                 c => c.StrEq.Of("status", "purged"),
-                (c, s, q, p) => q.IsContradictory == false && q.Extract(p).ToString() == "(StrEq \"status\" \"purged\")"),
+                (c, s, q, p) => c.IsContradictory(q) == false && q.Extract(p).ToString() == "(StrEq \"status\" \"purged\")"),
             new("a comparison beyond a declared bound is false",
                 (c, s) => s.Assume(c.Types.Of("n").Is(Set.Of(["number"])), c.Lo.Of("n").Is(0L), c.Hi.Of("n").Is(100L)),
                 c => c.NumGt.Of("n", 500L),
-                (c, s, q, p) => q.IsContradictory && s.IsContradictory == false && q.Extract(p).ToString() == "(PFalse)"),
+                (c, s, q, p) => c.IsContradictory(q) && c.IsContradictory(s) == false && q.Extract(p).ToString() == "(PFalse)"),
             new("a bound inside the declared range is left alone",
                 (c, s) => s.Assume(c.Types.Of("n").Is(Set.Of(["number"])), c.Lo.Of("n").Is(0L), c.Hi.Of("n").Is(100L)),
                 c => c.NumGt.Of("n", 50L),
@@ -94,11 +94,11 @@ namespace Eggnog.Tests.Predicates.Scoped
             new("an integer outside a declared domain is false",
                 (c, s) => s.Assume(c.Present.Of("n"), c.IDom.Of("n").Is(Set.Of([100L, 200L, 300L]))),
                 c => c.And.Of(c.NumGt.Of("n", 499L), c.NumLt.Of("n", 501L)),
-                (c, s, q, p) => q.IsContradictory && q.Extract(p).ToString() == "(PFalse)"),
+                (c, s, q, p) => c.IsContradictory(q) && q.Extract(p).ToString() == "(PFalse)"),
             new("an integer inside the declared domain is left alone",
                 (c, s) => s.Assume(c.Present.Of("n"), c.IDom.Of("n").Is(Set.Of([100L, 500L]))),
                 c => c.And.Of(c.NumGt.Of("n", 499L), c.NumLt.Of("n", 501L)),
-                (c, s, q, p) => q.IsContradictory == false && q.Get(c.IDom.Of("n")).Equals(Set.Of([500L]))),
+                (c, s, q, p) => c.IsContradictory(q) == false && q.Get(c.IDom.Of("n")).Equals(Set.Of([500L]))),
         ];
 
         /// <summary>

@@ -24,8 +24,7 @@ namespace Eggnog.Tests.Definitions
             graph.DefineRelation<long>("t");
             Assert.Throws<ArgumentException>(() => graph.DefineRelation<long>("t"));
             Assert.Throws<ArgumentException>(() => graph.DefineFunction<long, long>("t"));
-            Assert.Equal("contradiction", graph.DefineRelation("contradiction").Name);
-            Assert.Equal(3, graph.Tables.Count);
+            Assert.Single(graph.Tables);
         }
 
         [Fact]
@@ -34,7 +33,7 @@ namespace Eggnog.Tests.Definitions
             var graph = new EGraph();
             Assert.Throws<ArgumentException>(() => graph.DefineRelation<long>(""));
             Assert.Throws<ArgumentNullException>(() => graph.DefineRelation<long>(null!));
-            Assert.Single(graph.Tables);
+            Assert.Empty(graph.Tables);
         }
 
         /// <summary>
@@ -73,41 +72,21 @@ namespace Eggnog.Tests.Definitions
         }
 
         /// <summary>
-        /// The built-in <see cref="EGraph.Contradiction"/> takes no name of the user's: a user's table named
-        /// <c>$contradiction</c>, which egglog accepts (<c>(relation $contradiction ()) ($contradiction)
-        /// (check ($contradiction))</c> succeeds), is another table, and holding it is no contradiction.
+        /// A user's table may be named <c>$contradiction</c>, as egglog accepts: <c>(relation $contradiction ())
+        /// ($contradiction) (check ($contradiction))</c> succeeds.
         /// </summary>
         [Fact]
-        public void AUsersTableMayBeNamedAsTheBuiltInContradiction()
+        public void AUsersTableMayBeNamedDollarContradictionAsInEgglog()
         {
             var graph = new EGraph();
             var own = graph.DefineRelation("$contradiction");
-            Assert.NotSame(graph.Contradiction, own);
-            Assert.Equal(graph.Contradiction.Name, own.Name);
+            Assert.Equal("$contradiction", own.Name);
             Assert.Throws<ArgumentException>(() => graph.DefineRelation("$contradiction"));
-            Assert.Equal(new TableHandle[] { graph.Contradiction, own }, graph.Tables);
+            Assert.Equal(new TableHandle[] { own }, graph.Tables);
 
             graph.Root.Assume(own.Of());
 
             Assert.True(graph.Root.Check(own.Of()));
-            Assert.False(graph.Root.IsContradictory);
-            Assert.False(graph.Root.Check(graph.Contradiction.Of()));
-            graph.Root.Assume(graph.Contradiction.Of());
-            Assert.True(graph.Root.IsContradictory);
-        }
-
-        [Fact]
-        public void TheGraphsContradictionIsTheFirstTable()
-        {
-            var graph = new EGraph();
-            Assert.Equal("$contradiction", graph.Contradiction.Name);
-            Assert.Same(graph.Contradiction, graph.Tables[0]);
-            Assert.Equal(0, graph.Contradiction.Index);
-            Assert.Equal(TableRole.Fact, graph.Contradiction.Role);
-            Assert.Empty(graph.Contradiction.Keys);
-            Assert.False(graph.Root.IsContradictory);
-            graph.Root.Assume(graph.Contradiction.Of());
-            Assert.True(graph.Root.IsContradictory);
         }
 
         [Fact]
@@ -117,7 +96,7 @@ namespace Eggnog.Tests.Definitions
             Assert.Contains("ValueStore.Register", Assert.Throws<ArgumentException>(() => graph.DefineRelation<Point>("p")).Message);
             Assert.Contains("ValueStore.RegisterEnum", Assert.Throws<ArgumentException>(() => graph.DefineFunction<string, Shade>("s")).Message);
             Assert.Contains("EGraph.DefineSort", Assert.Throws<ArgumentException>(() => graph.DefineConstructor<long, Node>("n")).Message);
-            Assert.Single(graph.Tables);
+            Assert.Empty(graph.Tables);
         }
 
         /// <summary>
@@ -181,8 +160,8 @@ namespace Eggnog.Tests.Definitions
             var dom = graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
             var lit = graph.DefineConstructor<long, Node>("Lit", cost: 3);
 
-            Assert.Equal(new TableHandle[] { graph.Contradiction, present, analysis, dom, lit }, graph.Tables);
-            Assert.Equal(1, present.Index);
+            Assert.Equal(new TableHandle[] { present, analysis, dom, lit }, graph.Tables);
+            Assert.Equal(0, present.Index);
             Assert.Equal(TableKind.Relation, present.Kind);
             Assert.Null(present.Output);
             Assert.True(present.IsValueOnly);

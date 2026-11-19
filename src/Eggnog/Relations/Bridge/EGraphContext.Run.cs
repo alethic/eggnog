@@ -33,8 +33,7 @@ namespace Eggnog.Relations
         /// <para>
         /// Progress: each rule's <c>(T, K, generation)</c> is staged when the rule set is built and committed once the
         /// run has merged, a recorded failure included, before the rebuild. Then, if the run grew the union-find, the
-        /// context rebuilds with its first pass at <c>T</c>; otherwise the clock advances. A stopped context runs
-        /// nothing and reports <see cref="IterationReport.Stopped"/>.
+        /// context rebuilds with its first pass at <c>T</c>; otherwise the clock advances.
         /// </para>
         /// <para>
         /// Failures. A panic (a failure an action or a merge recorded) is thrown as <see cref="PanicException"/> after the
@@ -63,7 +62,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Runs <paramref name="rules"/> until they saturate: an iteration in which neither the rules nor the rebuild
-        /// changed anything, a contradiction stops the context, or <paramref name="maxIterations"/> iterations ran.
+        /// changed anything, or <paramref name="maxIterations"/> iterations ran.
         /// </summary>
         /// <param name="rules">The rules.</param>
         /// <param name="maxIterations">The most iterations to run; zero runs none.</param>
@@ -76,21 +75,18 @@ namespace Eggnog.Relations
             for (var i = 0; i < maxIterations; i++)
             {
                 var report = RunRules(rules);
-                if (report.Stopped)
-                    return new SaturateReport(i + 1, true, false);
-
                 if (report.Changed == false && report.RebuildChanged == false)
-                    return new SaturateReport(i + 1, false, false);
+                    return new SaturateReport(i + 1, false);
             }
 
-            return new SaturateReport(maxIterations, false, true);
+            return new SaturateReport(maxIterations, true);
         }
 
         /// <summary>
         /// Brings the context up to date: brings a parent that is not frozen up to date, flushes the host writes staged
         /// here (<see cref="FlushUpdates"/>), then rebuilds. At the root it rebuilds only when its union-find grew
         /// since its last rebuild, so writes staged at the root and not flushed stay pending into the next run, as in
-        /// egglog, and the root adds no pass and no epoch at rest. Nothing for a frozen or stopped context.
+        /// egglog, and the root adds no pass and no epoch at rest. Nothing for a frozen context.
         /// </summary>
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
         /// <exception cref="InvalidOperationException">The context is faulted; its domain is held by another thread; or
@@ -147,9 +143,6 @@ namespace Eggnog.Relations
                 return;
 
             using var scope = context.Domain.Enter();
-            if (IsStopped)
-                return;
-
             if (hostWrites.IsEmpty == false)
                 FlushCore(throwOnFailure: true);
 
@@ -193,9 +186,6 @@ namespace Eggnog.Relations
             using var scope = domain.Enter();
             ThrowIfUnwritable();
             Context.ThrowIfInCallback(domain, nameof(RunRules));
-            if (IsStopped)
-                return IterationReport.WhenStopped;
-
             if (egglogCompatible)
             {
                 if (hostWrites.IsEmpty == false)
@@ -205,9 +195,6 @@ namespace Eggnog.Relations
             {
                 EnsureClean();
             }
-
-            if (IsStopped)
-                return IterationReport.WhenStopped;
 
             // The per-rule buffers of the run come from the shared pools and go back cleared, so a run allocates nothing
             // per rule for its own bookkeeping.
@@ -316,15 +303,6 @@ namespace Eggnog.Relations
             var failed = TakeFailure(out var message);
             Commit(rules, staged);
 
-            if (IsStopped)
-            {
-                context.EndEpoch();
-                if (failed)
-                    throw new PanicException(message);
-
-                return new IterationReport(report, TimeSpan.Zero, false, 0, true);
-            }
-
             if (context.DisplacedCount == unionsBefore)
             {
                 // No new unions: no row can have become non-canonical; advance the clock (lib.rs:606-613).
@@ -332,7 +310,7 @@ namespace Eggnog.Relations
                 if (failed)
                     throw new PanicException(message);
 
-                return new IterationReport(report, TimeSpan.Zero, false, 0, false);
+                return new IterationReport(report, TimeSpan.Zero, false);
             }
 
             // The first pass reads the clock again, which gives T (lib.rs:667).
@@ -349,7 +327,7 @@ namespace Eggnog.Relations
             if (TakeFailure(out var later))
                 throw new PanicException(later);
 
-            return new IterationReport(report, rebuildTime, rebuildChanged, context.LastRebuildPasses, IsStopped);
+            return new IterationReport(report, rebuildTime, rebuildChanged, context.LastRebuildPasses);
         }
 
         /// <summary>

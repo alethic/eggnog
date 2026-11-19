@@ -9,8 +9,8 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// A small store-backed e-graph for the bridge's context tests: relations as the rule layer writes them (unit
-    /// output and an assert-eq merge, which is a lattice merge, so children may write them), constructors, a lattice
-    /// function, a nullary contradiction relation, and rule builders over them.
+    /// output and an assert-eq merge, which is a lattice merge, so children may write them), a nullary one among them,
+    /// constructors, a lattice function, and rule builders over them.
     /// </summary>
     sealed class ContextGraph
     {
@@ -81,7 +81,7 @@ namespace Eggnog.Relations.Tests
         public FunctionId Low { get; }
 
         /// <summary>
-        /// <c>bottom()</c>, a nullary relation: the contradiction function when designated.
+        /// <c>bottom()</c>, a nullary relation.
         /// </summary>
         public FunctionId Bottom { get; }
 
@@ -152,18 +152,6 @@ namespace Eggnog.Relations.Tests
             var y = rb.NewVar(ColumnTy.Id);
             rb.QueryTable(Edge, [x, y, rb.NewVar(UnitType)], false);
             rb.Union(x, y);
-            return rb.Build();
-        }
-
-        /// <summary>
-        /// <c>mark(x) =&gt; bottom()</c>.
-        /// </summary>
-        public EGraphRuleId MarkIsBottom(string name = "mark-bottom")
-        {
-            var rb = EGraph.NewRule(name, true);
-            var x = rb.NewVar(ColumnTy.Id);
-            rb.QueryTable(Mark, [x, rb.NewVar(UnitType)], false);
-            rb.Set(Bottom, [RuleEntry.Const(Unit, UnitType)]);
             return rb.Build();
         }
 

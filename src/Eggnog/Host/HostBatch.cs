@@ -115,9 +115,6 @@ namespace Eggnog
                 uint cell;
                 do
                 {
-                    if (stopped)
-                        scope.ThrowIfStopped();
-
                     Literals.Call(term.Shape);
                     cell = PlanTermCore(term);
                 }
@@ -316,9 +313,6 @@ namespace Eggnog
                 RebuildFor(fact);
                 do
                 {
-                    if (stopped)
-                        return;
-
                     PlanFactCore(fact);
                 }
                 while (EndFact() == false);
@@ -439,9 +433,6 @@ namespace Eggnog
 
                 do
                 {
-                    if (stopped)
-                        return;
-
                     PlanSubsumeCore(term);
                 }
                 while (EndFact() == false);
@@ -519,9 +510,6 @@ namespace Eggnog
 
                 do
                 {
-                    if (stopped)
-                        return;
-
                     PlanSubsumeCore(fact);
                 }
                 while (EndFact() == false);
@@ -577,9 +565,6 @@ namespace Eggnog
                 RebuildForUnion();
                 do
                 {
-                    if (stopped)
-                        return;
-
                     PlanUnionCore(a, b);
                 }
                 while (EndFact() == false);

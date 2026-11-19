@@ -21,9 +21,8 @@ namespace Eggnog.Relations
         /// target context.
         /// </summary>
         /// <remarks>
-        /// Nothing is visible until the flush; the context is not clean meanwhile (<see cref="IsClean"/>). A stopped
-        /// context ignores the row. In a child, a function whose merge is not a lattice merge is refused here, before
-        /// anything is staged. O(row) amortized.
+        /// Nothing is visible until the flush; the context is not clean meanwhile (<see cref="IsClean"/>). In a child, a
+        /// function whose merge is not a lattice merge is refused here, before anything is staged. O(row) amortized.
         /// </remarks>
         /// <param name="function">The function.</param>
         /// <param name="row">One value per schema column: the keys, then the output.</param>
@@ -61,9 +60,6 @@ namespace Eggnog.Relations
                 throw new ArgumentException($"{info.Name} cannot subsume.", nameof(function));
 
             CheckWritable(info);
-            if (IsStopped)
-                return;
-
             hostWrites.AddRow(function, MemoryMarshal.Cast<Value, uint>(row), canonicalizeIds: true, subsume);
         }
 
@@ -95,7 +91,7 @@ namespace Eggnog.Relations
         /// Stages the removal of the row of <paramref name="key"/> from <paramref name="function"/> for the next
         /// <see cref="FlushUpdates"/>: egglog's <c>stage_remove</c> of a top-level <c>delete</c>. A key with no row
         /// removes nothing; the table's merge deletes before it inserts. The context's retraction guard decides here,
-        /// before anything is staged. A stopped context ignores it.
+        /// before anything is staged.
         /// </summary>
         /// <param name="function">The function.</param>
         /// <param name="key">One value per key column.</param>
@@ -115,9 +111,6 @@ namespace Eggnog.Relations
                 throw new ArgumentException($"{info.Name} takes {info.Math.KeyCount} keys, not {key.Length}.", nameof(key));
 
             context.Database.RetractionGuard?.CheckRemove(info.Table);
-            if (IsStopped)
-                return;
-
             hostWrites.AddRemove(function, MemoryMarshal.Cast<Value, uint>(key));
         }
 
@@ -132,8 +125,8 @@ namespace Eggnog.Relations
         /// <returns>The fresh id.</returns>
         /// <exception cref="ArgumentException">The function is not declared, or the key's width is not its key
         /// count.</exception>
-        /// <exception cref="InvalidOperationException">The context is frozen, faulted or stopped; the function cannot
-        /// be written in a child; the domain is held by another thread; or the call comes from inside a callback of the
+        /// <exception cref="InvalidOperationException">The context is frozen or faulted; the function cannot be written in
+        /// a child; the domain is held by another thread; or the call comes from inside a callback of the
         /// domain.</exception>
         public Value StageTerm(FunctionId function, ReadOnlySpan<Value> key)
         {
@@ -141,13 +134,11 @@ namespace Eggnog.Relations
             var domain = context.Domain;
             using var scope = domain.Enter();
             Context.ThrowIfInCallback(domain, nameof(StageTerm));
-            context.ThrowIfContradicted();
             return StageTermCore(function, key);
         }
 
         /// <summary>
-        /// Stages the union of <paramref name="a"/> and <paramref name="b"/> for the next <see cref="FlushUpdates"/>. A
-        /// stopped context ignores it.
+        /// Stages the union of <paramref name="a"/> and <paramref name="b"/> for the next <see cref="FlushUpdates"/>.
         /// </summary>
         /// <param name="a">One id.</param>
         /// <param name="b">The other.</param>
@@ -159,9 +150,6 @@ namespace Eggnog.Relations
             var domain = context.Domain;
             using var scope = domain.Enter();
             Context.ThrowIfInCallback(domain, nameof(StageUnion));
-            if (IsStopped)
-                return;
-
             hostWrites.AddUnion(a.Rep, b.Rep);
         }
 
@@ -170,7 +158,7 @@ namespace Eggnog.Relations
         /// Thread-safe.
         /// </summary>
         /// <returns>The id.</returns>
-        /// <exception cref="InvalidOperationException">The context is frozen, faulted or stopped.</exception>
+        /// <exception cref="InvalidOperationException">The context is frozen or faulted.</exception>
         /// <exception cref="OverflowException">The store has run out of ids.</exception>
         public Value FreshId() => new(context.NewId());
 
@@ -227,7 +215,7 @@ namespace Eggnog.Relations
         /// through this API canonicalized here), merged at <c>T</c>, and the clock advances; a flush that grew the
         /// union-find rebuilds. A failure the merge or the rebuild recorded is taken and thrown as <see
         /// cref="PanicException"/> (the e-graph's egglog-compatible <see cref="EGraph.FlushUpdates"/> leaves it to the
-        /// next run instead). A stopped context drops what is staged and returns <c>false</c>.
+        /// next run instead).
         /// </para>
         /// <para>
         /// An exception escaping a child's flush faults it, except a clock that has run out, which faults no context.
@@ -270,8 +258,8 @@ namespace Eggnog.Relations
         /// <typeparam name="TResult">The result type.</typeparam>
         /// <param name="action">The action.</param>
         /// <returns>The action's result.</returns>
-        /// <exception cref="InvalidOperationException">The context is frozen, faulted or stopped, or the domain is held by
-        /// another thread.</exception>
+        /// <exception cref="InvalidOperationException">The context is frozen or faulted, or the domain is held by another
+        /// thread.</exception>
         internal TResult WithExecutionState<TResult>(Func<ExecutionState, TResult> action)
         {
             ArgumentNullException.ThrowIfNull(action);
@@ -348,8 +336,8 @@ namespace Eggnog.Relations
         /// <remarks>Rows staged for other functions, and staged unions, are kept for the next flush. O(the clear) plus
         /// O(staged cells).</remarks>
         /// <param name="function">The function.</param>
-        /// <exception cref="InvalidOperationException">The clear is refused, or the context is frozen, faulted or
-        /// stopped.</exception>
+        /// <exception cref="InvalidOperationException">The clear is refused, or the context is frozen or
+        /// faulted.</exception>
         public void ClearTable(FunctionId function)
         {
             var table = owner.GetTable(function);
@@ -374,7 +362,7 @@ namespace Eggnog.Relations
         /// <typeparam name="TContainer">The container type.</typeparam>
         /// <param name="container">The container; it must not change afterwards.</param>
         /// <returns>The container's id.</returns>
-        /// <exception cref="InvalidOperationException">The context is frozen, faulted or stopped.</exception>
+        /// <exception cref="InvalidOperationException">The context is frozen or faulted.</exception>
         internal Value GetContainerValue<TContainer>(in TContainer container)
             where TContainer : struct, IContainerValue<TContainer>
         {
@@ -402,11 +390,6 @@ namespace Eggnog.Relations
             using var scope = domain.Enter();
             ThrowIfUnwritable();
             Context.ThrowIfInCallback(domain, nameof(FlushUpdates));
-            if (IsStopped)
-            {
-                hostWrites.Clear();
-                return false;
-            }
 
             uint timestamp;
             try
@@ -417,12 +400,6 @@ namespace Eggnog.Relations
                 // Catch up before anything is staged: replayed rows are stamped after every ancestor change they could
                 // collide with, and canonicalized against the current union-find.
                 context.PrepareForWrite();
-                if (IsStopped)
-                {
-                    hostWrites.Clear();
-                    return false;
-                }
-
                 timestamp = context.BeginEpoch();
             }
             catch (OverflowException) when (owner.Store.ClockExhausted)
@@ -484,7 +461,6 @@ namespace Eggnog.Relations
             ThrowIfUnwritable();
             using var scope = context.Domain.Enter();
             var mark = hostWrites.RowCount;
-            var stopped = IsStopped;
             try
             {
                 foreach (var (function, row) in values)
@@ -495,8 +471,7 @@ namespace Eggnog.Relations
                         throw new ArgumentException($"A row of {info.Name} has {info.Math.FunctionColumns} values, not {row.Length}.", nameof(values));
 
                     CheckWritable(info);
-                    if (stopped == false)
-                        hostWrites.AddRow(function, MemoryMarshal.Cast<Value, uint>(row.AsSpan()), canonicalizeIds: true);
+                    hostWrites.AddRow(function, MemoryMarshal.Cast<Value, uint>(row.AsSpan()), canonicalizeIds: true);
                 }
             }
             catch
@@ -515,7 +490,7 @@ namespace Eggnog.Relations
         /// <remarks>
         /// Bypasses <see cref="HostWrites"/>: rows replayed as given need no catch-up at the root, so keeping them
         /// bridge-side would only retain a copy of the batch, and the root pays nothing per staged insert. If a row is
-        /// malformed nothing of the batch is published. A stopped root ignores the rows.
+        /// malformed nothing of the batch is published.
         /// <para>
         /// Writes land in the order the host issued them: rows and unions the root staged earlier through the context
         /// API (<see cref="StageRow(FunctionId, ReadOnlySpan{Value})"/>, <see cref="StageTerm"/>, <see
@@ -562,9 +537,6 @@ namespace Eggnog.Relations
                 }
 
                 // Publish the staged rows (egglog drops the buffers) only once every row was accepted.
-                if (IsStopped)
-                    return;
-
                 foreach (var (_, buffer) in buffers)
                     buffer.Flush();
             }
@@ -610,9 +582,6 @@ namespace Eggnog.Relations
                 Context.ThrowIfInCallback(domain, nameof(EGraph.AddTerm));
                 FlushStagedFirst();
                 result = owner.FreshId();
-                if (IsStopped)
-                    return result;
-
                 var columns = math.TableColumns;
                 Span<uint> row = columns <= MaxStackRow ? stackalloc uint[MaxStackRow] : new uint[columns];
                 row = row.Slice(0, columns);

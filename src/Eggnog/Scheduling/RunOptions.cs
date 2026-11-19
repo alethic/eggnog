@@ -25,14 +25,6 @@ namespace Eggnog
         public int IterationLimit { get; init; } = int.MaxValue;
 
         /// <summary>
-        /// Gets whether the run stops once the scope is contradictory (<see cref="EGraph.Contradiction"/> holds): every
-        /// later run step is skipped and the report says <see cref="RunStopReason.Contradiction"/>. Only the run stops:
-        /// the scope stays fully usable, and a later run with this option skips every step while the scope is
-        /// contradictory. Off by default.
-        /// </summary>
-        public bool StopOnContradiction { get; init; }
-
-        /// <summary>
         /// Gets the longest the run may take, measured from its start; <c>null</c>, the default, for no limit. Must not be
         /// negative. Checked before every iteration: once it has passed, the run stops with
         /// <see cref="RunStopReason.TimeLimit"/>, so it overshoots by at most one iteration.

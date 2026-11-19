@@ -62,12 +62,6 @@ namespace Eggnog
         public long ViewStamp => Context.Context.ViewStamp;
 
         /// <inheritdoc />
-        public override bool IsContradictory => Context.IsContradictory;
-
-        /// <inheritdoc />
-        public override bool IsStopped => Context.IsStopped;
-
-        /// <inheritdoc />
         public override long OwnRowCount => Context.OwnRowCount;
 
         /// <inheritdoc />
@@ -128,7 +122,7 @@ namespace Eggnog
             try
             {
                 var iteration = Context.RunRules(rules);
-                return new EngineIteration(iteration.Changed, iteration.RebuildChanged, iteration.Stopped, iteration.RuleSetReport, iteration.RebuildTime);
+                return new EngineIteration(iteration.Changed, iteration.RebuildChanged, iteration.RuleSetReport, iteration.RebuildTime);
             }
             finally
             {
