@@ -6,8 +6,9 @@ namespace Eggnog.Relations.Benchmarks
 
     /// <summary>
     /// The console app's footprint mode, <c>--context-footprint</c>: prints the bytes the structures of colored
-    /// contexts allocate and the counters of the case-split workloads, measured in this process. Allocation counts and
-    /// counters do not depend on the machine's load, so these figures need no idle machine; times are not measured.
+    /// contexts allocate, the bytes of a deep copy of the root, and the copy volume per union, measured in this process.
+    /// Allocation counts and counters do not depend on the machine's load, so these figures need no idle machine; times
+    /// are not measured.
     /// </summary>
     /// <remarks>
     /// Bytes are <see cref="GC.GetAllocatedBytesForCurrentThread"/> differences after a warm-up, averaged over many
@@ -30,9 +31,7 @@ namespace Eggnog.Relations.Benchmarks
         public static int Run()
         {
             Children();
-            CaseSplits();
-            CaseParts();
-            LateParentMints();
+            DeepCopies();
             CopyVolumes();
             return 0;
         }
@@ -72,12 +71,12 @@ namespace Eggnog.Relations.Benchmarks
             Print("  part: DisplacedJournal", Measure(() => GC.KeepAlive(new DisplacedJournal())));
             Print("  part: IdBlockAllocator", Measure(() => GC.KeepAlive(new IdBlockAllocator(root.Store.Counters, root.Store.IdCounter))));
 
-            var graph = new CaseGraph(20_000);
+            var graph = new BridgeRootWorkload(20_000);
             graph.Root.Freeze();
             Print("bridge child, no layer (EGraphContext.CreateChild, Dispose)", Measure(() => graph.Root.CreateChild().Dispose()));
             foreach (var rows in new[] { 20_000, 200_000 })
             {
-                var full = new CaseGraph(rows, runCopy: true);
+                var full = new BridgeRootWorkload(rows, runCopy: true);
                 full.Root.Freeze();
                 Print($"full per-child workload, frozen root of {rows:N0} (100 unions, flush, one rule run)", Measure(() =>
                 {
@@ -93,108 +92,21 @@ namespace Eggnog.Relations.Benchmarks
         }
 
         /// <summary>
-        /// Bytes per case of a split, with contexts and with clones (<see cref="CaseSplitMemoryBenchmarks"/>).
+        /// Bytes per deep copy of the root (<see cref="DeepCopyMemoryBenchmarks"/>).
         /// </summary>
-        static void CaseSplits()
+        static void DeepCopies()
         {
             Console.WriteLine();
-            Console.WriteLine("## Case splits: bytes per case");
+            Console.WriteLine("## Deep copies: bytes per copy");
             foreach (var rows in new[] { 20_000, 200_000 })
             {
-                var contexts = new CaseGraph(rows);
-                contexts.Root.Freeze();
-                var clones = new CaseGraph(rows);
-                foreach (var cases in new[] { 2, 8 })
+                var graph = new BridgeRootWorkload(rows);
+                foreach (var copies in new[] { 2, 8 })
                 {
-                    var scope = Measure(() => contexts.Root.CreateChild().Dispose());
-                    var plain = Measure(() => CaseSplitMemoryBenchmarks.RunContexts(contexts, cases, lift: false), warmup: 20, repetitions: 200);
-                    var lifted = Measure(() => CaseSplitMemoryBenchmarks.RunContexts(contexts, cases, lift: true), warmup: 20, repetitions: 200);
-                    var cloned = Measure(() => CaseSplitMemoryBenchmarks.RunClones(clones, cases), warmup: 1, repetitions: 3);
-                    Print($"root {rows:N0}, {cases} cases: contexts, per case (scope excluded)", (plain - scope) / cases);
-                    Print($"root {rows:N0}, {cases} cases: contexts with lift, per case (scope excluded)", (lifted - scope) / cases);
-                    Print($"root {rows:N0}, {cases} cases: Database.Clone, per case", cloned / cases);
+                    var cloned = Measure(() => DeepCopyMemoryBenchmarks.RunClones(graph, copies), warmup: 1, repetitions: 3);
+                    Print($"root {rows:N0}, {copies} copies: Database.Clone, per copy", cloned / copies);
                 }
             }
-        }
-
-        /// <summary>
-        /// The bytes of one case, structure by structure. Each line adds one step to the case's work, under a fresh
-        /// writable scope over a frozen root of 20,000 rows, and prints what the step adds (the scope's own cost is
-        /// subtracted): the case itself, a union and its rebuild, an asserted fact, a rule run, and a lift.
-        /// </summary>
-        static void CaseParts()
-        {
-            Console.WriteLine();
-            Console.WriteLine("## One case, structure by structure: bytes each step adds");
-            var graph = new CaseGraph(20_000, runCopy: true);
-            graph.Root.Freeze();
-            var scope = Measure(() => graph.Root.CreateChild().Dispose());
-            var previous = 0.0;
-            for (var steps = 1; steps <= 5; steps++)
-            {
-                var upTo = steps;
-                var bytes = Measure(() => RunCase(graph, upTo), warmup: 20, repetitions: 400) - scope;
-                Print(CasePartNames[steps - 1], bytes - previous);
-                previous = bytes;
-            }
-
-            Print("one case with all of the above (scope excluded)", previous);
-        }
-
-        /// <summary>
-        /// The names of <see cref="CaseParts"/>' steps, in order.
-        /// </summary>
-        static readonly string[] CasePartNames =
-        [
-            "  part: the case (CaseSet, child context, its database and catalogs)",
-            "  part: one union and its rebuild (overlay, union-find layer, catch-up copies, hidden sets, cursors)",
-            "  part: one asserted fact (the fact table's own layer)",
-            "  part: one rule run (rule progress and watermarks, the run's indexes, caches)",
-            "  part: one lift over the case (member map, candidate arenas, lift writes, the scope's flush)",
-        ];
-
-        /// <summary>
-        /// Opens one case under a fresh scope of <paramref name="graph"/>'s frozen root, runs the first
-        /// <paramref name="steps"/> of <see cref="CaseParts"/>' steps in it, and disposes everything.
-        /// </summary>
-        static void RunCase(CaseGraph graph, int steps)
-        {
-            var scope = graph.Root.CreateChild();
-            using (var set = new CaseSet(scope))
-            {
-                var @case = set.AddCase();
-                if (steps >= 2)
-                {
-                    @case.StageUnion(graph.Ids[0], graph.Ids[1]);
-                    @case.EnsureClean();
-                }
-
-                if (steps >= 3)
-                {
-                    @case.StageRow(graph.Mark, [graph.Ids[1], graph.Unit]);
-                    @case.EnsureClean();
-                }
-
-                if (steps >= 4)
-                    @case.RunRules(graph.Copy);
-
-                if (steps >= 5)
-                    set.Lift(graph.Spec, LiftOptions.Default);
-            }
-
-            scope.Dispose();
-        }
-
-        /// <summary>
-        /// The late-parent-mint counters (<see cref="LateParentMintBenchmarks"/>).
-        /// </summary>
-        static void LateParentMints()
-        {
-            Console.WriteLine();
-            Console.WriteLine("## Late parent mints");
-            foreach (var cases in new[] { 2, 8 })
-                foreach (var terms in new[] { 16, 256 })
-                    Console.WriteLine(LateParentMintBenchmarks.Run(LateParentMintBenchmarks.RootRows, cases, terms));
         }
 
         /// <summary>

@@ -295,10 +295,10 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Brings the rebuild index of every own layer of a shared table with rebuild columns up to date: the indexes a
-        /// child's hide-and-copy step and lift reads probe (<see cref="SortedWritesTable.SharedRebuildIndex"/>). Called
-        /// when a child is created from the context while it is not frozen (<see cref="Context.CreateChild"/>), so the
-        /// child never builds a whole index on its own path. O(own layers) plus the rows appended since each index's
-        /// last refresh. Domain thread only.
+        /// child's hide-and-copy step probes (<see cref="SortedWritesTable.SharedRebuildIndex"/>). Called when a child is
+        /// created from the context while it is not frozen (<see cref="Context.CreateChild"/>), so the child never builds
+        /// a whole index on its own path. O(own layers) plus the rows appended since each index's last refresh. Domain
+        /// thread only.
         /// </summary>
         internal void RefreshOwnRebuildIndexes()
         {

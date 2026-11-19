@@ -19,8 +19,7 @@ namespace Eggnog.Relations.Benchmarks
     /// row, where the hub <c>h(x)</c> is drawn with a heavy tail (the cube of a uniform draw over a random permutation
     /// of the ids, so a few random ids are the hub of thousands of rows), and it is frozen. A union copies the rows
     /// naming its loser, the larger id (smaller-id-wins), so a union whose loser is a hub copies thousands of rows and
-    /// most copy two or three. Only losers are marked, so nothing is copied for the winner's rows: the lift reads those
-    /// through the winner probe (<see cref="Context.ScanAncestorsMentioning{TSink}"/>) instead.
+    /// most copy two or three. Only losers are marked, so nothing is copied for the winner's rows.
     /// </para>
     /// <para>
     /// <see cref="Histogram"/> runs <see cref="Unions"/> single-union children and buckets the rows each copied (powers of

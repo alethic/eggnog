@@ -20,13 +20,13 @@ namespace Eggnog.Relations.Benchmarks
     /// index and rebuilds in its layer: 200 claims, then the child is disposed.
     /// </para>
     /// <para>
-    /// The catch-up (<see cref="ChildCatchUp"/>), a case split's shape: a writable parent of the root and its child;
-    /// the child unions <c>x(4j)</c> and <c>x(4j+1)</c>, claiming <c>v(4j)</c> and <c>v(4j+1)</c>; then the parent
-    /// unions <c>x(4j+1)</c> and <c>x(4j+2)</c>, claiming <c>v(4j+1)</c> and <c>v(4j+2)</c> in its own layer, which
-    /// its container log records; then the child rebuilds. Its pre-loop scan reads the parent's 400 entries and keeps
-    /// 200, which the setup checks; its catch-up leaves the parent's copy of <c>v(4j+1)</c>, which the child's copy
-    /// stands for, and claims <c>v(4j+2)</c>, which holds the child's loser; and its pass merges <c>v(4j+1)</c> into
-    /// <c>v(4j)</c>, whose copies become equal. Both are disposed, so the root never changes.
+    /// The catch-up (<see cref="ChildCatchUp"/>): a writable parent of the root and its child; the child unions
+    /// <c>x(4j)</c> and <c>x(4j+1)</c>, claiming <c>v(4j)</c> and <c>v(4j+1)</c>; then the parent unions <c>x(4j+1)</c>
+    /// and <c>x(4j+2)</c>, claiming <c>v(4j+1)</c> and <c>v(4j+2)</c> in its own layer, which its container log
+    /// records; then the child rebuilds. Its pre-loop scan reads the parent's 400 entries and keeps 200, which the setup
+    /// checks; its catch-up leaves the parent's copy of <c>v(4j+1)</c>, which the child's copy stands for, and claims
+    /// <c>v(4j+2)</c>, which holds the child's loser; and its pass merges <c>v(4j+1)</c> into <c>v(4j)</c>, whose
+    /// copies become equal. Both are disposed, so the root never changes.
     /// </para>
     /// <para>
     /// Each invocation creates and disposes its own contexts, so BenchmarkDotNet chooses the invocation count; the

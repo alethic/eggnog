@@ -83,14 +83,10 @@ namespace Eggnog.Relations
         /// (<see cref="Relations.ContainerLog.Clear"/>): no cursor into it is left.
         /// </summary>
         /// <remarks>
-        /// A frozen context is scanned without its domain, so a dispose from inside one of its
-        /// <see cref="ScanMerges{TVisitor}"/> visitors is not caught by the domain; it is refused through the context's
-        /// count of running scans instead, which also refuses a dispose while another thread scans it. A faulted
-        /// context may be disposed.
+        /// A faulted context may be disposed.
         /// </remarks>
         /// <exception cref="InvalidOperationException">The context is the root; it has live children; the call comes
-        /// from inside another operation of the same thread domain, or while a scan of the context runs; or the domain is
-        /// held by another thread.</exception>
+        /// from inside another operation of the same thread domain; or the domain is held by another thread.</exception>
         public void Dispose()
         {
             if (disposed)
@@ -119,9 +115,6 @@ namespace Eggnog.Relations
 
                         if (children.Count > 0)
                             throw new InvalidOperationException($"The context has {children.Count} live children; dispose them first.");
-
-                        if (Interlocked.CompareExchange(ref activeScans, ScansClosed, 0) != 0)
-                            throw new InvalidOperationException("Dispose cannot be called while a scan of the context runs (ScanMerges, ScanOwn or ScanAncestorsMentioning), from its visitor or from another thread.");
 
                         disposed = true;
                     }
@@ -588,10 +581,10 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Brings the rebuild indexes of this context and of its ancestors that are not frozen up to date before a
-        /// child is created from it: the child's hide-and-copy of the ancestor rows that name its losers, and its lift
-        /// reads, probe them, and would otherwise build an ancestor's whole index on their own path, O(ancestor rows),
-        /// the first time. Frozen ancestors built theirs at their freeze. Afterwards a child refreshes an ancestor's
-        /// index only from the rows the ancestor appended since, which its catch-up reads anyway.
+        /// child is created from it: the child's hide-and-copy of the ancestor rows that name its losers probes them,
+        /// and would otherwise build an ancestor's whole index on its own path, O(ancestor rows), the first time. Frozen
+        /// ancestors built theirs at their freeze. Afterwards a child refreshes an ancestor's index only from the rows
+        /// the ancestor appended since, which its catch-up reads anyway.
         /// </summary>
         /// <remarks>
         /// Cost, as child-creation work of the parent: O(tables of each context that is not frozen) plus, per shared table
@@ -729,7 +722,7 @@ namespace Eggnog.Relations
         [MethodImpl(MethodImplOptions.NoInlining)]
         static void ThrowReentrant(string operation)
         {
-            throw new InvalidOperationException($"{operation} cannot be called from inside another operation of the same context's thread domain (a write, a rule action or external, a visitor or a sink).");
+            throw new InvalidOperationException($"{operation} cannot be called from inside another operation of the same context's thread domain (a write, a rule action or external, a visitor).");
         }
 
     }

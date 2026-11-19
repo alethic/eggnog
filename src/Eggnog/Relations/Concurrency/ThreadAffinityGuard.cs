@@ -65,8 +65,9 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets whether the calling thread holds the guard and is running a caller's code inside one of the domain's
-        /// operations (a write batch's action, a <c>ScanMerges</c> visitor). Operations that change a context of the
-        /// domain refuse to run while this is true. <c>false</c> on a thread that does not hold the guard.
+        /// operations (a write batch's action, a row visitor, a rule search's calls into user code). Operations that change
+        /// a context of the domain refuse to run while this is true. <c>false</c> on a thread that does not hold the
+        /// guard.
         /// </summary>
         public bool InCallback
         {

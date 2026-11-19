@@ -21,12 +21,12 @@ namespace Eggnog.Relations.Benchmarks
     /// creates a child (root work, which the setup's first child absorbs; the children after it find them current).
     /// </para>
     /// <para>
-    /// The full workload (<see cref="ChildUnionsRebuildAndRuleRun"/>) runs on the bridge: a <see cref="CaseGraph"/>
-    /// root of <see cref="RootRows"/> ids whose rule <c>edge(x, y) ⇒ path(x, y)</c> ran once at the root. The child
-    /// stages the same 100 unions, flushes (its rebuild copies the root rows naming its losers) and runs the rule once.
-    /// The rule is semi-naive and its actions depend on its matches alone, so the child inherits the rule's watermark
-    /// from the root, and its semi-naive variants match only the child's 200 rewritten <c>edge</c> rows, whatever the
-    /// root's size; the setup checks the match count.
+    /// The full workload (<see cref="ChildUnionsRebuildAndRuleRun"/>) runs on the bridge: a
+    /// <see cref="BridgeRootWorkload"/> root of <see cref="RootRows"/> ids whose rule <c>edge(x, y) ⇒ path(x, y)</c> ran
+    /// once at the root. The child stages the same 100 unions, flushes (its rebuild copies the root rows naming its
+    /// losers) and runs the rule once. The rule is semi-naive and its actions depend on its matches alone, so the child
+    /// inherits the rule's watermark from the root, and its semi-naive variants match only the child's 200 rewritten
+    /// <c>edge</c> rows, whatever the root's size; the setup checks the match count.
     /// </para>
     /// <para>
     /// Each invocation creates and disposes its own child, so BenchmarkDotNet chooses the invocation count; the memory
@@ -43,7 +43,7 @@ namespace Eggnog.Relations.Benchmarks
         public const int Unions = 100;
 
         RootWorkload? workload;
-        CaseGraph? graph;
+        BridgeRootWorkload? graph;
 
         /// <summary>
         /// Gets or sets the number of rows of each root table.
@@ -79,7 +79,7 @@ namespace Eggnog.Relations.Benchmarks
         [GlobalSetup(Target = nameof(ChildUnionsRebuildAndRuleRun))]
         public void GlobalSetupFull()
         {
-            graph = new CaseGraph(RootRows, runCopy: true);
+            graph = new BridgeRootWorkload(RootRows, runCopy: true);
             if (FrozenRoot)
                 graph.Root.Freeze();
 
@@ -105,7 +105,7 @@ namespace Eggnog.Relations.Benchmarks
         /// <summary>
         /// Runs the full workload once over <paramref name="root"/> and returns the rule's matches.
         /// </summary>
-        static long RunFull(CaseGraph root)
+        static long RunFull(BridgeRootWorkload root)
         {
             var child = root.Root.CreateChild();
             for (var i = 0; i < Unions; i++)

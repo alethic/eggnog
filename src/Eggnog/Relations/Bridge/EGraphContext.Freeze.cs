@@ -17,7 +17,7 @@ namespace Eggnog.Relations
         /// (<see cref="PanicException"/>), leaving the context unfrozen and usable; (4) plan the rules the context's
         /// descendants will run, on this context's statistics: with <paramref name="planRules"/> <c>null</c>, every
         /// live rule without a cached plan; otherwise exactly the given rules that have none (a freeze must not plan
-        /// other scopes' local rules, queries or split matchers on its statistics); (5) freeze the storage context
+        /// other scopes' local rules or queries on its statistics); (5) freeze the storage context
         /// (<see cref="Context.Freeze"/>), warming the indexes the planned rules' plans use
         /// (<see cref="FreezeWarmup.From"/>): those of every live rule's plan for <c>null</c>, those of the given
         /// rules' plans otherwise.

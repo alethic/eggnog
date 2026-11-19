@@ -161,8 +161,8 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// Rebuilds the pair and compares the engine with the oracle: the engine's invariants hold; canonical ids are
         /// exactly the reference's; and in a child, local ids, the journal (complete, and minus the ids displaced in
-        /// the parent's view at creation), own displacements and the merges <see cref="Context.ScanMerges{TVisitor}"/>
-        /// reports are the reference's.
+        /// the parent's view at creation), own displacements and the merges the child made over its parent's ids, read
+        /// from the classes of its union-find overlay (<see cref="Context.Overlay"/>), are the reference's.
         /// </summary>
         /// <param name="allMinted">Every id minted anywhere in the program, by the reference context that minted
         /// it.</param>
@@ -203,14 +203,26 @@ namespace Eggnog.Relations.Tests
                 Assert.True(own == Engine.IsOwnDisplacement(id), $"{Name}: IsOwnDisplacement({id}) is wrong");
             }
 
-            // ScanMerges: every id canonical in the parent whose class here holds another such id, unless it is local,
-            // paired with its canonical here.
+            // The merges the child made over its parent's ids: every id canonical in the parent whose class here holds
+            // another such id, unless it is local, paired with its canonical here. The engine's are read from the
+            // member lists of its overlay's classes, independently of its finds checked above.
             var parentCanonicalIds = canonicals.Keys.Where(id => parentCanonicals.TryGetValue(id, out var p) == false || p == id).ToArray();
             var merged = parentCanonicalIds.GroupBy(id => canonicals[id]).Where(group => group.Count() >= 2).SelectMany(group => group);
             var expectedPairs = merged.Where(id => Reference.Minted.Contains(id) == false).Select(id => (id, canonicals[id])).OrderBy(pair => pair.Item1).ToArray();
-            var visitor = new MergeCollector();
-            Engine.ScanMerges(ref visitor);
-            Assert.Equal(expectedPairs, visitor.Pairs.Select(pair => (pair.Member, pair.Canonical)).OrderBy(pair => pair.Item1).ToArray());
+            var overlay = Engine.Overlay!;
+            var observedPairs = new List<(uint, uint)>();
+            for (var slot = 0; slot < overlay.SlotCount; slot++)
+            {
+                if (overlay.CountOf(slot) < 2)
+                    continue;
+
+                var classCanonical = overlay.CanonicalOf(slot);
+                foreach (var member in overlay.MembersOf(slot))
+                    if (Engine.IsLocalId(member) == false)
+                        observedPairs.Add((member, classCanonical));
+            }
+
+            Assert.Equal(expectedPairs, observedPairs.OrderBy(pair => pair.Item1).ToArray());
         }
 
     }

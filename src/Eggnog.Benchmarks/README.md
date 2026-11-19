@@ -9,8 +9,8 @@ library through its public API (`Library/`, namespace `Eggnog.Benchmarks.Library
   [The egglog-bridge examples](#the-egglog-bridge-examples));
 - the root engine's hot paths (`Relations/Root/`): scans, index builds, the executor, actions and rebuilds, the
   baseline that changes to those paths are compared against (see [The root benchmark set](#the-root-benchmark-set));
-- what a colored context costs (`Relations/Contexts/`): per child as the root grows, per case of a split, per union,
-  per structure, and per row a child catches up with under a busy parent (see
+- what a colored context costs (`Relations/Contexts/`): per child as the root grows, per union, per structure, and per
+  row a child catches up with under a busy parent, beside what a deep copy of the root costs (see
   [The context benchmarks](#the-context-benchmarks));
 - the library against the egglog command line, on a port of egglog's `math-microbenchmark.egg`, and the library's own
   paths: transient query scopes and idle local rules, and the library's work per run at the root. They use the public
@@ -397,10 +397,10 @@ that drops or misstores a merge function's output fails the run.
 
 ## The context benchmarks
 
-The classes in `Relations/Contexts/` measure what a colored context costs. They have no Rust counterpart and no
-baseline to stay within, but a shape to keep: a child must cost in proportion to what it touches, never to the size
-of its ancestors. The root workload (`RootWorkload`: `f(x) → v` and `r(x, x+1)` for every id, so a child's work over
-a fixed set of ids touches a fixed number of root rows; or `CaseGraph` for the bridge workloads) is built from the
+The classes in `Relations/Contexts/` measure what a colored context costs. They have no Rust counterpart and no baseline
+to stay within, but a shape to keep: a child must cost in proportion to what it touches, never to the size of its
+ancestors. The root workload (`RootWorkload`: `f(x) → v` and `r(x, x+1)` for every id, so a child's work over a fixed
+set of ids touches a fixed number of root rows; or `BridgeRootWorkload` for the bridge workloads) is built from the
 fixed seed `0x5EED`, frozen except where a class says otherwise; the classes check their results in the setup or in
 every invocation.
 
@@ -411,17 +411,16 @@ every invocation.
 | `ManyChildrenBenchmarks` | A thousand single-union children of a 200,000-row frozen root, in parallel and serially; one child with no layer and with one empty layer. | `ChildWithOneEmptyLayer` minus `ChildOnly` in the allocated column is the bytes per empty layer (about 1 KB). |
 | `ChildFindBenchmarks` | `find` at a frozen root, in a child at depth 1 and 3 over an explicit chain (raw and through `Context.Find`), and under a frozen, flattened chain. | One probe per non-empty level over the root's find; a flattened chain costs one map read whatever its depth. |
 | `ContextExtractionBenchmarks` | On-demand extraction of 4,000 classes from a fresh extractor: through the root API (the baseline), through the context form at the root, and in a child of a 40,000-term frozen root that made 4,000 terms and 400 unions of its own, frozen or not. | `RootContext` within noise of `RootApi` (one branch per discovery round, none per node); `Child` pays one index probe per present layer per producing function on top. |
-| `CaseSplitMemoryBenchmarks` | The bytes one split allocates per case (a case set under a fresh scope, each case one union and one fact, optionally lifted), against a full clone of the root per case with the same writes, over roots of 20,000 and 200,000 ids. | Bytes per case flat in the root's size for contexts; clones grow linearly. |
+| `DeepCopyMemoryBenchmarks` | The bytes a deep copy of the root allocates: one `Database.Clone` of a root of 20,000 or 200,000 ids per copy, with one union and one fact merged into each, the baseline a cheaper copy is measured against. | None to keep, as a baseline: bytes per copy grow linearly with the root's size. |
 | `CopyVolumeBenchmarks` | How many ancestor rows a child copies for one union, as a histogram (printed by the setup) over unions of random ids on a root where a few ids are named by thousands of rows. | Most unions copy two or three rows; only a union whose loser is a heavily used id copies many. |
-| `LateParentMintBenchmarks` | A writable parent that lifts terms after its cases built them, so each lifted term's parent id loses to the cases' local ids: the parent-id losers, the rows they copy per lift round, and the growth of the root's id array. | Counters linear in cases times terms per round, independent of the root's size. |
 | `BusyParentCatchUpBenchmarks` | A writable 20,000-row root with 1, 8 or 64 live children, each with one union of its own, appends 100 or 10,000 rows to a shared table (one in ten naming a child's loser), and every child rebuilds. Only the rebuilds are measured; `Items` is the rows examined, so time over `Items` is the time per examined row. Each iteration is one invocation on a fresh root, below BenchmarkDotNet's recommended 100 ms, so read the time per row from the cases with 10,000 appended rows; the others are there for their counters. | Each child examines every appended row once (`Children × Appended` in all, checked after each iteration), and only the rows naming its own loser are copied (`Appended / 10` in all); after the children are disposed the root has no live child, and each iteration's setup checks that the previous iteration was checked. |
 
 Run them like any other class, for example `--filter *PerChildCostBenchmarks*`; the 2M-row root takes some seconds to
 build in the setup.
 
 The app's footprint mode prints the steady-state bytes of the context structures (a bare child, an empty layer, a
-bridge child, a child with one union) and the counters of the case-split workloads, measured in process after a
-warm-up and averaged over many repetitions, without the cold-start allocations a dry run includes:
+bridge child, a child with one union), the bytes of a deep copy of the root and the copy volume per union, measured in
+process after a warm-up and averaged over many repetitions, without the cold-start allocations a dry run includes:
 
 ```
 src/Eggnog.Benchmarks/bin/Release/net10.0/Eggnog.Benchmarks.exe --context-footprint
@@ -760,7 +759,7 @@ are rough.
 | 1 | 3 | The example mode against the Rust examples, five pairs each, at every processor and at one thread (`--threads 1` against `RAYON_NUM_THREADS=1`); the library's `math-microbenchmark.egg` against `egglog -j 1`. | 0.5-0.8 h |
 | 2 | 1 | An A/A control: `main` against itself on `RuleSetRunBenchmarks` and the warm `math` example, for the spread of each configuration. | 0.5-1 h |
 | 2 | 2 | Each root-path candidate against `main` on the root set, as in step 1 of night 1, and the idle-rule allocation commit's `BridgeMathBenchmarks` against its parent, which the CI comparison left unsettled. | 2.5-3 h each; about 0.4 h for `BridgeMathBenchmarks` |
-| 2 | 3 | The context classes (`ContextExtractionBenchmarks`, `PerChildCostBenchmarks`, `CaseSplitMemoryBenchmarks`, `ManyChildrenBenchmarks`, `ChildFindBenchmarks`), whose ratios are within one build, and `BusyParentCatchUpBenchmarks`, for its time per examined row: about 10 minutes a launch. | 0.5 h |
+| 2 | 3 | The context classes (`ContextExtractionBenchmarks`, `PerChildCostBenchmarks`, `ManyChildrenBenchmarks`, `ChildFindBenchmarks`), whose ratios are within one build, and `BusyParentCatchUpBenchmarks`, for its time per examined row: about 8 minutes a launch. | 0.4 h |
 | 2 | 4 | The library classes on the launch matrix: four launches a class. | 0.5-1 h |
 | 2 | 5 | `WritesBenchmarks --iterationCount 25` with both shard counts, against `cargo bench --bench writes`, two rounds. | 1-1.5 h |
 | 2 | 6 | ETW profiles of `BasicMath`, `math` and a query child, as listed under "What the campaign times". | 0.5 h |

@@ -26,7 +26,8 @@ namespace Eggnog.Relations.Tests
             var root = store.Root;
             store.AdvanceClock();
             var child = root.CreateChild();
-            var grandchild = child.CreateChild(ContextOptions.Case);
+            var options = new ContextOptions { StopOnContradiction = true };
+            var grandchild = child.CreateChild(options);
 
             Assert.Equal(0, root.Depth);
             Assert.Equal(1, child.Depth);
@@ -39,9 +40,8 @@ namespace Eggnog.Relations.Tests
             Assert.True(root.IsRoot);
             Assert.False(child.IsRoot);
             Assert.Same(ContextOptions.Default, child.Options);
-            Assert.Same(ContextOptions.Case, grandchild.Options);
+            Assert.Same(options, grandchild.Options);
             Assert.True(grandchild.Options.StopOnContradiction);
-            Assert.True(grandchild.Options.IsCase);
             Assert.False(child.Options.StopOnContradiction);
             Assert.True(child.Options.InheritWatermarks);
             Assert.Same(store, grandchild.Store);

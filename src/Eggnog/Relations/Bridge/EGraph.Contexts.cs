@@ -31,7 +31,7 @@ namespace Eggnog.Relations
         /// <summary>
         /// Designates <paramref name="function"/> as the e-graph's contradiction function: a nullary relation whose
         /// row, once it merges into a context that stops on contradictions
-        /// (<see cref="ContextOptions.StopOnContradiction"/>, cases), stops that context. Maps to
+        /// (<see cref="ContextOptions.StopOnContradiction"/>), stops that context. Maps to
         /// <see cref="Relations.Store.DesignateContradiction"/>. Once per e-graph.
         /// </summary>
         /// <remarks>

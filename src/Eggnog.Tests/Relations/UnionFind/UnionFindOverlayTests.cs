@@ -9,8 +9,8 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// Tests for <see cref="UnionFindOverlay"/>'s class table, the classes a child context merged: the three shapes of
-    /// a union, canonical = minimum member, member lists in insertion order, the class map, slot reuse, the version,
-    /// freezing, and a random property test against <see cref="PartitionReference"/>.
+    /// a union, canonical = minimum member, member lists in insertion order, the class map, slot reuse, freezing, and a
+    /// random property test against <see cref="PartitionReference"/>.
     /// </summary>
     public class UnionFindOverlayTests
     {
@@ -29,7 +29,6 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(0, overlay.MemberCount);
             Assert.Equal(0, overlay.ClassCount);
             Assert.Equal(0, overlay.SlotCount);
-            Assert.Equal(0, overlay.Version);
             Assert.Equal(7u, overlay.Map(7));
             Assert.Equal(uint.MaxValue, overlay.Map(uint.MaxValue));
             Assert.False(overlay.TryGetClass(7, out var slot));
@@ -49,7 +48,6 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(new uint[] { 9, 4 }, Members(overlay, 4));
             Assert.Equal(4u, overlay.Map(9));
             Assert.Equal(4u, overlay.Map(4));
-            Assert.Equal(1, overlay.Version);
 
             // A trivial id joins: the class's canonical against the id.
             Assert.True(overlay.Union(2, 9, out winner, out loser));
@@ -73,7 +71,6 @@ namespace Eggnog.Relations.Tests
             Assert.True(overlay.TryGetClass(30, out var slot));
             Assert.Equal(1u, overlay.CanonicalOf(slot));
             Assert.Equal(5, overlay.CountOf(slot));
-            Assert.Equal(4, overlay.Version);
         }
 
         [Fact]
@@ -83,12 +80,12 @@ namespace Eggnog.Relations.Tests
             Assert.False(overlay.Union(3, 3, out var winner, out var loser));
             Assert.Equal((3u, 3u), (winner, loser));
             Assert.True(overlay.IsEmpty);
-            Assert.Equal(0, overlay.Version);
 
             overlay.Union(3, 8, out _, out _);
             Assert.False(overlay.Union(8, 3, out winner, out loser));
             Assert.Equal((3u, 3u), (winner, loser));
-            Assert.Equal(1, overlay.Version);
+            Assert.Equal(1, overlay.ClassCount);
+            Assert.Equal(new uint[] { 3, 8 }, Members(overlay, 8));
             Assert.Equal(2, overlay.MemberCount);
         }
 

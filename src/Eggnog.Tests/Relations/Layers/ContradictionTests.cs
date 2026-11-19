@@ -10,8 +10,8 @@ namespace Eggnog.Relations.Tests
     /// <summary>
     /// Tests for the contradiction stop at the storage level: with <see cref="ContextOptions.StopOnContradiction"/> a
     /// merged contradiction row stops the context, its merge loop stops after the round, and it answers only
-    /// <see cref="Context.IsContradictory"/>; without it a contradiction is an ordinary fact; and a case created where
-    /// a contradiction is visible starts stopped.
+    /// <see cref="Context.IsContradictory"/>; without it a contradiction is an ordinary fact; and a child that stops on
+    /// contradictions, created where a contradiction is visible, starts stopped.
     /// </summary>
     public class ContradictionTests
     {
@@ -26,7 +26,7 @@ namespace Eggnog.Relations.Tests
         }
 
         [Fact]
-        public void ACaseStopsWhenAContradictionMerges()
+        public void AStoppingChildStopsWhenAContradictionMerges()
         {
             var (store, bottom, g) = Setup();
             var root = store.Root;
@@ -35,7 +35,7 @@ namespace Eggnog.Relations.Tests
             var y = root.NewId();
             Insert(root, g, a, x, 0);
             root.Freeze();
-            var child = root.CreateChild(ContextOptions.Case);
+            var child = root.CreateChild(new ContextOptions { StopOnContradiction = true });
             Assert.False(child.IsContradicted);
             Assert.False(child.IsContradictory);
             var version = child.Version;
@@ -84,26 +84,26 @@ namespace Eggnog.Relations.Tests
             Assert.False(root.IsContradictory);
             LookupPaths.Check(child);
 
-            // A case created under it starts stopped; an ordinary child does not.
+            // A child that stops on contradictions, created under it, starts stopped; an ordinary child does not.
             child.Freeze();
-            var @case = child.CreateChild(ContextOptions.Case);
-            Assert.True(@case.IsContradicted);
-            Assert.True(@case.IsContradictory);
-            Assert.Throws<InvalidOperationException>(() => @case.GetView(bottom));
+            var stopping = child.CreateChild(new ContextOptions { StopOnContradiction = true });
+            Assert.True(stopping.IsContradicted);
+            Assert.True(stopping.IsContradictory);
+            Assert.Throws<InvalidOperationException>(() => stopping.GetView(bottom));
             var ordinary = child.CreateChild();
             Assert.False(ordinary.IsContradicted);
             Assert.True(ordinary.IsContradictory);
         }
 
         /// <summary>
-        /// The children of a case that a contradiction stopped with writes pending: its parent is never clean again,
+        /// The children of a context that a contradiction stopped with writes pending: its parent is never clean again,
         /// and a child catches up only with a parent that is frozen or clean, so it never catches up with that parent.
         /// A child that stops on contradictions stops too (the contradiction row is visible in its parent); any other
         /// child is refused on rebuild, write and child creation, unfaulted and without taking an epoch; both may be
         /// disposed.
         /// </summary>
         [Fact]
-        public void TheChildrenOfAStoppedCaseStopOrAreRefused()
+        public void TheChildrenOfAStoppedContextStopOrAreRefused()
         {
             var (store, bottom, g) = Setup();
             var root = store.Root;
@@ -112,19 +112,19 @@ namespace Eggnog.Relations.Tests
             var y = root.NewId();
             Insert(root, g, a, x, 0);
             root.Freeze();
-            var @case = root.CreateChild(ContextOptions.Case);
-            var ordinary = @case.CreateChild();
-            var subcase = @case.CreateChild(ContextOptions.Case);
+            var stopping = root.CreateChild(new ContextOptions { StopOnContradiction = true });
+            var ordinary = stopping.CreateChild();
+            var inner = stopping.CreateChild(new ContextOptions { StopOnContradiction = true });
             var grandchild = ordinary.CreateChild();
 
-            @case.Write(state =>
+            stopping.Write(state =>
             {
                 state.StageInsert(bottom, [state.Timestamp]);
                 state.StageInsert(g, [a, y, state.Timestamp]);
                 return 0;
             });
-            Assert.True(@case.IsContradicted);
-            Assert.False(@case.IsClean);
+            Assert.True(stopping.IsContradicted);
+            Assert.False(stopping.IsClean);
 
             var clock = store.ReadClock();
             Assert.Throws<InvalidOperationException>(() => ordinary.Rebuild());
@@ -135,17 +135,17 @@ namespace Eggnog.Relations.Tests
             Assert.False(grandchild.IsFaulted);
             Assert.False(ordinary.IsClean);
 
-            Assert.False(subcase.Rebuild());
-            Assert.True(subcase.IsContradicted);
-            Assert.True(subcase.IsContradictory);
-            Assert.Throws<InvalidOperationException>(() => Insert(subcase, g, x, x, 0));
-            Assert.False(subcase.IsFaulted);
+            Assert.False(inner.Rebuild());
+            Assert.True(inner.IsContradicted);
+            Assert.True(inner.IsContradictory);
+            Assert.Throws<InvalidOperationException>(() => Insert(inner, g, x, x, 0));
+            Assert.False(inner.IsFaulted);
             Assert.Equal(clock, store.ReadClock());
 
             grandchild.Dispose();
             ordinary.Dispose();
-            subcase.Dispose();
-            @case.Dispose();
+            inner.Dispose();
+            stopping.Dispose();
         }
 
         [Fact]

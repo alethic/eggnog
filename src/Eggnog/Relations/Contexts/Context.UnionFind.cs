@@ -68,8 +68,8 @@ namespace Eggnog.Relations
         /// <see cref="UnionFindStatistics.OwnUnions"/> is its displaced count and the rest are zero.
         /// </summary>
         public UnionFindStatistics UnionFindStatistics => overlayTable is { } table
-            ? new UnionFindStatistics(table.OwnUnions, Interlocked.Read(ref importedDisplacements), Interlocked.Read(ref rekeyedMembers), table.ParentIdLosers)
-            : new UnionFindStatistics(store.RootUnionFind.UnionFind.Count, 0, 0, 0);
+            ? new UnionFindStatistics(table.OwnUnions, Interlocked.Read(ref importedDisplacements), Interlocked.Read(ref rekeyedMembers))
+            : new UnionFindStatistics(store.RootUnionFind.UnionFind.Count, 0, 0);
 
         /// <summary>
         /// Gets the canonical id of <paramref name="id"/> in this context: the minimum of its class.
@@ -169,8 +169,8 @@ namespace Eggnog.Relations
         /// <returns><c>true</c> if the classes were distinct: the displaced count grew.</returns>
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
         /// <exception cref="InvalidOperationException">The context is frozen, faulted or contradicted; its domain is
-        /// held by another thread; or the call comes from inside a write batch's action or a <c>ScanMerges</c> visitor
-        /// of the same domain.</exception>
+        /// held by another thread; or the call comes from inside a write batch's action or other user code that an
+        /// operation of the same domain runs.</exception>
         public bool Union(uint a, uint b)
         {
             var before = Write((Context: this, A: a, B: b), static (state, args) =>
@@ -207,92 +207,10 @@ namespace Eggnog.Relations
         internal uint FindInParent(uint id) => parentFinder!.Find(id);
 
         /// <summary>
-        /// Visits the merges this child made over its parent's ids: for every class of its overlay, each member that is
-        /// not local to the child, paired with the class's canonical id; a class's canonical is visited paired with
-        /// itself when it is a parent id. Deterministic: slot order, then insertion order.
-        /// </summary>
-        /// <remarks>
-        /// <para>
-        /// Requires the context to be clean. The visitor may read any context (<see cref="Find"/> included). It runs as
-        /// a callback of the context's thread domain: a write to any context of the domain (<see cref="Union"/>,
-        /// <see cref="Write{TResult}"/>) and a rebuild that would run a pass are refused before they stage anything, so
-        /// the scanned context stays clean and its classes stay as they are; <see cref="CreateChild"/>,
-        /// <see cref="Freeze"/> and <see cref="Dispose"/> are refused too. A frozen context is scanned without its
-        /// domain, and nothing can change it; disposing it while a scan of it runs (from the visitor or from another
-        /// thread) is refused.
-        /// </para>
-        /// <para>Cost: O(overlay members), plus two interlocked operations per call.</para>
-        /// </remarks>
-        /// <typeparam name="TVisitor">The visitor type.</typeparam>
-        /// <param name="visitor">The visitor.</param>
-        /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
-        /// <exception cref="InvalidOperationException">The context is the root, is faulted, contradicted or not clean, or
-        /// its domain is held by another thread.</exception>
-        internal void ScanMerges<TVisitor>(ref TVisitor visitor)
-            where TVisitor : struct, IMergeVisitor
-        {
-            ThrowIfDisposed();
-            if (overlay is not { } o)
-                throw new InvalidOperationException("The root context merged nothing over a parent: it has none.");
-
-            // A context that is not frozen cannot freeze while this thread holds its domain, so the test is stable.
-            var current = frozen ? null : Domain;
-            using var scope = current is null ? default : current.Enter();
-            ThrowIfNotReadable();
-            if (Interlocked.Increment(ref activeScans) <= 0)
-            {
-                Interlocked.Decrement(ref activeScans);
-                ThrowDisposed();
-            }
-
-            current?.EnterCallback();
-            try
-            {
-                VisitMerges(o, ref visitor);
-            }
-            finally
-            {
-                current?.ExitCallback();
-                Interlocked.Decrement(ref activeScans);
-            }
-        }
-
-        /// <summary>
-        /// The loop of <see cref="ScanMerges{TVisitor}"/>: every member of every merged class that is not local, with its
-        /// class's canonical, in slot then insertion order.
-        /// </summary>
-        void VisitMerges<TVisitor>(UnionFindOverlay o, ref TVisitor visitor)
-            where TVisitor : struct, IMergeVisitor
-        {
-            var blocks = idBlocks!;
-
-            // Defence in depth: writes are refused inside the visitor, so the overlay cannot change under the scan.
-            var version = o.Version;
-            for (var slot = 0; slot < o.SlotCount; slot++)
-            {
-                if (o.CountOf(slot) < 2)
-                    continue;
-
-                var canonical = o.CanonicalOf(slot);
-                var members = o.MembersOf(slot);
-                for (var i = 0; i < members.Length; i++)
-                {
-                    var member = members[i];
-                    if (blocks.Contains(member))
-                        continue;
-
-                    visitor.Visit(member, canonical);
-                    if (o.Version != version)
-                        ThrowChangedDuringScan();
-                }
-            }
-        }
-
-        /// <summary>
         /// Throws <see cref="InvalidOperationException"/> when the calling thread runs a caller's code inside an
-        /// operation of <paramref name="domain"/> (a write batch's action, a <see cref="ScanMerges{TVisitor}"/>
-        /// visitor): the operation named by <paramref name="operation"/> would change a context the running operation
-        /// depends on. Nothing has been staged or changed when it throws, and no context is faulted.
+        /// operation of <paramref name="domain"/> (a write batch's action, a rule search's calls into user code): the
+        /// operation named by <paramref name="operation"/> would change a context the running operation depends on.
+        /// Nothing has been staged or changed when it throws, and no context is faulted.
         /// </summary>
         /// <param name="domain">The domain the calling thread holds.</param>
         /// <param name="operation">The refused operation's name.</param>
@@ -307,14 +225,7 @@ namespace Eggnog.Relations
         [MethodImpl(MethodImplOptions.NoInlining)]
         static void ThrowInCallback(string operation)
         {
-            throw new InvalidOperationException($"{operation} cannot change a context from inside a write batch's action or a ScanMerges visitor of the same thread domain; reads are allowed there.");
-        }
-
-        [DoesNotReturn]
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        static void ThrowChangedDuringScan()
-        {
-            throw new InvalidOperationException("The context's union-find changed during ScanMerges; a visitor must not write the context.");
+            throw new InvalidOperationException($"{operation} cannot change a context from inside a write batch's action, a visitor or other user code that an operation of the same thread domain runs; reads are allowed there.");
         }
 
     }

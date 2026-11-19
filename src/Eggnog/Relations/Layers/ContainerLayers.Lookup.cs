@@ -65,26 +65,9 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets whether <paramref name="id"/> is a container's id in the view of this context, of any type the root's
-        /// environments register: for each, the nearest level whose layer of the type owns the id answers, else the root.
-        /// O(types × depth) lock-free tests and at most one probe per type. Thread-safe.
-        /// </summary>
-        /// <param name="values">The root's container environments.</param>
-        /// <param name="id">The id.</param>
-        /// <returns><c>true</c> if a container of some type has the id.</returns>
-        public bool IsContainerId(ContainerValues values, uint id)
-        {
-            var count = values.TypeCount;
-            for (var i = 0; i < count; i++)
-                if (ContainsId(values.GetEnvironment(ContainerTypeId.FromIndex(i)), id))
-                    return true;
-
-            return false;
-        }
-
-        /// <summary>
         /// Gets whether a container of the type <paramref name="root"/> holds has id <paramref name="id"/> in the view of
-        /// this context, as <see cref="TryGetContainer{TContainer}"/> finds one, type-erased.
+        /// this context, as <see cref="TryGetContainer{TContainer}"/> finds one, type-erased: the nearest level whose
+        /// layer of the type owns the id answers, else the root. O(depth) lock-free tests and one probe.
         /// </summary>
         bool ContainsId(ContainerEnvBase root, uint id)
         {

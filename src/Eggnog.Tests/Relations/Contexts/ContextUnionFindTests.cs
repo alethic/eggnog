@@ -45,7 +45,7 @@ namespace Eggnog.Relations.Tests
             // A clean root rebuilds nothing and leaves the clock alone, so its timestamps stay egglog's.
             Assert.False(root.Rebuild());
             Assert.Equal(clock + 1, store.ReadClock());
-            Assert.Equal(new UnionFindStatistics(1, 0, 0, 0), root.UnionFindStatistics);
+            Assert.Equal(new UnionFindStatistics(1, 0, 0), root.UnionFindStatistics);
             Assert.False(root.IsOwnDisplacement(b));
         }
 
@@ -102,7 +102,7 @@ namespace Eggnog.Relations.Tests
             // The parent is unchanged.
             Assert.Equal(ids[3], root.Find(ids[3]));
             Assert.Equal(1, root.DisplacedCount);
-            Assert.Equal(new UnionFindStatistics(1, 0, 0, 0), child.UnionFindStatistics);
+            Assert.Equal(new UnionFindStatistics(1, 0, 0), child.UnionFindStatistics);
             child.CheckInvariants();
         }
 
@@ -374,15 +374,12 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// <see cref="Context.ScanMerges{TVisitor}"/> and <see cref="Context.IsLocalId"/>, which only a child answers,
-        /// throw at the root.
+        /// <see cref="Context.IsLocalId"/>, which only a child answers, throws at the root.
         /// </summary>
         [Fact]
-        public void ScanMergesAndIsLocalIdAreRefusedAtTheRoot()
+        public void IsLocalIdIsRefusedAtTheRoot()
         {
             var store = new Store();
-            var visitor = new MergeCollector();
-            Assert.Throws<InvalidOperationException>(() => store.Root.ScanMerges(ref visitor));
             Assert.Throws<InvalidOperationException>(() => store.Root.IsLocalId(0));
         }
 

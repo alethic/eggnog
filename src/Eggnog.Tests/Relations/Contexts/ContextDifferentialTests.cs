@@ -18,8 +18,9 @@ namespace Eggnog.Relations.Tests
     /// The id pool is kept small so keys collide and congruence cascades. Retractions are attempted anywhere: where the
     /// engine's retraction rule allows them (the root without live descendants, a child of a frozen parent without live
     /// descendants) they apply; elsewhere the engine must refuse without changing anything. Checks compare views
-    /// (exactly with the reference), lookups, column scans (through the lift reads in children) and scans since a clock
-    /// reading; every rebuild runs the engine's invariant checker, and every write the lookup-path comparison.
+    /// (exactly with the reference), lookups, column scans (in a child, from its own layer read apart from its view and
+    /// from its view's ancestor layers) and scans since a clock reading; every rebuild runs the engine's invariant
+    /// checker, and every write the lookup-path comparison.
     /// </para>
     /// <para>
     /// <c>EGGNOG_CONTEXT_SEEDS</c> sets the number of seeds (400 by default). A failing program prints itself.

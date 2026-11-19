@@ -227,11 +227,11 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// A failure recorded by a run that also stopped the context is thrown as <see cref="PanicException"/>; the
-        /// stop does not hide it. A case's rule derives the contradiction and, in the same run, writes an assert-eq
-        /// conflict.
+        /// stop does not hide it. In a child that stops on contradictions, a rule derives the contradiction and, in the
+        /// same run, writes an assert-eq conflict.
         /// </summary>
         [Fact]
-        public void APanicInTheRunThatStopsACaseIsThrown()
+        public void APanicInTheRunThatStopsAContextIsThrown()
         {
             var g = new ContextGraph();
             g.EGraph.DesignateContradiction(g.Bottom);
@@ -247,12 +247,12 @@ namespace Eggnog.Relations.Tests
             var rule = rb.Build();
             g.Root.Freeze();
 
-            using var @case = g.Root.CreateChild(ContextOptions.Case);
-            g.Assert(@case, g.Mark, a);
-            @case.FlushUpdates();
-            Assert.Throws<PanicException>(() => @case.RunRules(rule));
-            Assert.True(@case.IsStopped);
-            Assert.False(@case.IsFaulted);
+            using var stopping = g.Root.CreateChild(new ContextOptions { StopOnContradiction = true });
+            g.Assert(stopping, g.Mark, a);
+            stopping.FlushUpdates();
+            Assert.Throws<PanicException>(() => stopping.RunRules(rule));
+            Assert.True(stopping.IsStopped);
+            Assert.False(stopping.IsFaulted);
         }
 
         /// <summary>

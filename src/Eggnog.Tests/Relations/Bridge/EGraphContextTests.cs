@@ -176,7 +176,7 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// Every term minted in a child is local to it, since every term mint draws on the child's own id blocks: fresh
         /// ids, staged terms, and the ids its rules mint; container ids are minted on the shared counter and are never
-        /// local.
+        /// local. The root, which has no local ids, refuses the question.
         /// </summary>
         [Fact]
         public void IsLocalIdCoversTermMintsAndNotContainerMints()
@@ -207,6 +207,11 @@ namespace Eggnog.Relations.Tests
             Assert.True(child.Context.IsLocalId(add!.Value.Rep));
             Assert.False(child.Context.IsLocalId(container.Rep));
             Assert.Equal(container, g.EGraph.GetContainerValue(new VecContainer(false, 1, 2)));
+
+            // The bridge's form answers as the storage context's, and the root refuses it.
+            Assert.True(child.IsLocalId(fresh));
+            Assert.False(child.IsLocalId(container));
+            Assert.Throws<InvalidOperationException>(() => g.Root.IsLocalId(fresh));
         }
 
         /// <summary>
@@ -245,8 +250,9 @@ namespace Eggnog.Relations.Tests
         public void TheLifecycleFollowsStorage()
         {
             var g = new ContextGraph();
-            var child = g.Root.CreateChild(ContextOptions.Case);
-            Assert.True(child.Options.IsCase);
+            var options = new ContextOptions { StopOnContradiction = true };
+            var child = g.Root.CreateChild(options);
+            Assert.Same(options, child.Options);
             Assert.Same(g.Root, child.Parent);
             Assert.Same(child, child.Context.Host);
             var grandchild = child.CreateChild();
@@ -374,7 +380,7 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// A stopped context's writes and runs are no-ops, and its reads but
-        /// <see cref="EGraphContext.IsContradictory"/> are refused: a contradicted case has no model.
+        /// <see cref="EGraphContext.IsContradictory"/> are refused: a contradicted context has no model.
         /// </summary>
         [Fact]
         public void AStoppedContextIgnoresWritesAndRuns()
@@ -382,19 +388,19 @@ namespace Eggnog.Relations.Tests
             var g = new ContextGraph();
             g.EGraph.DesignateContradiction(g.Bottom);
             g.Root.Freeze();
-            using var @case = g.Root.CreateChild(ContextOptions.Case);
-            var a = @case.FreshId();
-            @case.StageRow(g.Bottom, [g.Unit]);
-            Assert.True(@case.FlushUpdates());
-            Assert.True(@case.IsStopped);
-            Assert.True(@case.IsContradictory);
-            g.Assert(@case, g.Mark, a);
-            Assert.False(@case.FlushUpdates());
-            Assert.True(@case.RunRules(g.EdgeToPath()).Stopped);
-            Assert.Throws<InvalidOperationException>(() => @case.TableSize(g.Mark));
-            Assert.Throws<InvalidOperationException>(() => @case.CreateChild());
-            Assert.Throws<InvalidOperationException>(() => @case.FreshId());
-            @case.CheckInvariants();
+            using var stopping = g.Root.CreateChild(new ContextOptions { StopOnContradiction = true });
+            var a = stopping.FreshId();
+            stopping.StageRow(g.Bottom, [g.Unit]);
+            Assert.True(stopping.FlushUpdates());
+            Assert.True(stopping.IsStopped);
+            Assert.True(stopping.IsContradictory);
+            g.Assert(stopping, g.Mark, a);
+            Assert.False(stopping.FlushUpdates());
+            Assert.True(stopping.RunRules(g.EdgeToPath()).Stopped);
+            Assert.Throws<InvalidOperationException>(() => stopping.TableSize(g.Mark));
+            Assert.Throws<InvalidOperationException>(() => stopping.CreateChild());
+            Assert.Throws<InvalidOperationException>(() => stopping.FreshId());
+            stopping.CheckInvariants();
         }
 
     }

@@ -14,14 +14,9 @@ namespace Eggnog.Relations
         public static ContextOptions Default { get; } = new();
 
         /// <summary>
-        /// The options of a case of a split: a contradiction stops the context, which then answers only whether it is
-        /// contradictory and is disposed as vacuous.
-        /// </summary>
-        public static ContextOptions Case { get; } = new() { IsCase = true, StopOnContradiction = true };
-
-        /// <summary>
-        /// Gets whether merging a row into the store's designated contradiction table stops the context. Default
-        /// <c>false</c>: for host runs a contradiction is an ordinary fact.
+        /// Gets whether merging a row into the store's designated contradiction table stops the context, which then
+        /// answers only whether it is contradictory. Default <c>false</c>: for host runs a contradiction is an ordinary
+        /// fact.
         /// </summary>
         public bool StopOnContradiction { get; init; }
 
@@ -31,11 +26,6 @@ namespace Eggnog.Relations
         /// concurrently).
         /// </summary>
         public ParallelHeuristics? Parallelism { get; init; }
-
-        /// <summary>
-        /// Gets whether the context is a case of a split, for the lift and split drivers.
-        /// </summary>
-        public bool IsCase { get; init; }
 
         /// <summary>
         /// Gets whether the bridge may seed this context's rule watermarks from its ancestors'. Default <c>true</c>;

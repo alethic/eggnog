@@ -21,8 +21,7 @@ namespace Eggnog.Relations
         /// context's id blocks and inserts (<see cref="ContainerEnv{TContainer}.GetOrInsertLocal"/>), recording the
         /// entry in the context's container log while its descendants live. The context's rule tasks that race to
         /// intern one content agree on one id. The ancestors never see the container, so disposing the context drops
-        /// it with its layers (<see cref="Release"/>); its id stays local to the context, so a lift drops the rows that
-        /// name it (<see cref="MemberMap.Members"/>).
+        /// it with its layers (<see cref="Release"/>); its id stays local to the context.
         /// </para>
         /// <para>
         /// The ancestors hold still meanwhile: a frozen one never changes, and a writable one does not run while its

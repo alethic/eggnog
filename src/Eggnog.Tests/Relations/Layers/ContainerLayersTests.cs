@@ -124,10 +124,6 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(new VecContainer(b), found);
             Assert.True(childView.TryGetId(new VecContainer(b, b), out var foundId));
             Assert.Equal(local, foundId);
-            Assert.True(childView.IsContainerId(local));
-            Assert.True(childView.IsContainerId(x));
-            Assert.False(rootView.IsContainerId(local));
-            Assert.False(childView.IsContainerId(a));
 
             // The root's environment is untouched, and the layer obeys the ownership rule.
             Assert.Equal(2, env.Count);
@@ -319,7 +315,6 @@ namespace Eggnog.Relations.Tests
                             Assert.Equal(x, ByContent(view, env, new VecContainer(b)));
                             Assert.Equal(local, ByContent(view, env, new VecContainer(b, b)));
                             Assert.Null(ByContent(view, env, new VecContainer(a)));
-                            Assert.True(view.IsContainerId(local));
                         }
                     }));
                 }

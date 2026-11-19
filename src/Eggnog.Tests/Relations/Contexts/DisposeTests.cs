@@ -13,7 +13,7 @@ namespace Eggnog.Relations.Tests
     /// Tests for <see cref="Context.Dispose"/> in full: the rules (the root and a context with live children refuse, a
     /// second call does nothing, every later call throws <see cref="ObjectDisposedException"/>), what it releases, the
     /// gates it exits (which release compaction and retraction above it), the root's container log cleared with the
-    /// last descendant, and disposing faulted, frozen and scanned contexts.
+    /// last descendant, disposing faulted and frozen contexts, and the refusal of a dispose from inside a write batch.
     /// </summary>
     public class DisposeTests
     {
@@ -35,7 +35,6 @@ namespace Eggnog.Relations.Tests
             Assert.True(child.IsDisposed);
             child.Dispose();
 
-            var sink = new RowCollector();
             Assert.Throws<ObjectDisposedException>(() => child.Find(a));
             Assert.Throws<ObjectDisposedException>(() => child.Union(a, a));
             Assert.Throws<ObjectDisposedException>(() => child.Rebuild());
@@ -46,8 +45,6 @@ namespace Eggnog.Relations.Tests
             Assert.Throws<ObjectDisposedException>(() => Insert(child, f, a, 2, 0));
             Assert.Throws<ObjectDisposedException>(() => child.ClearTable(f));
             Assert.Throws<ObjectDisposedException>(() => child.NewId());
-            Assert.Throws<ObjectDisposedException>(() => child.ScanOwn(f, ref sink));
-            Assert.Throws<ObjectDisposedException>(() => child.ScanAncestorsMentioning(f, a, ref sink));
             Assert.Throws<ObjectDisposedException>(() => child.IsContradictory);
             Assert.Throws<ObjectDisposedException>(() => child.CheckInvariants());
         }
@@ -131,11 +128,11 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A dispose from inside a scan of the context (or from another thread during one) is refused; a re-entrant
-        /// dispose from a write batch too.
+        /// A re-entrant dispose from a write batch of the context is refused; once the batch is done, the dispose
+        /// succeeds.
         /// </summary>
         [Fact]
-        public void ADisposeDuringAScanOrABatchIsRefused()
+        public void ADisposeDuringABatchIsRefused()
         {
             var store = new Store(ParallelHeuristics.Serial);
             var f = store.AddTable(MaxFunction(1), name: "f");
@@ -143,23 +140,16 @@ namespace Eggnog.Relations.Tests
             var a = root.NewId();
             Insert(root, f, a, 1, 0);
             root.Freeze();
+
             var child = root.CreateChild();
-            Insert(child, f, a, 2, 0);
-            child.Freeze();
-
-            var sink = new DisposingSink(child);
-            child.ScanOwn(f, ref sink);
-            Assert.IsType<InvalidOperationException>(sink.Error);
-            Assert.False(child.IsDisposed);
-
-            var sibling = root.CreateChild();
-            Assert.Throws<InvalidOperationException>(() => sibling.Write(state =>
+            Assert.Throws<InvalidOperationException>(() => child.Write(state =>
             {
-                sibling.Dispose();
+                child.Dispose();
                 return 0;
             }));
-            sibling.Dispose();
+            Assert.False(child.IsDisposed);
             child.Dispose();
+            Assert.True(child.IsDisposed);
         }
 
         /// <summary>
