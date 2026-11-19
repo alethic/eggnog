@@ -25,7 +25,7 @@ Contents:
 Eggnog is an equality-saturation library: a database of terms and facts, closed under equality (an e-graph), and a
 Datalog-style rule engine that runs over it until nothing new can be derived. Its engine is a C# reimplementation of
 [egglog](https://github.com/egraphs-good/egglog)'s Rust engine, and its public API is a typed C# API over that
-engine. One feature has no counterpart in egglog: scopes, a tree of contexts that inherit their parent's contents and
+engine. Its main addition, which egglog lacks, is scopes: a tree of contexts that inherit their parent's contents and
 store only what they change.
 
 ### 1.1 Layers
@@ -406,8 +406,8 @@ default 1). `RelationOptions` and `ConstructorOptions` also set whether the rows
 2.5); `FunctionOptions` has no such setting, since no function can be.
 
 `EGraph.Contradiction` is a built-in nullary relation, an addition egglog lacks, named `$contradiction`. A rule that
-derives it says the scope has no model. It is an ordinary fact, unless a run asks to stop on it
-(`RunOptions.StopOnContradiction`).
+derives it says the scope has no model. It is an ordinary fact; a run that asks to stop on it
+(`RunOptions.StopOnContradiction`) skips its later steps, and the scope stays usable.
 
 A table's name is any non-empty string unique among the user's tables, `@` and a leading `$` included, as in egglog. The
 tables the library makes for itself take no name of the user's: the built-in contradiction relation is not among the
@@ -690,6 +690,10 @@ root                      empty and frozen, or a shared theory
   it. An ancestor's reaches its descendants when they catch up, and a frozen scope's stays for its children.
 - **Queries on frozen scopes** run in a transient child created for the call and disposed after it, so the frozen
   scope stays read-only. In a writable scope a query runs as an iteration that writes nothing.
+- **Terms that differ by case.** The library does not reason by cases; a host that needs a term that differs by case,
+  for a few if-then-else guards, builds it with children: it opens a child per distinct condition and assumes the
+  condition, runs the theory there, and extracts the then-branch's best term; it then `Make`s that term in the parent
+  inside the theory's if-then-else constructor and `Union`s it with the original term.
 
 ### 2.9 Extraction
 
@@ -751,9 +755,10 @@ Extractors over a frozen scope may run concurrently, one per thread.
   host write keeps what its calls staged before the failure (section 2.7); a flush that fails before a later call of a
   batch fails that call, and the batch goes on.
 - A failure with no egglog counterpart faults the scope: a lattice merge that throws while a call catches its scope up
-  with an ancestor's writes, a scheduler that throws, and an exception the engine cannot undo in a child (section 3.8).
-  `Failure` keeps the exception, and every later call except `Dispose` throws `InvalidOperationException` with it as the
-  inner exception. A faulted root makes the graph unusable.
+  with an ancestor's writes, a scheduler that throws, a copy rule that fails as a mirror is synced (section 2.8), which
+  faults the tagged scope and the scope whose run needed the sync, and an exception the engine cannot undo in a child
+  (section 3.8). `Failure` keeps the exception, and every later call except `Dispose` throws `InvalidOperationException`
+  with it as the inner exception. A faulted root makes the graph unusable.
 - Refusals made before anything changes (`ArgumentException`, a write's `FactConflictException`, a definition error)
   do not fault, nor does the `FactConflictException` of a merge whose rows conflict, which comes after its rebuild.
 - A disposed scope gives back its own state, but not what it drew from the graph:
@@ -1259,12 +1264,12 @@ The library's deletion (section 2.5) is the engine's, and the library refuses be
 refuse. Subsumption is not a retraction: a sticky value change of the row's subsumption cell, merged like an output
 (decision 1).
 
-**Contradiction.** A context created as a case stops when the contradiction relation gets a row: its stop flag is set
-when a merge applies the row (the merge after an iteration's search, or a write's flush) or the row becomes visible from
-an ancestor (at the context's creation, in a catch-up, or when its parent stops), the rebuild loop checks it, and a
-stopped case is skipped by the lift and disposed. A rule's write of the row is an ordinary write, so the search that
-derives it runs in full, and what that search interns and the ids it reserves stay in the store's pools and id counter
-after the case is disposed.
+**Contradiction.** A context created with `ContextOptions.StopOnContradiction`, as a case's options set it, stops when
+the contradiction relation gets a row: its stop flag is set when a merge applies the row (the merge after an iteration's
+search, or a write's flush) or the row becomes visible from an ancestor (at the context's creation, in a catch-up, or
+when its parent stops), the rebuild loop checks it, and a stopped case is skipped by the lift and disposed. A rule's
+write of the row is an ordinary write, so the search that derives it runs in full, and what that search interns and the
+ids it reserves stay in the store's pools and id counter after the case is disposed.
 
 **What the root pays.** A few per-call, per-batch, per-probe and per-refinement branches, freeze-time and
 child-creation work (each child, a query's transient child and a case included, also allocates its empty container
@@ -1296,12 +1301,16 @@ benchmarks exercise them.
   classes a case interned has an id local to the case, which stands for no parent id, so a row that names one is
   dropped, as a row naming a class the case made is: a container the case's rules, writes or the constants of its
   split's assumptions made, which the case interned in its own layers. A memo (`LiftSignature`) makes a lift over cases
-  and a parent that have not changed return at once.
+  and a parent that have not changed return at once. A lift is sound only when the cases cover the parent, every model
+  of the parent being a model of some case: that is the caller's obligation (a split source's, for `SplitDriver`), and
+  only a vacuous case may be dropped.
 - `CaseSet`: the cases of one split, created as cases, run, lifted and disposed together.
 - `SplitDriver`: one step of a split schedule. It asks its sources (`ISplitSource`) for split requests, skips requests a
   live record in the scope or an ancestor covers and requests over the limits, opens the cases, runs the in-case
   schedule (`ICaseSchedule`) in each with nested splits disabled and lifts (phase A), then runs it again with nested
-  splits enabled and lifts again if that changed something (phase B). Records live until the driver disposes them.
+  splits enabled and lifts again if that changed something (phase B). Records live until the driver disposes them. A
+  later step skips the requests they cover, but runs and lifts again the live records it opened, so that their cases
+  take in the scope's new facts, and a case those facts make vacuous is dropped.
 
 ### 3.10 Parallelism
 
@@ -1387,9 +1396,9 @@ congruence closure.
 ### 5.2 Differential tests
 
 Random programs run two or three ways, and every observation must agree, modulo renaming of class ids where ids may
-differ. A failing program prints itself (several harnesses shrink it first), and each family's seed count can be raised
-with an environment variable (`EGGNOG_SEEDS`, `EGGNOG_CONTEXT_SEEDS` and others, named in each class's
-documentation).
+differ; the case rules, which run one way, are held to their models instead. A failing program prints itself (several
+harnesses shrink it first), and each family's seed count can be raised with an environment variable (`EGGNOG_SEEDS`,
+`EGGNOG_CONTEXT_SEEDS` and others, named in each class's documentation).
 
 | Level | Programs | Compared against |
 |---|---|---|
@@ -1447,8 +1456,8 @@ production runs.
   of every value left declare. `ContextArgumentTheory` is the same theory in one flat graph, with contexts as data
   arguments and inheritance written as rules over them, but for its cases: it opens a context per value of a
   discriminator and runs the whole theory there, so it derives what a case reaches through further rules, which the
-  scoped case rules, reading only what the branches declare, do not. Tests of scopes, schedules, rendering, concurrency
-  and diagnostics run over it, and a model-based oracle checks the scoped case rules (section 5.2).
+  scoped case rules, reading only what the branches declare, do not. Tests of scopes, rendering, concurrency and
+  diagnostics run over it, and a model-based oracle checks the scoped case rules (section 5.2).
 
 ---
 

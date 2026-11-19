@@ -26,7 +26,7 @@ namespace Eggnog
         /// before it stand; or a merge failed, and what the call staged stands, as egglog's failed command keeps
         /// it.</exception>
         /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction, before the call or
-        /// through it, or lies under a stopped scope.</exception>
+        /// through it, or lies under a stopped scope; no scope the library makes stops.</exception>
         /// <exception cref="OverflowException">The graph has run out of ids or epochs (<see cref="EGraph.Usage"/>), and the
         /// scope is not faulted. When the ids ran out, or the epochs before the merge, nothing is written. When the epochs
         /// ran out in the rebuild after the merge, the write stays, and if that rebuild left work undone the scope's reads
@@ -74,7 +74,7 @@ namespace Eggnog
         /// is a write its primitives made, which alone is dropped, or the rebuild after the fact, whose merges made two
         /// rows of a function without a lattice meet with different values, which keeps one of the rows and everything
         /// the fact staged; the facts before it stand, and the facts after it are not written. On a scope whose
-        /// contradiction stopped it, or a scope under one, the call does nothing.
+        /// contradiction stopped it, or a scope under one, the call does nothing; no scope the library makes stops.
         /// </summary>
         /// <param name="facts">The facts; none, a <c>null</c> array included, write nothing.</param>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
@@ -131,7 +131,7 @@ namespace Eggnog
         /// <param name="a">One class.</param>
         /// <param name="b">The other class.</param>
         /// <returns><c>true</c> where the classes were distinct before the call; <c>false</c> on a scope whose
-        /// contradiction stopped it, or a scope under one.</returns>
+        /// contradiction stopped it, or a scope under one (no scope the library makes stops).</returns>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
         /// <exception cref="ArgumentException">A class value is not usable in this scope.</exception>
         /// <exception cref="FactConflictException">The union merged two keys of a function without a lattice that hold
@@ -189,7 +189,7 @@ namespace Eggnog
         /// subsumed. Subsumption is sticky, and a term already subsumed writes nothing, so it moves neither
         /// <see cref="Version"/> nor any extractor. In a child, the subsumption shadows the ancestor's row: the
         /// ancestors and the siblings still match it. On a scope whose contradiction stopped it, or a scope under one,
-        /// the call does nothing.
+        /// the call does nothing; no scope the library makes stops.
         /// </summary>
         /// <typeparam name="TSort">The sort.</typeparam>
         /// <param name="term">The term: an application of a subsumable constructor (<see
@@ -244,7 +244,8 @@ namespace Eggnog
         /// sticky, and rows already subsumed write nothing, so they move neither <see cref="Version"/> nor any
         /// extractor. In a child, the subsumption shadows the ancestor's row: the ancestors and the siblings still
         /// match it. A row that fails keeps the terms its keys made, as egglog's failed command does, and the rows
-        /// before it stand. On a scope whose contradiction stopped it, or a scope under one, the call does nothing.
+        /// before it stand. On a scope whose contradiction stopped it, or a scope under one, the call does nothing; no
+        /// scope the library makes stops.
         /// </summary>
         /// <param name="rows">The rows, of subsumable relations (<see cref="RelationOptions.Subsumable"/>).</param>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
@@ -300,7 +301,8 @@ namespace Eggnog
         /// a run's saturation, as in egglog. The root, and any scope without live descendants under a frozen parent,
         /// may delete; a scope with live descendants and a child of a writable parent may not (the descendants would
         /// not see the deletion). Delete is a call of its own: a <see cref="ScopeWriter"/> batch does not delete. On a
-        /// scope whose contradiction stopped it, or a scope under one, the call does nothing.
+        /// scope whose contradiction stopped it, or a scope under one, the call does nothing; no scope the library
+        /// makes stops.
         /// </summary>
         /// <typeparam name="T">The application's type.</typeparam>
         /// <param name="term">The application: <c>f.Of(k)</c> of a function or a constructor.</param>
@@ -351,7 +353,8 @@ namespace Eggnog
         /// Deletes ground relation rows (<c>r.Of(a, b)</c>) as one batch: egglog's <c>(delete (r a b))</c>, one command
         /// per row. A row that does not exist deletes nothing. The rows' terms are evaluated as for
         /// <see cref="Delete{T}"/>, and the same scopes may delete. A row that fails deletes nothing, and the rows before it
-        /// stand. On a scope whose contradiction stopped it, or a scope under one, the call does nothing.
+        /// stand. On a scope whose contradiction stopped it, or a scope under one, the call does nothing; no scope the
+        /// library makes stops.
         /// </summary>
         /// <param name="rows">The rows.</param>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
@@ -437,7 +440,7 @@ namespace Eggnog
         /// staged stands, as egglog's failed command keeps it, and the scope is not faulted. A flush before a later call
         /// fails that call, which writes nothing, and the batch goes on, as egglog's later commands do.</exception>
         /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction, or lies under a
-        /// stopped scope.</exception>
+        /// stopped scope; no scope the library makes stops.</exception>
         /// <exception cref="OverflowException">The graph has run out of ids or epochs (<see cref="EGraph.Usage"/>), in a
         /// call of the batch or as it commits, and the scope is not faulted. When the ids ran out in a call, its fact
         /// writes nothing; when they or the epochs ran out before a flush's merge, the flush writes nothing, and the batch

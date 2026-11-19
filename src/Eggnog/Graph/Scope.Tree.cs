@@ -114,7 +114,7 @@ namespace Eggnog
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
         /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction, or lies under a
-        /// stopped scope.</exception>
+        /// stopped scope; no scope the library makes stops.</exception>
         /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>): no child is
         /// created, the scope is not faulted, and from then on the graph creates no child at all.</exception>
         public Scope CreateChild(ScopeTag? tag = null, ScopeOptions? options = null)
@@ -180,7 +180,7 @@ namespace Eggnog
         /// <exception cref="RuleEvaluationException">A merge the freeze ran failed, or a lattice merge threw in the catch-up
         /// the freeze makes first; the scope is then faulted.</exception>
         /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction, or lies under a
-        /// stopped scope.</exception>
+        /// stopped scope; no scope the library makes stops.</exception>
         /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>) while the freeze
         /// brought the scope up to date: the scope is neither frozen nor faulted.</exception>
         public void Freeze()
@@ -280,7 +280,7 @@ namespace Eggnog
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
         /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction, or lies under a
-        /// stopped scope.</exception>
+        /// stopped scope; no scope the library makes stops.</exception>
         public Rule DefineRule(Ruleset ruleset, string name, Action<RuleBuilder> define)
         {
             ArgumentNullException.ThrowIfNull(ruleset);
@@ -346,7 +346,7 @@ namespace Eggnog
         /// <exception cref="RuleDefinitionException">A rule is not valid; nothing is registered.</exception>
         /// <exception cref="RuleEvaluationException">As for <see cref="DefineRule"/>.</exception>
         /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction, or lies under a
-        /// stopped scope.</exception>
+        /// stopped scope; no scope the library makes stops.</exception>
         public (Rule Forward, Rule Backward) DefineBiRewrite<TSort>(Ruleset ruleset, string name,
             Func<RuleBuilder, (Term<TSort> Left, Term<TSort> Right)> define)
             where TSort : struct, ISort<TSort>

@@ -7,14 +7,15 @@ namespace Eggnog.Tests.Differential.CaseRules
 {
 
     /// <summary>
-    /// What the scoped encoding of a case-rule oracle program derives in its query: whether the query is contradictory,
-    /// and for each of the program's paths whether it is present, its stored forms, its domain and its types.
+    /// What the scoped encoding of a case-rule oracle program derives in a scope, its frozen schema or its query:
+    /// whether the scope is contradictory, and for each of the program's paths whether it is present, its stored forms,
+    /// its domain and its types.
     /// </summary>
     public sealed class CaseRuleFacts
     {
 
         /// <summary>
-        /// Gets or sets whether the query is contradictory.
+        /// Gets or sets whether the scope is contradictory.
         /// </summary>
         public bool Contradictory { get; set; }
 

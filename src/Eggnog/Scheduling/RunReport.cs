@@ -16,7 +16,8 @@ namespace Eggnog
         /// </summary>
         /// <param name="iterations">The engine iterations.</param>
         /// <param name="changed">Whether an iteration changed the scope.</param>
-        /// <param name="saturated">Whether the run completed and its last iteration changed nothing.</param>
+        /// <param name="saturated">Whether the run completed and the last of its iterations that ran rules changed
+        /// nothing.</param>
         /// <param name="stopReason">Why the run ended.</param>
         /// <param name="elapsed">The run's wall time.</param>
         /// <param name="rules">Every rule that ran, with its statistics.</param>
@@ -53,7 +54,9 @@ namespace Eggnog
         public bool Changed { get; }
 
         /// <summary>
-        /// Gets whether the run completed and its last iteration changed nothing.
+        /// Gets whether the run completed and the last of its iterations that ran rules changed nothing. A scheduler step
+        /// with no rule to schedule (<see cref="Schedule.RunWith"/>) counts in <see cref="Iterations"/> but leaves this
+        /// as the iteration before it left it.
         /// </summary>
         public bool Saturated { get; }
 

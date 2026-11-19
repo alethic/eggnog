@@ -62,7 +62,8 @@ namespace Eggnog
         /// was created.</exception>
         /// <exception cref="ArgumentException">The class value is not usable in the scope.</exception>
         /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction since the extractor
-        /// was made, or lies under a stopped scope, a scope stopped through its parent included.</exception>
+        /// was made, or lies under a stopped scope, a scope stopped through its parent included; no scope the library
+        /// makes stops.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up a query of a writable scope makes
         /// first, in the scope or a writable ancestor; the scope is faulted, and so is the ancestor.</exception>
         public ExtractedTerm Extract<TSort>(TSort root) where TSort : struct, ISort<TSort>
@@ -83,7 +84,8 @@ namespace Eggnog
         /// <exception cref="InvalidOperationException">The scope changed since the extractor was created.</exception>
         /// <exception cref="ArgumentException">The class value is not usable in the scope.</exception>
         /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction since the extractor
-        /// was made, or lies under a stopped scope, a scope stopped through its parent included.</exception>
+        /// was made, or lies under a stopped scope, a scope stopped through its parent included; no scope the library
+        /// makes stops.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up a query of a writable scope makes
         /// first, in the scope or a writable ancestor; the scope is faulted, and so is the ancestor.</exception>
         public bool TryExtract<TSort>(TSort root, [NotNullWhen(true)] out ExtractedTerm? term) where TSort : struct, ISort<TSort>
@@ -139,7 +141,8 @@ namespace Eggnog
         /// or the call comes from a primitive, lattice, filter or cost function.</exception>
         /// <exception cref="ArgumentException">The class value is not usable in the scope.</exception>
         /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction since the extractor
-        /// was made, or lies under a stopped scope, a scope stopped through its parent included.</exception>
+        /// was made, or lies under a stopped scope, a scope stopped through its parent included; no scope the library
+        /// makes stops.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up a query of a writable scope makes
         /// first, in the scope or a writable ancestor; the scope is faulted, and so is the ancestor.</exception>
         public IReadOnlyList<ExtractedTerm> ExtractVariants<TSort>(TSort root, int count) where TSort : struct, ISort<TSort>
@@ -181,7 +184,8 @@ namespace Eggnog
         /// <exception cref="InvalidOperationException">The scope changed since the extractor was created.</exception>
         /// <exception cref="ArgumentException">The class value is not usable in the scope.</exception>
         /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction since the extractor
-        /// was made, or lies under a stopped scope, a scope stopped through its parent included.</exception>
+        /// was made, or lies under a stopped scope, a scope stopped through its parent included; no scope the library
+        /// makes stops.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up a query of a writable scope makes
         /// first, in the scope or a writable ancestor; the scope is faulted, and so is the ancestor.</exception>
         public bool TryGetCost<TSort>(TSort root, out ulong cost) where TSort : struct, ISort<TSort>

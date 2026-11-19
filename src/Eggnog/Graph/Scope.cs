@@ -22,8 +22,10 @@ namespace Eggnog
     /// command leaves its e-graph: what the run's matches or the write's calls staged before they failed stands, merged
     /// and rebuilt. A failure with no egglog counterpart faults the scope, and every later call except
     /// <see cref="Dispose"/> throws; a faulted root makes its graph unusable. So it is after a lattice merge that
-    /// throws in the catch-up a call makes first, a read's, query's or extraction's included. <see cref="Dispose"/>
-    /// never throws: it makes the scope unusable at once, and releases its engine state once nothing defers it.
+    /// throws in the catch-up a call makes first, a read's, query's or extraction's included, after a scheduler that
+    /// throws, and after a copy rule that fails as a mirror is synced, which faults the tagged scope and the scope
+    /// whose run needed the sync. <see cref="Dispose"/> never throws: it makes the scope unusable at once, and
+    /// releases its engine state once nothing defers it.
     /// </para>
     /// <para>
     /// A child starts as a copy of its parent and keeps seeing what its writable ancestors write later. A call into a
@@ -33,6 +35,13 @@ namespace Eggnog
     /// "catch-up the call makes first" of the members' exception clauses. A scoped read (<c>T.In(tag)</c>) in a rule
     /// or query reads a mirror: an internal copy of the table that copy rules keep equal to the view of the nearest
     /// ancestor-or-self carrying the tag, synced just before a rule, query or freeze reads it.
+    /// </para>
+    /// <para>
+    /// A contradictory scope (<see cref="IsContradictory"/>) stays fully usable: <see cref="EGraph.Contradiction"/> is
+    /// an ordinary fact, and a run that stops on it (<see cref="RunOptions.StopOnContradiction"/>) skips its steps once
+    /// the scope is contradictory, and leaves the scope as it is. No scope the library makes stops, so the members'
+    /// clauses on a scope whose contradiction stopped it, or a scope under one
+    /// (<see cref="ScopeContradictedException"/>), never apply.
     /// </para>
     /// <para>
     /// Every member that enters the scope (its reads, writes, runs, extraction and tree operations) throws
@@ -109,9 +118,10 @@ namespace Eggnog
         /// <summary>
         /// Gets whether the scope is faulted: set after a <see cref="RuleEvaluationException"/> with no egglog
         /// counterpart (a lattice merge that threw in the catch-up of any call into this scope or a descendant, a
-        /// scheduler that threw), or after the engine faulted the scope's context because an exception escaped one of
-        /// its writes, runs or rebuilds (an ancestor row the scope stopped seeing before its rewritten copy was merged
-        /// would stay lost, so the scope cannot be repaired).
+        /// scheduler that threw, a copy rule that failed as this scope's mirrors were synced, or in the sync a run of this
+        /// scope needed), or after the engine faulted the scope's context because an exception escaped one of its writes,
+        /// runs or rebuilds (an ancestor row the scope stopped seeing before its rewritten copy was merged would stay lost,
+        /// so the scope cannot be repaired).
         /// </summary>
         public bool IsFaulted => Failure is not null;
 

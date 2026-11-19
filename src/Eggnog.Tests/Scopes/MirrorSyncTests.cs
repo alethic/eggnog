@@ -1,3 +1,5 @@
+using System;
+
 using Eggnog.Tests.Support;
 
 using Xunit;
@@ -8,7 +10,7 @@ namespace Eggnog.Tests.Scopes
     /// <summary>
     /// When a mirror sync is due: whenever the tagged scope's view of a mirrored table changed since its last sync,
     /// including through a write into one of its writable ancestors that leaves its own <see cref="Scope.Version"/>
-    /// where it was, and whenever the tag gained a mirror since then.
+    /// where it was, and whenever the tag gained a mirror since then; and what a sync whose copy rule fails faults.
     /// </summary>
     public sealed class MirrorSyncTests
     {
@@ -166,6 +168,45 @@ namespace Eggnog.Tests.Scopes
             });
             inner.Run(Schedule.Saturate(t.Rules));
             Assert.Equal(3L, inner.Get(bests.Of("k")));
+        }
+
+        /// <summary>
+        /// A copy rule that fails in the sync a run needs faults the scope that ran and the tagged scope: the mirror holds
+        /// 1, the tagged scope's value steps to 3 by merges of one step each, which its lattice allows, and the copy rule's
+        /// merge of 1 with 3 throws.
+        /// </summary>
+        [Fact]
+        public void ACopyRuleThatFailsInARunsSyncFaultsTheRunsScopeAndTheTaggedScope()
+        {
+            var graph = new EGraph();
+            var steps = new ValueLattice<long>("max by steps", (x, y) => Math.Abs(x - y) >= 2 ? throw new InvalidOperationException("a step of two or more") : Math.Max(x, y));
+            var f = graph.DefineFunction<string, long>("f", steps);
+            var seen = graph.DefineRelation<string>("seen");
+            var tag = graph.DefineScopeTag("t");
+            var rules = graph.DefineRuleset("rules");
+            rules.DefineRule("read f in t", r =>
+            {
+                var (k, v) = r.Vars<string, long>("k", "v");
+                r.When(v.Is(f.In(tag).Of(k)));
+                r.Then(seen.Of(k));
+            });
+            graph.Root.Freeze();
+            var tagged = graph.Root.CreateChild(tag);
+            var reader = tagged.CreateChild();
+            tagged.Assume(f.Of("k").Is(1L));
+            reader.Run(rules);
+            Assert.True(reader.Check(seen.Of("k")));
+
+            tagged.Assume(f.Of("k").Is(2L));
+            tagged.Assume(f.Of("k").Is(3L));
+            Assert.Equal(3L, tagged.Get(f.Of("k")));
+            Assert.False(tagged.IsFaulted);
+
+            var failure = Assert.Throws<RuleEvaluationException>(() => reader.Run(rules));
+            Assert.Equal("a step of two or more", Assert.IsType<InvalidOperationException>(failure.InnerException).Message);
+            Assert.True(reader.IsFaulted);
+            Assert.True(tagged.IsFaulted);
+            Assert.False(graph.Root.IsFaulted);
         }
 
     }

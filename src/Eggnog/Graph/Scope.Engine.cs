@@ -20,7 +20,9 @@ namespace Eggnog
         /// </summary>
         /// <remarks>
         /// On a scope whose contradiction stopped it, or a scope under one, the run returns at once, with no iteration
-        /// and <see cref="RunStopReason.Contradiction"/>.
+        /// and <see cref="RunStopReason.Contradiction"/>; no scope the library makes stops. A run that stops on
+        /// contradiction (<see cref="RunOptions.StopOnContradiction"/>) skips its steps once the scope is contradictory,
+        /// and leaves the scope usable.
         /// </remarks>
         /// <param name="schedule">The schedule.</param>
         /// <param name="options">The run's options; <c>null</c> for <see cref="RunOptions.Default"/>.</param>
@@ -42,9 +44,10 @@ namespace Eggnog
         /// a lambda's, a callback's or a merge's: as egglog's failed run, the failure stops the iteration, whose matches
         /// applied before it stopped keep what they wrote before a call of theirs failed, merged and rebuilt; the iteration
         /// counts as run, so a later run does not apply the matches of a semi-naive rule it did not reach, as egglog's; and
-        /// the scope is not faulted. Or a scheduler threw: the scope is then faulted. Or a lattice merge threw in the
-        /// catch-up the call makes first, here or in a writable ancestor: the scope is faulted, and so is the
-        /// ancestor.</exception>
+        /// the scope is not faulted. Or a scheduler threw: the scope is then faulted. Or a copy rule failed in the sync of
+        /// a mirror that a rule of the run reads: the scope is faulted, and so is the tagged scope the sync ran in. Or a
+        /// lattice merge threw in the catch-up the call makes first, here or in a writable ancestor: the scope is
+        /// faulted, and so is the ancestor.</exception>
         /// <exception cref="OverflowException">The graph has run out of ids or epochs (<see cref="EGraph.Usage"/>): the
         /// step that ran out changes nothing, what the run's earlier iterations wrote stays, and the scope is not
         /// faulted, but every later call that needs an id or an epoch throws the same way. A rule that makes a term
@@ -148,7 +151,7 @@ namespace Eggnog
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
         /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction, or lies under a
-        /// stopped scope.</exception>
+        /// stopped scope; no scope the library makes stops.</exception>
         public Extractor CreateExtractor(CostModel? costs = null)
         {
             costs ??= CostModel.Default;
@@ -182,7 +185,7 @@ namespace Eggnog
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
         /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction, or lies under a
-        /// stopped scope.</exception>
+        /// stopped scope; no scope the library makes stops.</exception>
         public ExtractedTerm Extract<TSort>(TSort root, CostModel? costs = null) where TSort : struct, ISort<TSort> =>
             CreateExtractor(costs).Extract(root);
 
@@ -206,7 +209,7 @@ namespace Eggnog
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
         /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction, or lies under a
-        /// stopped scope.</exception>
+        /// stopped scope; no scope the library makes stops.</exception>
         public IReadOnlyList<ExtractedTerm> ExtractVariants<TSort>(TSort root, int count, CostModel? costs = null) where TSort : struct, ISort<TSort>
         {
             ArgumentOutOfRangeException.ThrowIfNegative(count);

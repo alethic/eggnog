@@ -9,7 +9,8 @@ namespace Eggnog.Tests.Predicates.Scoped
     /// <see cref="PredicateTheory"/>'s case rules on small schemas: the values of a discriminator they drop, because the
     /// scope rules out what their branches declare, and what they derive from the branches of the values left: stored
     /// forms, a string type declared by different claims, and the union of the declared domains over those values
-    /// only. Each schema is compiled with <see cref="PredicateTheory.Facts"/> and each query run with
+    /// only; and the discriminators they reason by: present ones marked as discriminators, and in a query those its
+    /// predicate mentions. Each schema is compiled with <see cref="PredicateTheory.Facts"/> and each query run with
     /// <see cref="PredicateTheory.Saturation"/>.
     /// </summary>
     public sealed class CaseRuleTests
@@ -83,6 +84,57 @@ namespace Eggnog.Tests.Predicates.Scoped
                 var best = query.Extract(q);
                 Assert.Equal("(And (NumGt \"body.ref\" 0) (StrGe \"kind\" \"a\"))", best.ToString());
                 Assert.Equal<ulong>(7, best.Cost);
+            }
+        }
+
+        /// <summary>
+        /// A domain declares a string, which a path whose types hold no string cannot hold: where <c>n</c> is present
+        /// and holds a number or null, a's branch, which declares a domain of it, has no document, while c's, which
+        /// declares a domain of <c>m</c>, a string or null, keeps its value; so <c>kind</c> holds b or c, whose
+        /// branches both declare the stored form of <c>ref</c>. So too where a's branch declares <c>n</c> present
+        /// itself, while c's, which declares only the domain, keeps its value, since <c>n</c> may be absent there; and
+        /// in a query that makes <c>n</c> present, where the UUID comparison then lowers.
+        /// </summary>
+        [Fact]
+        public void ACaseWhoseDomainThePathsTypesRuleOutIsDropped()
+        {
+            var (c, schema) = Compile((c, s) =>
+            {
+                s.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of(["a", "b", "c"])), c.Discriminator.Of("kind"));
+                s.Assume(c.Present.Of("n"), c.Types.Of("n").Is(Set.Of(["null", "number"])));
+                s.Assume(c.Present.Of("m"), c.Types.Of("m").Is(Set.Of(["null", "string"])));
+                c.DeclareBranch(s, "kind", "a", domains: [("n", Set.Of(["x"]))]);
+                c.DeclareBranch(s, "kind", "b", forms: [("ref", "uuid-lower")]);
+                c.DeclareBranch(s, "kind", "c", forms: [("ref", "uuid-lower")], domains: [("m", Set.Of(["x"]))]);
+            });
+            Assert.False(schema.IsContradictory);
+            Assert.Equal(Set.Of(["b", "c"]), schema.Get(c.Dom.Of("kind")));
+            Assert.True(schema.Check(c.Form.Of("ref", "uuid-lower")));
+
+            (c, schema) = Compile((c, s) =>
+            {
+                s.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of(["a", "b", "c"])), c.Discriminator.Of("kind"), c.Types.Of("n").Is(Set.Of(["null"])));
+                c.DeclareBranch(s, "kind", "a", present: ["n"], domains: [("n", Set.Of(["x"]))]);
+                c.DeclareBranch(s, "kind", "c", domains: [("n", Set.Of(["x"]))]);
+            });
+            Assert.False(schema.IsContradictory);
+            Assert.Equal(Set.Of(["b", "c"]), schema.Get(c.Dom.Of("kind")));
+
+            (c, schema) = Compile((c, s) =>
+            {
+                s.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of(["a", "b"])), c.Discriminator.Of("kind"), c.Types.Of("n").Is(Set.Of(["null", "number"])));
+                c.DeclareBranch(s, "kind", "a", domains: [("n", Set.Of(["x"]))]);
+                c.DeclareBranch(s, "kind", "b", forms: [("ref", "uuid-lower")]);
+            });
+            Assert.Equal(Set.Of(["a", "b"]), schema.Get(c.Dom.Of("kind")));
+            var (query, q) = Ask(c, schema, c.And.Of(c.And.Of(c.Not.Of(c.StrEq.Of("n", "zz")), c.StrGe.Of("kind", "a")), c.UuidEq.Of("ref", DiscriminatedSchema.Ref)));
+            using (query)
+            {
+                Assert.False(query.IsContradictory);
+                Assert.Equal(Set.Of(["b"]), query.Get(c.Dom.Of("kind")));
+                var best = query.Extract(q);
+                Assert.Equal($"(And (And (Not (StrEq \"n\" \"zz\")) (StrGe \"kind\" \"a\")) (StrEq \"ref\" \"{DiscriminatedSchema.Ref}\"))", best.ToString());
+                Assert.Equal<ulong>(12, best.Cost);
             }
         }
 
@@ -207,6 +259,43 @@ namespace Eggnog.Tests.Predicates.Scoped
         }
 
         /// <summary>
+        /// A branch that declares a path present has no document where the schema leaves the path no value: no possible
+        /// type, an empty domain, an empty integer domain, or crossed bounds. So a, whose branch declares <c>n</c>
+        /// present, is dropped, while c, whose branch declares present <c>m</c>, which the schema leaves a value, is
+        /// not; b and c both declare the stored form of <c>ref</c>, and the schema, where <c>n</c> may be absent, is
+        /// not contradictory.
+        /// </summary>
+        /// <param name="empty">What the schema leaves <c>n</c> without.</param>
+        [Theory]
+        [InlineData("types")]
+        [InlineData("domain")]
+        [InlineData("integer domain")]
+        [InlineData("bounds")]
+        public void ACaseThatDeclaresPresentAPathWithNoValueIsDropped(string empty)
+        {
+            var (c, schema) = Compile((c, s) =>
+            {
+                Fact[] Leaves(string path, bool none) => empty switch
+                {
+                    "types" => [c.Types.Of(path).Is(none ? Set<string>.Empty : Set.Of(["number"]))],
+                    "domain" => [c.Dom.Of(path).Is(none ? Set<string>.Empty : Set.Of(["x"]))],
+                    "integer domain" => [c.IDom.Of(path).Is(none ? Set<long>.Empty : Set.Of([1L]))],
+                    _ => [c.Lo.Of(path).Is(5L), c.Hi.Of(path).Is(none ? 3L : 7L)],
+                };
+
+                s.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of(["a", "b", "c"])), c.Discriminator.Of("kind"));
+                s.Assume(Leaves("n", none: true));
+                s.Assume(Leaves("m", none: false));
+                c.DeclareBranch(s, "kind", "a", present: ["n"]);
+                c.DeclareBranch(s, "kind", "b", forms: [("ref", "uuid-lower")]);
+                c.DeclareBranch(s, "kind", "c", present: ["m"], forms: [("ref", "uuid-lower")]);
+            });
+            Assert.False(schema.IsContradictory);
+            Assert.Equal(Set.Of(["b", "c"]), schema.Get(c.Dom.Of("kind")));
+            Assert.True(schema.Check(c.Form.Of("ref", "uuid-lower")));
+        }
+
+        /// <summary>
         /// The domain of <c>status</c> that the case rules derive is the union of the domains declared by the values
         /// left: the schema's, over a, b and c, is x, y and z; a query of kinds a and b narrows it to x and y, so it
         /// refutes a status of z.
@@ -304,6 +393,97 @@ namespace Eggnog.Tests.Predicates.Scoped
             var (refuted, _) = Ask(c, schema, c.And.Of(c.NumGt.Of("x", 0L), c.StrGe.Of("kind", "a")));
             using (refuted)
                 Assert.True(refuted.IsContradictory);
+        }
+
+        /// <summary>
+        /// A document may lack a discriminator that the schema does not declare present, and then holds none of its
+        /// values, so the case rules do not reason by it: what the branches of both values of <c>kind</c> declare holds
+        /// only once <c>kind</c> is declared present.
+        /// </summary>
+        [Fact]
+        public void ADiscriminatorThatMayBeAbsentDerivesNothingByCases()
+        {
+            foreach (var present in new[] { false, true })
+            {
+                var (c, schema) = Compile((c, s) =>
+                {
+                    s.Assume(c.Dom.Of("kind").Is(Set.Of(["a", "b"])), c.Discriminator.Of("kind"));
+                    if (present)
+                        s.Assume(c.Present.Of("kind"));
+
+                    c.DeclareBranch(s, "kind", "a", present: ["ref"], forms: [("ref", "uuid-lower")]);
+                    c.DeclareBranch(s, "kind", "b", present: ["ref"], forms: [("ref", "uuid-lower")]);
+                });
+                Assert.Equal(present, schema.Check(c.Present.Of("ref")));
+                Assert.Equal(present, schema.Check(c.Form.Of("ref", "uuid-lower")));
+            }
+        }
+
+        /// <summary>
+        /// The branch of a discriminator that may be absent does not hold, though the discriminator's domain holds its
+        /// value alone: it holds only once <c>kind</c> is declared present.
+        /// </summary>
+        [Fact]
+        public void TheBranchOfADiscriminatorThatMayBeAbsentDoesNotHold()
+        {
+            foreach (var present in new[] { false, true })
+            {
+                var (c, schema) = Compile((c, s) =>
+                {
+                    s.Assume(c.Dom.Of("kind").Is(Set.Of(["a"])), c.Discriminator.Of("kind"));
+                    if (present)
+                        s.Assume(c.Present.Of("kind"));
+
+                    c.DeclareBranch(s, "kind", "a", present: ["ref"], forms: [("ref", "uuid-lower")]);
+                });
+                Assert.Equal(present, schema.Check(c.Present.Of("ref")));
+                Assert.Equal(present, schema.Check(c.Form.Of("ref", "uuid-lower")));
+            }
+        }
+
+        /// <summary>
+        /// The case rules reason only by the values of a path marked as a discriminator: the branches of both values of
+        /// <c>kind</c> declare the stored form of <c>ref</c>, which holds only once <c>kind</c> is marked.
+        /// </summary>
+        [Fact]
+        public void APathNotMarkedAsADiscriminatorIsNotReasonedBy()
+        {
+            foreach (var marked in new[] { false, true })
+            {
+                var (c, schema) = Compile((c, s) =>
+                {
+                    s.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of(["a", "b"])));
+                    if (marked)
+                        s.Assume(c.Discriminator.Of("kind"));
+
+                    c.DeclareBranch(s, "kind", "a", forms: [("ref", "uuid-lower")]);
+                    c.DeclareBranch(s, "kind", "b", forms: [("ref", "uuid-lower")]);
+                });
+                Assert.Equal(marked, schema.Check(c.Form.Of("ref", "uuid-lower")));
+            }
+        }
+
+        /// <summary>
+        /// A query reasons by the cases of the discriminators its predicate mentions only: a number at <c>ref</c> rules
+        /// out a and b, whose branches declare its stored form, only in a query that also mentions <c>kind</c>.
+        /// </summary>
+        [Fact]
+        public void AQueryReasonsOnlyByTheDiscriminatorsItMentions()
+        {
+            var (c, schema) = Forms();
+            var (query, _) = Ask(c, schema, c.NumGt.Of("ref", 0L));
+            using (query)
+            {
+                Assert.False(query.IsContradictory);
+                Assert.Equal(Set.Of(["a", "b", "c"]), query.Get(c.Dom.Of("kind")));
+            }
+
+            var (mentioning, _) = Ask(c, schema, c.And.Of(c.NumGt.Of("ref", 0L), c.StrGe.Of("kind", "a")));
+            using (mentioning)
+            {
+                Assert.False(mentioning.IsContradictory);
+                Assert.Equal(Set.Of(["c"]), mentioning.Get(c.Dom.Of("kind")));
+            }
         }
 
     }

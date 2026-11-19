@@ -1,3 +1,5 @@
+using System;
+
 namespace Eggnog.Tests.Predicates.Scoped
 {
 
@@ -33,12 +35,21 @@ namespace Eggnog.Tests.Predicates.Scoped
         /// Gets <c>dom-cases</c>: for discriminator p and its domain d, the union of the case domains of q
         /// (<see cref="CaseDom"/>) of the values of d that have one.
         /// </summary>
+        /// <remarks>
+        /// A row is keyed by the domain p holds when the row is written, so each domain of several values that p holds in
+        /// turn adds a row for each path q a value of it declares a domain of, and the rows of the domains before it stay
+        /// in the scope, never read again, until the scope is disposed: a query that narrows p in many steps keeps a row
+        /// per step and path.
+        /// </remarks>
         public Function<string, Set<string>, string, Set<string>> DomCases { get; private set; } = null!;
 
         /// <summary>
         /// Gets <c>dom-reported</c>: for discriminator p and its domain d, the values of d that have a case domain of q,
         /// which <see cref="DomCases"/> unions.
         /// </summary>
+        /// <remarks>
+        /// Keyed as <see cref="DomCases"/> is: the rows of the domains p held before stay in the scope as long.
+        /// </remarks>
         public Function<string, Set<string>, string, Set<string>> DomReported { get; private set; } = null!;
 
         /// <summary>
@@ -126,10 +137,12 @@ namespace Eggnog.Tests.Predicates.Scoped
         /// <summary>
         /// Defines the case rules of one ruleset. Where discriminator p is present and its domain d holds more than one
         /// value, p holds one value of d, and where it holds v the claims of v's branch hold
-        /// (<see cref="DeclareBranch"/>). So a value is dropped from d when the scope rules out its branch's claims: a
-        /// stored form or a domain of a path whose types in the scope hold neither a string nor null, or a domain of a
-        /// path that the scope's domain of the path and its refused values leave empty, the path being present in the
-        /// scope or declared present by the branch. And what the branches of the values of d all declare holds: a stored
+        /// (<see cref="DeclareBranch"/>). So a value is dropped from d when the scope rules out its branch's claims, by
+        /// what the lattice rules refute of a present path: a path the branch declares present that the scope leaves no
+        /// possible type, an empty domain or an empty integer domain, or whose bounds the scope crosses; and, where the
+        /// path is present in the scope or declared present by the branch, a stored form of it whose types in the scope
+        /// hold neither a string nor null, or a domain of it whose types hold no string, or that the scope's domain of the
+        /// path and its refused values leave empty. And what the branches of the values of d all declare holds: a stored
         /// form or a presence that every one declares; that a path holds a string or null, where every one declares a
         /// stored form or a domain of it; and, where every one declares a domain of a path, the union of those domains,
         /// each narrowed as above.
@@ -154,9 +167,10 @@ namespace Eggnog.Tests.Predicates.Scoped
 
             Term<bool> Several(Var<Set<string>> d) => Int64Primitives.Greater.Of(Primitives.SetLength<string>().Of(d), 1L);
 
-            // The values the scope rules out. A case domain narrows as the scope's domain of its path does, and a case
-            // in which a path present there can hold no value, or no string or null that its branch's claims allow, has
-            // no document.
+            // The values the scope rules out. A case has no document where a path present there, in the scope or by its
+            // branch's claims, can hold no value, which is what the lattice rules refute of a present path. A case
+            // domain narrows as the scope's domain of its path does; a stored form admits a string or null, and a domain
+            // a string only.
             ruleset.DefineRule("a case domain narrows to the path's domain", r =>
             {
                 var (p, v, q) = r.Vars<string, string, string>("p", "v", "q");
@@ -195,6 +209,20 @@ namespace Eggnog.Tests.Predicates.Scoped
 
                     r.Then(Dom.Of(p).Is(Primitives.SetRemove<string>().Of(d, v)));
                 });
+                ruleset.DefineRule($"a case with a domain of {path} whose types hold no string is vacuous", r =>
+                {
+                    var (p, v, q) = r.Vars<string, string, string>("p", "v", "q");
+                    var (d, dv, t, s) = r.Vars<Set<string>, Set<string>, Set<string>, Set<string>>("d", "dv", "t", "s");
+                    r.When(Cases(p, d));
+                    r.When(dv.Is(CaseDom.Of(p, v, q)), t.Is(Types.Of(q)), declared ? s.Is(PresentCases.Of(p, q)) : Present.Of(q));
+                    r.Where(Several(d));
+                    r.Where(Primitives.SetContains<string>().Of(d, v));
+                    r.Where(Primitives.SetNotContains<string>().Of(t, "string"));
+                    if (declared)
+                        r.Where(Primitives.SetContains<string>().Of(s, v));
+
+                    r.Then(Dom.Of(p).Is(Primitives.SetRemove<string>().Of(d, v)));
+                });
                 ruleset.DefineRule($"cases whose strings the types of {path} exclude are vacuous", r =>
                 {
                     var (p, q) = r.Vars<string, string>("p", "q");
@@ -206,6 +234,45 @@ namespace Eggnog.Tests.Predicates.Scoped
                     r.Then(Dom.Of(p).Is(Primitives.SetDifference<string>().Of(d, declared ? Primitives.SetIntersect<string>().Of(s, present) : s)));
                 });
             }
+
+            // A path the branch declares present and the scope leaves no value, by each of the lattice rules' refutations
+            // of a present path.
+            void DeclaredPresent(string what, Action<RuleBuilder, Var<string>> noValue) =>
+                ruleset.DefineRule($"cases that declare present a path {what} are vacuous", r =>
+                {
+                    var (p, q) = r.Vars<string, string>("p", "q");
+                    var (d, s) = r.Vars<Set<string>, Set<string>>("d", "s");
+                    r.When(Cases(p, d));
+                    r.When(s.Is(PresentCases.Of(p, q)));
+                    noValue(r, q);
+                    r.Where(Several(d));
+                    r.Then(Dom.Of(p).Is(Primitives.SetDifference<string>().Of(d, s)));
+                });
+
+            DeclaredPresent("with no possible type", (r, q) =>
+            {
+                var t = r.Var<Set<string>>("t");
+                r.When(t.Is(Types.Of(q)));
+                r.Where(Primitives.SetIsEmpty<string>().Of(t));
+            });
+            DeclaredPresent("whose domain is empty", (r, q) =>
+            {
+                var dq = r.Var<Set<string>>("dq");
+                r.When(dq.Is(Dom.Of(q)));
+                r.Where(Primitives.SetIsEmpty<string>().Of(dq));
+            });
+            DeclaredPresent("whose integer domain is empty", (r, q) =>
+            {
+                var iq = r.Var<Set<long>>("iq");
+                r.When(iq.Is(IDom.Of(q)));
+                r.Where(Primitives.SetIsEmpty<long>().Of(iq));
+            });
+            DeclaredPresent("whose bounds cross", (r, q) =>
+            {
+                var (l, h) = r.Vars<long, long>("l", "h");
+                r.When(l.Is(Lo.Of(q)), h.Is(Hi.Of(q)));
+                r.Where(Int64Primitives.Greater.Of(l, h));
+            });
 
             // What the branch of every value of the domain declares.
             ruleset.DefineRule("every case declares a stored form", r =>

@@ -218,23 +218,31 @@ namespace Eggnog.Tests.Scopes
         }
 
         /// <summary>
-        /// The clock moves by the same number of epochs for every query of a shape, on a first pass and a second.
+        /// The clock moves by the same number of epochs for every query of a shape, on a first pass and a second, the
+        /// shape that reasons by cases included.
         /// </summary>
         [Fact]
         public void TheClockMovesByTheSameCountForEveryQueryOfAShape()
         {
             var churn = new ScopeChurn();
             var c = churn.Theory;
-            foreach (var predicate in new[] { c.StrEq.Of("kind", "a"), c.NumGt.Of("n", 50L), c.Or.Of(c.StrEq.Of("kind", "b"), c.StrEq.Of("kind", "a")) })
+            var shapes = new (ConstructorTerm<Predicates.Pred> Predicate, Schedule? Schedule)[]
             {
-                churn.Derive(predicate);
+                (c.StrEq.Of("kind", "a"), null),
+                (c.NumGt.Of("n", 50L), null),
+                (c.Or.Of(c.StrEq.Of("kind", "b"), c.StrEq.Of("kind", "a")), null),
+                (c.Not.Of(c.StrEq.Of("kind", "c")), churn.Cases),
+            };
+            foreach (var (predicate, schedule) in shapes)
+            {
+                churn.Derive(predicate, schedule);
                 var counts = new HashSet<long>();
                 for (var pass = 0; pass < 2; pass++)
                 {
                     for (var i = 0; i < Queries / 2; i++)
                     {
                         var before = churn.Graph.Usage.Epochs;
-                        churn.Derive(predicate);
+                        churn.Derive(predicate, schedule);
                         counts.Add(churn.Graph.Usage.Epochs - before);
                     }
                 }

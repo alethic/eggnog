@@ -133,7 +133,8 @@ of them fall on the same side of the gate; otherwise it is inconclusive, up to f
   indexes) from a `dotnet-gcdump` snapshot of 1,000 live children, whose total must agree with `--context-footprint`
   within 5%. It needs no idle machine.
 - **Library paths.** `QueryScopeBenchmarks`, `LibraryRunOverheadBenchmarks` and `BusyParentCatchUpBenchmarks` check
-  their results and wait for the campaign's times; of catch-up, only its time per examined row is left to measure.
+  their results and wait for the campaign's times. Catch-up's share of a workload's rows is left to measure, and so is
+  its time per examined row (`BusyParentCatchUpBenchmarks`).
 - **Library run overhead.** The library adds about 320 B per rule plus about 1 KB per run over the engine. A library
   `Run` must stay within 1.05x of the engine's `RunRules` at 10 rules, or its per-run bookkeeping is trimmed.
 
@@ -150,6 +151,11 @@ of them fall on the same side of the gate; otherwise it is inconclusive, up to f
   becomes a label that need not be unique.
 - **The query gate.** Queries managed by the garbage collector land if 1,000 dropped queries that ran retain at most
   64 B each, and a disposed query runs no sentinel finalizer.
+- **The hidden-discriminator note.** A note, for theories such as `PredicateTheory`, on synthesizing a hidden
+  discriminator key with guarded branch rules, so that a disjunction with no discriminator of its own is reasoned by
+  cases, as the fixture's case rules do in
+  `DiscriminatedSchemaTests.TheCaseRulesOfAHiddenDiscriminatorJoinTheBranchDomains`. Only history documents and that
+  test's summary describe it.
 - **Sound numeric bounds.** A note, for theories such as `PredicateTheory`, that a comparison that first converts a
   stored value proves no type, and that a bound that steps by one is sound only over integers. Both are soundness traps
   that only history documents record.
@@ -212,6 +218,8 @@ Considered and not planned. Each line says what would reopen it.
 - Case splits, lifts and host-driven cases in the library: a theory reasons by the cases of a domain in its own rules,
   over set lattices, as the `PredicateTheory` fixture's case rules do. Reopen only by a decision to make reasoning by
   cases a library feature.
+- Guarded terms as a feature, a term that differs by case built by the library: for a user who reasons over
+  if-then-else guards in volume; the recipe with children is in [`architecture.md`](architecture.md), section 2.8.
 - Pairing a catch-up failure with the run's own in `RunRulesCore`: if an engine caller outside the library appears.
 - Lazy `IndexCatalog` objects: if never-probed catalogs exceed 5% of a lifted case's bytes and the root gate stays
   within 2%.

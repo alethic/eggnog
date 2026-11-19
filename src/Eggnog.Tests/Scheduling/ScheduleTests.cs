@@ -11,8 +11,9 @@ namespace Eggnog.Tests.Scheduling
 
     /// <summary>
     /// Schedules and run limits at the root: <c>Repeat</c>, <c>Saturate</c>, <c>Sequence</c> and <c>Until</c>; the
-    /// iteration, time and row limits, which are checked before the first iteration and between iterations; and the
-    /// refusal, before any work, of what a run cannot execute.
+    /// iteration, time and row limits, which are checked before the first iteration and between iterations, and the row
+    /// limit of a child, which counts only the rows the child holds itself; and the refusal, before any work, of what a
+    /// run cannot execute.
     /// </summary>
     public sealed class ScheduleTests
     {
@@ -384,6 +385,41 @@ namespace Eggnog.Tests.Scheduling
             Assert.Equal(21, report.Iterations);
             Assert.Equal(25, t.Root.CountRows(t.Num));
             Assert.False(t.Root.IsFaulted);
+        }
+
+        /// <summary>
+        /// Below the root, the row limit counts the rows the scope holds itself, not the rows it reads from its
+        /// ancestors: a child of a frozen root of 2,000 rows saturates under a limit of 100, writing 5 rows, and stops
+        /// under a limit of 2 once its first iteration has written them.
+        /// </summary>
+        [Fact]
+        public void AChildsRowLimitCountsTheRowsItHoldsItself()
+        {
+            var t = new NodeTheory();
+            var next = t.Graph.DefineRelation<long>("next");
+            t.Rules.DefineRule("next of a small number", r =>
+            {
+                var x = r.Var<long>("x");
+                r.When(t.Num.Of(x));
+                r.Where(Int64Primitives.Less.Of(x, 5L));
+                r.Then(next.Of(x));
+            });
+            t.Root.Assume(Enumerable.Range(0, 2_000).Select(i => t.Num.Of((long)i)).ToArray());
+            t.Root.Freeze();
+
+            using var child = t.Root.CreateChild();
+            var report = child.Run(Schedule.Saturate(t.Rules), new RunOptions { RowLimit = 100 });
+            Assert.Equal(RunStopReason.Completed, report.StopReason);
+            Assert.True(report.Saturated);
+            Assert.Equal(2, report.Iterations);
+            Assert.Equal(5, child.CountRows(next));
+
+            using var tight = t.Root.CreateChild();
+            var stopped = tight.Run(Schedule.Saturate(t.Rules), new RunOptions { RowLimit = 2 });
+            Assert.Equal(RunStopReason.RowLimit, stopped.StopReason);
+            Assert.False(stopped.Saturated);
+            Assert.Equal(1, stopped.Iterations);
+            Assert.Equal(5, tight.CountRows(next));
         }
 
         [Fact]

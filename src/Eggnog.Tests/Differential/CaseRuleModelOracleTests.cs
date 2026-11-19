@@ -14,15 +14,15 @@ namespace Eggnog.Tests.Differential
     /// A model-based soundness check of <see cref="PredicateTheory"/>'s case rules: random programs
     /// (<see cref="CaseRuleProgram"/>) run in the scoped encoding, against an enumeration of their models. A model gives
     /// each discriminator one value of its domain and each path it governs no value (absent), a string, null or a number,
-    /// such that what the schema holds of the path holds (a number type, or a domain whose strings a present path
-    /// holds), the branch of the discriminator's value holds (a path it declares present is present, a path whose stored
-    /// form it declares holds a string or null, a path whose domain it declares holds one of its strings) and the
-    /// query's conjuncts hold (an in-set conjunct's path holds one of its values, a disequality's path is present and
-    /// holds another, a numeric comparison's path holds a number). Whatever the query derives must hold in each model:
-    /// a present path is present in every model, a stored form is declared by the branch every model selects, a domain
-    /// holds the value every model gives the path when present, a string for a governed path, a type set holds the type
-    /// of every such value, and a contradiction means that there is no model. 400 seeds by default; <c>EGGNOG_SEEDS</c>
-    /// raises it. A failing program prints itself.
+    /// such that what the schema holds of the path holds (a value of its type set, one of the strings of its domain,
+    /// and a value at all where it is present), the branch of the discriminator's value holds (a path it declares
+    /// present is present, a path whose stored form it declares holds a string or null, a path whose domain it declares
+    /// holds one of its strings) and the query's conjuncts hold (an in-set conjunct's path holds one of its values, a
+    /// disequality's path is present and holds another, a numeric comparison's path holds a number). Whatever the query
+    /// derives must hold in each model: a present path is present in every model, a stored form is declared by the
+    /// branch every model selects, a domain holds the value every model gives the path when present, a string for a
+    /// governed path, a type set holds the type of every such value, and a contradiction means that there is no model.
+    /// 400 seeds by default; <c>EGGNOG_SEEDS</c> raises it. A failing program prints itself.
     /// </summary>
     public sealed class CaseRuleModelOracleTests
     {
@@ -53,7 +53,7 @@ namespace Eggnog.Tests.Differential
         /// </summary>
         [Fact]
         public void WhatTheSchemasCaseRulesDeriveHoldsInEveryModel() =>
-            CheckSeeds(program => RunScoped(program, mentioned: false));
+            CheckSeeds(mentioned: false);
 
         /// <summary>
         /// What the query derives with <see cref="PredicateTheory.Saturation"/>, whose case rules reason only by the
@@ -61,12 +61,14 @@ namespace Eggnog.Tests.Differential
         /// </summary>
         [Fact]
         public void WhatTheQuerysCaseRulesDeriveHoldsInEveryModel() =>
-            CheckSeeds(program => RunScoped(program, mentioned: true));
+            CheckSeeds(mentioned: true);
 
         /// <summary>
         /// Runs the programs of the seeds and checks each against its models.
         /// </summary>
-        static void CheckSeeds(Func<CaseRuleProgram, CaseRuleFacts> run)
+        /// <param name="mentioned">Whether the query runs <see cref="PredicateTheory.Saturation"/>, whose case rules
+        /// reason only by the discriminators it mentions, rather than the schema's case rules.</param>
+        static void CheckSeeds(bool mentioned)
         {
             var failures = new List<string>();
             var refuted = 0;
@@ -76,7 +78,7 @@ namespace Eggnog.Tests.Differential
             for (var seed = 0; seed < seeds && failures.Count < 3; seed++)
             {
                 var program = CaseRuleProgram.Generate(seed);
-                var facts = run(program);
+                var (schema, facts) = RunScoped(program, mentioned);
                 if (Check(program, facts) is { } failure)
                     failures.Add($"{program}\n{failure}\n  scoped: {facts}");
 
@@ -86,26 +88,21 @@ namespace Eggnog.Tests.Differential
                     continue;
                 }
 
+                // With the query's case rules, a drop or a fact counts only where the query goes beyond the frozen
+                // schema, whose own case rules have reasoned by every present discriminator already: so these counts
+                // show the query's case rules at work, not what the query inherits.
+                var inherited = mentioned ? schema : null;
                 foreach (var (path, values) in program.Discriminators)
                 {
                     var domain = facts.Domains[path];
-                    if (domain.Count < Allowed(program, path, values).Count())
+                    if (domain.Count < Allowed(program, path, inherited?.Domains[path].ToArray() ?? values).Count())
                         dropped++;
 
                     // Facts of the governed paths that no conjunct names while the discriminator still has several
-                    // values, which no branch rule derives; a domain or a type set counts only where the schema
-                    // declares neither of the path.
+                    // values, which no branch rule derives.
                     if (domain.Count > 1)
-                    {
                         foreach (var governed in CaseRuleProgram.Governed(path).Where(g => program.Conjuncts.All(c => c.Path != g)))
-                        {
-                            var declared = program.Numbers.Contains(governed) || program.Domains.Any(d => d.Path == governed);
-                            byCases += facts.Forms.Count(f => f.StartsWith(governed + ":", StringComparison.Ordinal));
-                            byCases += facts.Domains.ContainsKey(governed) && declared == false ? 1 : 0;
-                            byCases += facts.Types.ContainsKey(governed) && declared == false ? 1 : 0;
-                            byCases += facts.Present.Contains(governed) ? 1 : 0;
-                        }
-                    }
+                            byCases += ByCases(program, facts, inherited, governed);
                 }
             }
 
@@ -119,15 +116,51 @@ namespace Eggnog.Tests.Differential
         }
 
         /// <summary>
+        /// Counts the facts of a governed path that the query holds by cases. With <paramref name="inherited"/>, the
+        /// facts the frozen schema does not hold: a stored form or a presence it lacks, a domain or a type set it holds
+        /// otherwise or not at all. Without, its stored forms; where the schema declares neither a domain nor a type
+        /// set of the path, its domain and type set; and its presence, where the schema does not declare it.
+        /// </summary>
+        /// <param name="program">The program.</param>
+        /// <param name="facts">What the query holds.</param>
+        /// <param name="inherited">What the frozen schema holds; <c>null</c> to count what the query holds.</param>
+        /// <param name="path">The governed path.</param>
+        /// <returns>The count.</returns>
+        static int ByCases(CaseRuleProgram program, CaseRuleFacts facts, CaseRuleFacts? inherited, string path)
+        {
+            var count = facts.Forms.Count(f => f.StartsWith(path + ":", StringComparison.Ordinal) && inherited?.Forms.Contains(f) != true);
+            if (inherited is not null)
+            {
+                count += facts.Domains.TryGetValue(path, out var domain) && Held(inherited.Domains, path, domain) == false ? 1 : 0;
+                count += facts.Types.TryGetValue(path, out var types) && Held(inherited.Types, path, types) == false ? 1 : 0;
+                count += facts.Present.Contains(path) && inherited.Present.Contains(path) == false ? 1 : 0;
+                return count;
+            }
+
+            var declared = program.Types.Any(t => t.Path == path) || program.Domains.Any(d => d.Path == path);
+            count += facts.Domains.ContainsKey(path) && declared == false ? 1 : 0;
+            count += facts.Types.ContainsKey(path) && declared == false ? 1 : 0;
+            count += facts.Present.Contains(path) && program.Present.Contains(path) == false ? 1 : 0;
+            return count;
+        }
+
+        /// <summary>
+        /// Whether the frozen schema holds a path's domain or type set as the query does.
+        /// </summary>
+        static bool Held(SortedDictionary<string, Set<string>> schema, string path, Set<string> value) =>
+            schema.TryGetValue(path, out var held) && held.Equals(value);
+
+        /// <summary>
         /// The scoped encoding as a schema and its query run it: the schema compiled with its case rules
         /// (<see cref="PredicateTheory.Facts"/>) and frozen, then the query run with the schema's case rules, which reason
         /// by every present discriminator, or with <see cref="PredicateTheory.Saturation"/>, whose case rules reason only
-        /// by those the query mentions. Facts are read for every path, discriminators and governed paths alike.
+        /// by those the query mentions. Facts are read for every path, discriminators and governed paths alike, in the
+        /// frozen schema and in the query.
         /// </summary>
         /// <param name="program">The program.</param>
         /// <param name="mentioned">Whether the query runs <see cref="PredicateTheory.Saturation"/>.</param>
-        /// <returns>What the query scope holds.</returns>
-        static CaseRuleFacts RunScoped(CaseRuleProgram program, bool mentioned)
+        /// <returns>What the frozen schema holds, and what the query scope holds.</returns>
+        static (CaseRuleFacts Schema, CaseRuleFacts Query) RunScoped(CaseRuleProgram program, bool mentioned)
         {
             var c = new PredicateTheory(new EGraph());
             c.Graph.Root.Freeze();
@@ -135,11 +168,14 @@ namespace Eggnog.Tests.Differential
             foreach (var (path, values) in program.Discriminators)
                 schema.Assume(c.Present.Of(path), c.Dom.Of(path).Is(Set.From(values)), c.Discriminator.Of(path));
 
-            foreach (var path in program.Numbers)
-                schema.Assume(c.Types.Of(path).Is(Set.Of(["number"])));
+            foreach (var (path, types) in program.Types)
+                schema.Assume(c.Types.Of(path).Is(Set.From(types)));
 
             foreach (var (path, values) in program.Domains)
                 schema.Assume(c.Dom.Of(path).Is(Set.From(values)));
+
+            foreach (var path in program.Present)
+                schema.Assume(c.Present.Of(path));
 
             foreach (var branch in program.Branches.Where(b => b.IsEmpty == false))
                 c.DeclareBranch(schema, branch.Discriminator, branch.Value, branch.Present, branch.Forms, branch.Domains.Select(d => (d.Path, Set.From(d.Values))).ToArray());
@@ -177,21 +213,32 @@ namespace Eggnog.Tests.Differential
             var report = query.Run(mentioned ? c.Saturation : Schedule.Saturate(Schedule.Saturate(c.Horn, c.Lattice), c.SchemaCases, c.Rewrite));
             Assert.Equal(RunStopReason.Completed, report.StopReason);
             Assert.Empty(query.Children);
+            return (Read(c, schema, program), Read(c, query, program));
+        }
 
-            var facts = new CaseRuleFacts { Contradictory = query.IsContradictory };
+        /// <summary>
+        /// Reads what a scope holds of every path of a program, discriminators and governed paths alike.
+        /// </summary>
+        /// <param name="c">The theory.</param>
+        /// <param name="scope">The scope.</param>
+        /// <param name="program">The program.</param>
+        /// <returns>The facts.</returns>
+        static CaseRuleFacts Read(PredicateTheory c, Scope scope, CaseRuleProgram program)
+        {
+            var facts = new CaseRuleFacts { Contradictory = scope.IsContradictory };
             foreach (var path in program.Discriminators.SelectMany(d => CaseRuleProgram.Governed(d.Path).Prepend(d.Path)))
             {
-                if (query.Check(c.Present.Of(path)))
+                if (scope.Check(c.Present.Of(path)))
                     facts.Present.Add(path);
 
                 foreach (var form in CaseRuleProgram.Forms)
-                    if (query.Check(c.Form.Of(path, form)))
+                    if (scope.Check(c.Form.Of(path, form)))
                         facts.Forms.Add(path + ":" + form);
 
-                if (query.TryGet(c.Dom.Of(path), out var domain))
+                if (scope.TryGet(c.Dom.Of(path), out var domain))
                     facts.Domains[path] = domain;
 
-                if (query.TryGet(c.Types.Of(path), out var types))
+                if (scope.TryGet(c.Types.Of(path), out var types))
                     facts.Types[path] = types;
             }
 
@@ -276,9 +323,9 @@ namespace Eggnog.Tests.Differential
         static bool Allows(CaseRuleProgram program, CaseRuleBranch branch, string path, string value)
         {
             if (value == Absent)
-                return branch.Present.Contains(path) == false && program.Conjuncts.All(c => c.Path != path);
+                return program.Present.Contains(path) == false && branch.Present.Contains(path) == false && program.Conjuncts.All(c => c.Path != path);
 
-            if (program.Numbers.Contains(path) && value != Number)
+            if (program.Types.Any(t => t.Path == path && t.Types.Contains(TypeOf(value)) == false))
                 return false;
 
             if (program.Domains.Concat(branch.Domains).Any(d => d.Path == path && d.Values.Contains(value) == false))

@@ -9,9 +9,9 @@ namespace Eggnog.Tests.Differential.CaseRules
     /// <summary>
     /// A random discriminated schema and a query over it (run by <c>CaseRuleModelOracleTests</c>): one or two
     /// discriminators with two to four values each, branches that declare presence, stored forms and domains of the
-    /// paths each discriminator governs, what the schema itself holds of some of those paths (a number type or a
-    /// domain, without presence), and a query of in-set conjuncts and disequalities on the discriminators, and of in-set
-    /// conjuncts, disequalities and numeric comparisons on the governed paths.
+    /// paths each discriminator governs, what the schema itself holds of some of those paths (a type set or a domain,
+    /// either of which may be empty, and presence), and a query of in-set conjuncts and disequalities on the
+    /// discriminators, and of in-set conjuncts, disequalities and numeric comparisons on the governed paths.
     /// </summary>
     /// <remarks>
     /// Each discriminator governs its own paths, <c>g{i}0</c> and <c>g{i}1</c> for <c>k{i}</c>, so the values a model
@@ -20,11 +20,12 @@ namespace Eggnog.Tests.Differential.CaseRules
     /// <param name="Seed">The seed that made it.</param>
     /// <param name="Discriminators">Each discriminator's path and domain.</param>
     /// <param name="Branches">The branches.</param>
-    /// <param name="Numbers">The governed paths the schema types as numbers.</param>
+    /// <param name="Types">The type sets the schema declares of governed paths, path and types.</param>
     /// <param name="Domains">The domains the schema declares of governed paths, path and values.</param>
+    /// <param name="Present">The governed paths the schema declares present.</param>
     /// <param name="Conjuncts">The query's conjuncts.</param>
     public sealed record CaseRuleProgram(int Seed, (string Path, string[] Values)[] Discriminators, CaseRuleBranch[] Branches,
-        string[] Numbers, (string Path, string[] Values)[] Domains, CaseRuleConjunct[] Conjuncts)
+        (string Path, string[] Types)[] Types, (string Path, string[] Values)[] Domains, string[] Present, CaseRuleConjunct[] Conjuncts)
     {
 
         /// <summary>
@@ -38,6 +39,12 @@ namespace Eggnog.Tests.Differential.CaseRules
         public static readonly string[] Strings = ["x", "y", "z"];
 
         /// <summary>
+        /// The type sets the schema may declare of a governed path: a number, null, either, a string or null, or none,
+        /// which leaves the path absent.
+        /// </summary>
+        static readonly string[][] TypeSets = [["number"], ["null"], ["null", "number"], ["null", "string"], []];
+
+        /// <summary>
         /// Generates the program of a seed.
         /// </summary>
         /// <param name="seed">The seed.</param>
@@ -48,8 +55,9 @@ namespace Eggnog.Tests.Differential.CaseRules
             string[] values = ["a", "b", "c", "d"];
             var discriminators = new List<(string Path, string[] Values)>();
             var branches = new List<CaseRuleBranch>();
-            var numbers = new List<string>();
+            var types = new List<(string Path, string[] Types)>();
             var domains = new List<(string Path, string[] Values)>();
+            var schemaPresent = new List<string>();
             for (var i = 0; i < random.Next(1, 3); i++)
             {
                 var path = "k" + i;
@@ -66,15 +74,19 @@ namespace Eggnog.Tests.Differential.CaseRules
 
                 foreach (var governed in Governed(path))
                 {
-                    switch (random.Next(6))
+                    switch (random.Next(8))
                     {
                         case 0:
-                            numbers.Add(governed);
-                            break;
                         case 1:
-                            domains.Add((governed, Pick(random, Strings)));
+                            types.Add((governed, TypeSets[random.Next(TypeSets.Length)]));
+                            break;
+                        case 2:
+                            domains.Add((governed, random.Next(4) == 0 ? [] : Pick(random, Strings)));
                             break;
                     }
+
+                    if (random.Next(6) == 0)
+                        schemaPresent.Add(governed);
                 }
             }
 
@@ -97,7 +109,7 @@ namespace Eggnog.Tests.Differential.CaseRules
                 });
             }
 
-            return new CaseRuleProgram(seed, discriminators.ToArray(), branches.ToArray(), numbers.ToArray(), domains.ToArray(), conjuncts.ToArray());
+            return new CaseRuleProgram(seed, discriminators.ToArray(), branches.ToArray(), types.ToArray(), domains.ToArray(), schemaPresent.ToArray(), conjuncts.ToArray());
         }
 
         /// <summary>
@@ -126,11 +138,14 @@ namespace Eggnog.Tests.Differential.CaseRules
             foreach (var branch in Branches)
                 text.Append("  ").Append(branch).Append('\n');
 
-            foreach (var path in Numbers)
-                text.Append($"  types({path}) = {{number}}\n");
+            foreach (var (path, types) in Types)
+                text.Append($"  types({path}) = {{{string.Join(", ", types)}}}\n");
 
             foreach (var (path, values) in Domains)
                 text.Append($"  dom({path}) = {{{string.Join(", ", values)}}}\n");
+
+            foreach (var path in Present)
+                text.Append($"  present({path})\n");
 
             return text.Append("  predicate ").Append(string.Join(" and ", Conjuncts.Select(c => c.ToString()))).ToString();
         }
