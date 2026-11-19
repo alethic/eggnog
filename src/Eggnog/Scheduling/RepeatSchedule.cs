@@ -32,7 +32,7 @@ namespace Eggnog
         public Schedule[] Steps { get; }
 
         /// <inheritdoc />
-        internal override bool Execute(ScheduleExecutor executor, Scope scope, int depth, bool inCase, bool splitsEnabled)
+        internal override bool Execute(ScheduleExecutor executor, Scope scope)
         {
             var changed = false;
             var outer = executor.HeldBack;
@@ -41,7 +41,7 @@ namespace Eggnog
                 for (var pass = 0; pass < Times; pass++)
                 {
                     executor.HeldBack = false;
-                    if (SequenceSchedule.ExecuteAll(Steps, executor, scope, depth, inCase, splitsEnabled))
+                    if (SequenceSchedule.ExecuteAll(Steps, executor, scope))
                         changed = true;
                     else if (executor.HeldBack == false)
                         break;
@@ -65,11 +65,10 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        internal override void Collect(ISet<Ruleset> rulesets, ICollection<Fact> conditions, ISet<SplitRule> splits, ISet<Ruleset> inCases,
-            bool inCase)
+        internal override void Collect(ISet<Ruleset> rulesets, ICollection<Fact> conditions)
         {
             foreach (var step in Steps)
-                step.Collect(rulesets, conditions, splits, inCases, inCase);
+                step.Collect(rulesets, conditions);
         }
 
     }

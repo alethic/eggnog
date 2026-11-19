@@ -248,12 +248,11 @@ namespace Eggnog
 
         /// <summary>
         /// Subsumes a constructor term: egglog's <c>(subsume (f args...))</c>. The term's row stays, and lookups,
-        /// checks and host reads still find it, but from the next iteration rule bodies, queries and split rules no
-        /// longer match it, and extraction skips it; its class keeps every other member. A term that does not exist yet
-        /// is made, subsumed, and the rule's later head items still run for the match. Subsumption is sticky. The
-        /// constructor must be subsumable (<see cref="ConstructorOptions.Subsumable"/>; a
-        /// <see cref="RuleDefinitionException"/> otherwise). The term's arguments are evaluated as head terms, made if
-        /// absent.
+        /// checks and host reads still find it, but from the next iteration rule bodies and queries no longer match it,
+        /// and extraction skips it; its class keeps every other member. A term that does not exist yet is made,
+        /// subsumed, and the rule's later head items still run for the match. Subsumption is sticky. The constructor
+        /// must be subsumable (<see cref="ConstructorOptions.Subsumable"/>; a <see cref="RuleDefinitionException"/>
+        /// otherwise). The term's arguments are evaluated as head terms, made if absent.
         /// </summary>
         /// <typeparam name="TSort">The sort.</typeparam>
         /// <param name="term">The constructor term.</param>
@@ -266,11 +265,11 @@ namespace Eggnog
 
         /// <summary>
         /// Subsumes relation rows (<c>r.Of(a, b)</c>): egglog's <c>(subsume (r a b))</c>. Each row stays, and lookups,
-        /// checks and host reads still find it, but from the next iteration rule bodies, queries and split rules no
-        /// longer match it. A row that does not exist yet is inserted, subsumed, and the rule's later head items still
-        /// run for the match. Subsumption is sticky. Each relation must be subsumable (<see
-        /// cref="RelationOptions.Subsumable"/>), and each fact must be a relation row of the running scope, not a scoped
-        /// view (a <see cref="RuleDefinitionException"/> otherwise).
+        /// checks and host reads still find it, but from the next iteration rule bodies and queries no longer match it.
+        /// A row that does not exist yet is inserted, subsumed, and the rule's later head items still run for the
+        /// match. Subsumption is sticky. Each relation must be subsumable (<see cref="RelationOptions.Subsumable"/>),
+        /// and each fact must be a relation row of the running scope, not a scoped view (a
+        /// <see cref="RuleDefinitionException"/> otherwise).
         /// </summary>
         /// <param name="rows">The relation rows.</param>
         /// <exception cref="ArgumentException">The tag of a <see cref="Fact.In"/> belongs to another graph.</exception>
@@ -285,16 +284,15 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Deletes the row of a function or constructor application: egglog's <c>(delete (f args...))</c>. The row of the
-        /// application's keys goes, if there is one, and nothing else: a deleted constructor term's class stays, with its
-        /// other members. The keys are evaluated as head terms, made if absent. Every deletion of an iteration lands
-        /// before its writes, so a row the same iteration also writes stays where the write stages it, as in egglog: a
-        /// key the table lacked, or a function's output. A relation's fact or a constructor's term the table already
-        /// holds stages nothing, so a deletion of it in the same iteration wins. A deletion is no change for
-        /// saturation. A rule that deletes runs only where the scope may delete: not in a scope with live
-        /// descendants, a child of a writable parent, or a run that splits (<see cref="Scope.Run"/> refuses it before any
-        /// work). The application must be of the running scope, not a scoped view (a
-        /// <see cref="RuleDefinitionException"/> otherwise).
+        /// Deletes the row of a function or constructor application: egglog's <c>(delete (f args...))</c>. The row of
+        /// the application's keys goes, if there is one, and nothing else: a deleted constructor term's class stays,
+        /// with its other members. The keys are evaluated as head terms, made if absent. Every deletion of an iteration
+        /// lands before its writes, so a row the same iteration also writes stays where the write stages it, as in
+        /// egglog: a key the table lacked, or a function's output. A relation's fact or a constructor's term the table
+        /// already holds stages nothing, so a deletion of it in the same iteration wins. A deletion is no change for
+        /// saturation. A rule that deletes runs only where the scope may delete: not in a scope with live descendants,
+        /// or a child of a writable parent (<see cref="Scope.Run"/> refuses it before any work). The application must
+        /// be of the running scope, not a scoped view (a <see cref="RuleDefinitionException"/> otherwise).
         /// </summary>
         /// <typeparam name="T">The application's type.</typeparam>
         /// <param name="term">The application: <c>f.Of(k)</c> of a function or a constructor.</param>

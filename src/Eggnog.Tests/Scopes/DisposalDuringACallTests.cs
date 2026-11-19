@@ -8,10 +8,10 @@ namespace Eggnog.Tests.Scopes
 {
 
     /// <summary>
-    /// A scope disposed while a call on it is in progress: the call completes using the scope's classes, there and in
-    /// its run's cases, and calls in the scope's live descendants use them too. Outside the scope's subtree its classes
-    /// are refused as disposed with <see cref="ArgumentException"/>, and a call on the scope that starts after the
-    /// disposal is refused at entry with <see cref="ObjectDisposedException"/>.
+    /// A scope disposed while a call on it is in progress: the call completes using the scope's classes, and calls in
+    /// the scope's live descendants use them too. Outside the scope's subtree its classes are refused as disposed with
+    /// <see cref="ArgumentException"/>, and a call on the scope that starts after the disposal is refused at entry with
+    /// <see cref="ObjectDisposedException"/>.
     /// </summary>
     public sealed class DisposalDuringACallTests
     {
@@ -141,57 +141,6 @@ namespace Eggnog.Tests.Scopes
             Assert.True(schema.IsReleased);
         }
 
-        /// <summary>
-        /// A run whose scope a lattice merge in one of its cases disposes: the cases' <c>Until</c> condition, checked in
-        /// the cases, which are live descendants of the scope, still reads a class of that scope. The same class reads in
-        /// a live child of the disposed scope, and a call on the scope after the run is refused at entry.
-        /// </summary>
-        [Fact]
-        public void AnUntilInACaseReadsAClassOfTheRunsScopeDisposedDuringTheRun()
-        {
-            Scope? disposed = null;
-            var graph = new EGraph();
-            graph.DefineSort<Node>("Node");
-            var a = graph.DefineConstructor<Node>("A");
-            var tag = graph.DefineRelation<Node>("tag");
-            var max = new ValueLattice<long>("disposing max", (x, y) =>
-            {
-                disposed?.Dispose();
-                return Math.Max(x, y);
-            });
-            var g = graph.DefineFunction<string, long>("g", max);
-            var dom = graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
-            var chosen = graph.DefineRelation<string, string>("chosen");
-            var rules = graph.DefineRuleset("rules");
-            rules.DefineRule("chosen bumps g", r =>
-            {
-                r.When(chosen.Of("kind", "x"));
-                r.Then(g.Of("k").Is(5L));
-            });
-            var split = graph.DefineSplit("choose", s =>
-            {
-                var (p, d) = s.Vars<string, Set<string>>("p", "d");
-                s.When(d.Is(dom.Of(p)));
-                var v = s.Cases("v", d);
-                s.Assume(chosen.Of(p, v));
-            });
-            graph.Root.Freeze();
-            var scope = graph.Root.CreateChild();
-            var node = scope.Make(a.Of());
-            scope.Assume(dom.Of("kind").Is(Set.Of(["x", "y"])));
-            scope.Assume(g.Of("k").Is(1L));
-            var child = scope.CreateChild();
-            var inCase = Schedule.Sequence(Schedule.Saturate(rules), Schedule.Until(Schedule.Saturate(rules), tag.Of(node)));
-            disposed = scope;
-
-            var report = scope.Run(Schedule.Split(split, inCase));
-
-            Assert.Equal(2, report.CasesOpened);
-            Assert.True(scope.IsDisposed);
-            Assert.False(child.Check(tag.Of(node)));
-            Assert.Throws<ObjectDisposedException>(() => scope.Check(tag.Of(node)));
-        }
-
 
         /// <summary>
         /// A <c>Write</c> callback that disposes its own scope: the <c>Write</c> is a call on the scope already in
@@ -240,53 +189,6 @@ namespace Eggnog.Tests.Scopes
             Assert.Throws<ArgumentException>(() => outside.Write(w => w.Make(t.Wrap.Of(c))));
             Assert.False(outside.AreEqual(outside.Make(t.A.Of()), outside.Make(t.B.Of())));
             Assert.Equal(0, outside.CountRows(t.Wrap));
-        }
-
-        /// <summary>
-        /// A run whose scope is disposed while a split step grounds the assumption of its last case, after the case is
-        /// made and before the assumption's class of the run's scope is checked; a primitive of the assumption disposes
-        /// it in place of another thread. The case is a live descendant of the run's scope, so it assumes the class, and
-        /// the run completes without a fault. A call after the run is refused at entry.
-        /// </summary>
-        [Fact]
-        public void ASplitAssumptionHoldsAClassOfTheRunsScopeDisposedWhileItIsGrounded()
-        {
-            Scope? disposed = null;
-            var grounded = 0;
-            var graph = new EGraph();
-            graph.DefineSort<Node>("Node");
-            var a = graph.DefineConstructor<Node>("A");
-            var dom = graph.DefineFunction<Node, Set<string>>("dom", ValueLattice.Intersect<string>());
-            var chosen = graph.DefineRelation<Node, string>("chosen");
-            var disposing = new Primitive<string, string>("disposing", x =>
-            {
-                if (++grounded == 2)
-                    disposed?.Dispose();
-
-                return x;
-            }, true);
-            var split = graph.DefineSplit("choose", s =>
-            {
-                var p = s.Var<Node>("p");
-                var d = s.Var<Set<string>>("d");
-                s.When(d.Is(dom.Of(p)));
-                var v = s.Cases("v", d);
-                s.Assume(chosen.Of(p, disposing.Of(v)));
-            });
-            var none = graph.DefineRuleset("none");
-            graph.Root.Freeze();
-            var scope = graph.Root.CreateChild();
-            var node = scope.Make(a.Of());
-            scope.Assume(dom.Of(node).Is(Set.Of(["x", "y"])));
-            disposed = scope;
-
-            var report = scope.Run(Schedule.Split(split, Schedule.Saturate(none)));
-
-            Assert.Equal(2, grounded);
-            Assert.Equal(2, report.CasesOpened);
-            Assert.True(scope.IsDisposed);
-            Assert.Null(scope.Failure);
-            Assert.Throws<ObjectDisposedException>(() => scope.Check(chosen.Of(node, "x")));
         }
 
         /// <summary>

@@ -7,13 +7,13 @@ namespace Eggnog.Tests.Predicates.Scoped
 {
 
     /// <summary>
-    /// Queries of <see cref="PredicateTheory"/> that run without a split, each a <see cref="ScopedQueryCase"/> over a
-    /// schema of its own, with the steps that compile a case's schema and ask its query; the queries over a schema with
-    /// a discriminator split are <see cref="DiscriminatedSchema"/>'s. Between them they exercise stored forms and
-    /// lowering, discriminated and undiscriminated unions, refused values, numeric bounds, integer domains, type claims
-    /// and the deletion of conjuncts the schema implies. Used by the tests that must run every query in another
-    /// setting: two graphs in either order and on parallel threads (ScopeTagTests), and a degree of parallelism above 1
-    /// (ParallelEquivalenceTests).
+    /// Queries of <see cref="PredicateTheory"/> that run without the case rules, each a <see cref="ScopedQueryCase"/>
+    /// over a schema of its own, with the steps that compile a case's schema and ask its query; the queries over a
+    /// schema that reasons by the cases of its discriminator are <see cref="DiscriminatedSchema"/>'s. Between them they
+    /// exercise stored forms and lowering, discriminated and undiscriminated unions, refused values, numeric bounds,
+    /// integer domains, type claims and the deletion of conjuncts the schema implies. Used by the tests that must run
+    /// every query in another setting: two graphs in either order and on parallel threads (ScopeTagTests), and a degree
+    /// of parallelism above 1 (ParallelEquivalenceTests).
     /// </summary>
     public static class ScopedQueryCases
     {
@@ -34,19 +34,19 @@ namespace Eggnog.Tests.Predicates.Scoped
         public static IReadOnlyList<ScopedQueryCase> All { get; } =
         [
             new("a declared stored form lowers the UUID comparison",
-                (c, s) => c.DeclareBranch(s, "kind", "B", c.Form.Of("ref", "uuid-lower")),
+                (c, s) => c.DeclareBranch(s, "kind", "B", forms: [("ref", "uuid-lower")]),
                 c => c.And.Of(c.StrEq.Of("kind", "B"), c.UuidEq.Of("ref", Ref)),
                 (c, s, q, p) => q.Extract(p).ToString() == $"(And (StrEq \"kind\" \"B\") (StrEq \"ref\" \"{Ref}\"))"),
             new("without the discriminator nothing is proven and nothing lowers",
-                (c, s) => c.DeclareBranch(s, "kind", "B", c.Form.Of("ref", "uuid-lower")),
+                (c, s) => c.DeclareBranch(s, "kind", "B", forms: [("ref", "uuid-lower")]),
                 c => c.UuidEq.Of("ref", Ref),
                 (c, s, q, p) => q.Check(c.Form.Of("ref", "uuid-lower")) == false && q.Extract(p).Cost == 1002),
-            new("without a split, horn and lattice rules alone do not lower a disjunction",
+            new("without the case rules, horn and lattice rules alone do not lower a disjunction",
                 (c, s) =>
                 {
                     s.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of(["order", "invoice", "note"])), c.Discriminator.Of("kind"));
-                    c.DeclareBranch(s, "kind", "order", c.Form.Of("ref", "uuid-lower"));
-                    c.DeclareBranch(s, "kind", "invoice", c.Form.Of("ref", "uuid-lower"));
+                    c.DeclareBranch(s, "kind", "order", forms: [("ref", "uuid-lower")]);
+                    c.DeclareBranch(s, "kind", "invoice", forms: [("ref", "uuid-lower")]);
                 },
                 c => c.And.Of(c.Or.Of(c.StrEq.Of("kind", "order"), c.StrEq.Of("kind", "invoice")), c.UuidEq.Of("ref", Ref)),
                 (c, s, q, p) => q.Get(c.Dom.Of("kind")).Equals(Set.Of(["invoice", "order"])) && q.Check(c.Form.Of("ref", "uuid-lower")) == false),
@@ -54,16 +54,16 @@ namespace Eggnog.Tests.Predicates.Scoped
                 (c, s) =>
                 {
                     s.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of(["order", "invoice"])));
-                    c.DeclareBranch(s, "kind", "order", c.Form.Of("ref", "uuid-lower"));
+                    c.DeclareBranch(s, "kind", "order", forms: [("ref", "uuid-lower")]);
                 },
                 c => c.And.Of(c.Not.Of(c.StrEq.Of("kind", "invoice")), c.UuidEq.Of("ref", Ref)),
                 (c, s, q, p) => q.Extract(p).ToString() == $"(And (Not (StrEq \"kind\" \"invoice\")) (StrEq \"ref\" \"{Ref}\"))"),
-            new("without a split, the branches of an undiscriminated union never meet",
+            new("without the case rules, the branches of an undiscriminated union never meet",
                 (c, s) =>
                 {
                     s.Assume(c.Present.Of("$anyOf/0"), c.Dom.Of("$anyOf/0").Is(Set.Of(["0", "1"])), c.Discriminator.Of("$anyOf/0"));
-                    c.DeclareBranch(s, "$anyOf/0", "0", c.Present.Of("legacyId"), c.Dom.Of("status").Is(Set.Of(["active", "archived"])));
-                    c.DeclareBranch(s, "$anyOf/0", "1", c.Present.Of("id2"), c.Dom.Of("status").Is(Set.Of(["draft", "active"])));
+                    c.DeclareBranch(s, "$anyOf/0", "0", present: ["legacyId"], domains: [("status", Set.Of(["active", "archived"]))]);
+                    c.DeclareBranch(s, "$anyOf/0", "1", present: ["id2"], domains: [("status", Set.Of(["draft", "active"]))]);
                 },
                 c => c.StrEq.Of("status", "purged"),
                 (c, s, q, p) => q.IsContradictory == false && q.Extract(p).ToString() == "(StrEq \"status\" \"purged\")"),

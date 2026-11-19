@@ -129,7 +129,7 @@ namespace Eggnog
 
         /// <summary>
         /// Gets the context of the body's primitives, egglog's: <see cref="PrimitiveAccess.Pure"/> for a semi-naive rule's
-        /// body and a split rule's, <see cref="PrimitiveAccess.Read"/> for a naive rule's and a query's.
+        /// body, <see cref="PrimitiveAccess.Read"/> for a naive rule's and a query's.
         /// </summary>
         public PrimitiveAccess BodyContext { get; init; } = PrimitiveAccess.Pure;
 

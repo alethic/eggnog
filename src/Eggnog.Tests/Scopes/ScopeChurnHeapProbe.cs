@@ -56,7 +56,7 @@ namespace Eggnog.Tests.Scopes
             + $"set {IsolatedRun.Variable} to a file for its figures to run it here.";
 
         /// <summary>
-        /// Measures queries that reuse their literals: every tenth splits on <c>kind</c>, the rest query
+        /// Measures queries that reuse their literals: every tenth reasons by the cases of <c>kind</c>, the rest query
         /// <c>StrEq(kind, a)</c>.
         /// </summary>
         [Fact]
@@ -69,7 +69,7 @@ namespace Eggnog.Tests.Scopes
             Action<int> derive = i =>
             {
                 if (i % 10 == 0)
-                    churn.Derive(c.Not.Of(c.StrEq.Of("kind", "zz")), churn.Split);
+                    churn.Derive(c.Not.Of(c.StrEq.Of("kind", "c")), churn.Cases);
                 else
                     churn.Derive(c.StrEq.Of("kind", "a"));
             };
@@ -107,8 +107,8 @@ namespace Eggnog.Tests.Scopes
 
         /// <summary>
         /// Measures the soak: 99,000 queries, of which every hundredth has a new literal, every tenth of the others
-        /// splits, and the rest reuse their literal, in a warm-up of 19,800, a settling interval of 13,200 and five
-        /// measured intervals of 13,200, against a control as <see cref="QueriesWithANewLiteral"/> measures. A
+        /// reasons by cases, and the rest reuse their literal, in a warm-up of 19,800, a settling interval of 13,200
+        /// and five measured intervals of 13,200, against a control as <see cref="QueriesWithANewLiteral"/> measures. A
         /// disposed query leaves no child of the schema behind.
         /// </summary>
         [Fact]
@@ -163,7 +163,7 @@ namespace Eggnog.Tests.Scopes
 
         /// <summary>
         /// Gets the step of the soak: every hundredth query has a new literal (<see cref="Soak"/> of the step's
-        /// number), every tenth of the others splits, and the rest reuse their literal.
+        /// number), every tenth of the others reasons by cases, and the rest reuse their literal.
         /// </summary>
         /// <param name="churn">The graph.</param>
         /// <returns>The step, by number.</returns>
@@ -175,7 +175,7 @@ namespace Eggnog.Tests.Scopes
                 if (i % 100 == 0)
                     churn.Derive(c.StrEq.Of("kind", Soak(i)));
                 else if (i % 10 == 0)
-                    churn.Derive(c.Not.Of(c.StrEq.Of("kind", "zz")), churn.Split);
+                    churn.Derive(c.Not.Of(c.StrEq.Of("kind", "c")), churn.Cases);
                 else
                     churn.Derive(c.StrEq.Of("kind", "a"));
             };

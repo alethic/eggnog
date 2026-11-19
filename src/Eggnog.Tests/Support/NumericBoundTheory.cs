@@ -5,9 +5,9 @@ namespace Eggnog.Tests.Support
 
     /// <summary>
     /// A graph with <see cref="NumericBound"/> registered and two functions over it, <c>lo</c> and <c>hi</c>, merged by
-    /// user lattices: <c>lo</c> merges to the greater bound and joins cases to the lesser, <c>hi</c> mirrors that, and on
-    /// a tie of value the open bound is the tighter one. Four relations of comparisons (<c>gt</c>, <c>ge</c>, <c>lt</c>,
-    /// <c>le</c>, over a path and a <c>decimal</c>) give the bounds through the rules of <see cref="Bounds"/>.
+    /// user lattices: <c>lo</c> merges to the greater bound, <c>hi</c> to the lesser, and on a tie of value the open
+    /// bound is the tighter one. Four relations of comparisons (<c>gt</c>, <c>ge</c>, <c>lt</c>, <c>le</c>, over a path
+    /// and a <c>decimal</c>) give the bounds through the rules of <see cref="Bounds"/>.
     /// </summary>
     public sealed class NumericBoundTheory
     {
@@ -58,18 +58,16 @@ namespace Eggnog.Tests.Support
         public Ruleset Bounds { get; }
 
         /// <summary>
-        /// Makes the lattice of lower bounds: the merge keeps the greater bound, an open bound winning a tie of value;
-        /// the case join keeps the lesser, a closed bound winning a tie.
+        /// Makes the lattice of lower bounds: the merge keeps the greater bound, an open bound winning a tie of value.
         /// </summary>
         /// <returns>The lattice.</returns>
-        public static ValueLattice<NumericBound> LowerLattice() => new("lower-bound", TighterLower, LooserLower);
+        public static ValueLattice<NumericBound> LowerLattice() => new("lower-bound", TighterLower);
 
         /// <summary>
-        /// Makes the lattice of upper bounds: the merge keeps the lesser bound, an open bound winning a tie of value;
-        /// the case join keeps the greater, a closed bound winning a tie.
+        /// Makes the lattice of upper bounds: the merge keeps the lesser bound, an open bound winning a tie of value.
         /// </summary>
         /// <returns>The lattice.</returns>
-        public static ValueLattice<NumericBound> UpperLattice() => new("upper-bound", TighterUpper, LooserUpper);
+        public static ValueLattice<NumericBound> UpperLattice() => new("upper-bound", TighterUpper);
 
         /// <summary>
         /// Formats a bound as a literal: <c>(open 1.5)</c> or <c>(closed 2)</c>.
@@ -91,17 +89,6 @@ namespace Eggnog.Tests.Support
         }
 
         /// <summary>
-        /// The looser of two lower bounds; the first when they are equal.
-        /// </summary>
-        static NumericBound LooserLower(NumericBound a, NumericBound b)
-        {
-            if (a.Value != b.Value)
-                return a.Value < b.Value ? a : b;
-
-            return a.Open == false || b.Open ? a : b;
-        }
-
-        /// <summary>
         /// The tighter of two upper bounds; the first when they are equal.
         /// </summary>
         static NumericBound TighterUpper(NumericBound a, NumericBound b)
@@ -110,17 +97,6 @@ namespace Eggnog.Tests.Support
                 return a.Value < b.Value ? a : b;
 
             return a.Open || b.Open == false ? a : b;
-        }
-
-        /// <summary>
-        /// The looser of two upper bounds; the first when they are equal.
-        /// </summary>
-        static NumericBound LooserUpper(NumericBound a, NumericBound b)
-        {
-            if (a.Value != b.Value)
-                return a.Value > b.Value ? a : b;
-
-            return a.Open == false || b.Open ? a : b;
         }
 
         /// <summary>

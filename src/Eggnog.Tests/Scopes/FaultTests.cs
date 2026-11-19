@@ -58,36 +58,6 @@ namespace Eggnog.Tests.Scopes
         }
 
         [Fact]
-        public void ACaseTheHostRunsStaysUsableAfterAFailedRun()
-        {
-            // A case of a CaseSet is a scope the host runs, as it runs a child: its failed run leaves it usable, and the
-            // set still lifts what the case proved.
-            var t = new ScopeTheory();
-            t.Rules.DefineRule("fails on bad", r =>
-            {
-                var x = r.Var<string>("x");
-                r.When(t.Fact.Of(x));
-                r.Where(x, x => x == "bad" ? throw new InvalidOperationException("bad fact") : true);
-                r.Then(t.Seen.Of(x));
-            });
-            t.Root.Assume(t.Fact.Of("good"));
-            var parent = t.Root.CreateChild();
-            using var cases = parent.OpenCases();
-            var @case = cases.Add();
-            @case.Assume(t.Fact.Of("bad"));
-
-            var failure = Assert.Throws<RuleEvaluationException>(() => @case.Run(Schedule.Saturate(t.Rules)));
-
-            Assert.Equal("fails on bad", failure.RuleName);
-            Assert.False(@case.IsFaulted);
-            Assert.True(@case.Check(t.Seen.Of("good")));
-            Assert.False(parent.IsFaulted);
-            cases.Lift();
-            Assert.True(parent.Check(t.Seen.Of("good")));
-            Assert.False(parent.Check(t.Seen.Of("bad")));
-        }
-
-        [Fact]
         public void AWritableParentStaysUsableAfterItsChildsRunFails()
         {
             var t = new ScopeTheory();

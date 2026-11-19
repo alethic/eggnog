@@ -17,8 +17,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Appends the splits <paramref name="scope"/> could take now to <paramref name="requests"/>, each with a key whose
-        /// <see cref="SplitKey.Source"/> is this source's index in the driver. A request the source declines itself (for a
-        /// rule split, an empty set) is counted in <see cref="SplitReport.SplitsSkipped"/>.
+        /// <see cref="SplitKey.Source"/> is this source's index in the driver. A request the source declines itself is
+        /// counted in <see cref="SplitReport.SplitsSkipped"/>.
         /// </summary>
         /// <param name="scope">The scope, clean.</param>
         /// <param name="requests">Receives the requests.</param>
@@ -27,7 +27,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Makes <paramref name="case"/> assume case <paramref name="caseIndex"/> of <paramref name="request"/>: writes its
-        /// assumptions (for a rule split, the facts that bind the set's element) and flushes them.
+        /// assumptions and flushes them.
         /// </summary>
         /// <param name="case">The new case, a child of the scope.</param>
         /// <param name="request">The request, as <see cref="FindRequests"/> made it.</param>

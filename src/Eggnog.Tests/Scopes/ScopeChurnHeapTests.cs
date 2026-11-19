@@ -90,9 +90,9 @@ namespace Eggnog.Tests.Scopes
         }
 
         /// <summary>
-        /// Queries that reuse their literals retain less than 16 bytes each, a plain query's and a split query's alike:
-        /// the median growth of the measured intervals per step is less than <see cref="MedianBound"/>, and the mean
-        /// less than <see cref="MeanBound"/> (<see cref="ScopeChurnHeapProbe.QueriesThatReuseTheirLiterals"/>).
+        /// Queries that reuse their literals retain less than 16 bytes each, a plain query's and one reasoning by cases
+        /// alike: the median growth of the measured intervals per step is less than <see cref="MedianBound"/>, and the
+        /// mean less than <see cref="MeanBound"/> (<see cref="ScopeChurnHeapProbe.QueriesThatReuseTheirLiterals"/>).
         /// </summary>
         [Fact]
         public void QueriesThatReuseTheirLiteralsRetainNothing()
@@ -154,10 +154,10 @@ namespace Eggnog.Tests.Scopes
         }
 
         /// <summary>
-        /// The opt-in soak of a long-lived graph: 99,000 queries, of which every tenth splits and every hundredth has a
-        /// new literal, retain nothing beyond their new values over the last two thirds (five measured intervals of
-        /// 13,200 queries after a warm-up of 19,800 and a settling interval of 13,200), measured against a control as
-        /// <see cref="QueriesWithANewLiteralRetainOnlyTheirNewValues"/> measures
+        /// The opt-in soak of a long-lived graph: 99,000 queries, of which every tenth reasons by cases and every
+        /// hundredth has a new literal, retain nothing beyond their new values over the last two thirds (five measured
+        /// intervals of 13,200 queries after a warm-up of 19,800 and a settling interval of 13,200), measured against a
+        /// control as <see cref="QueriesWithANewLiteralRetainOnlyTheirNewValues"/> measures
         /// (<see cref="ScopeChurnHeapProbe.TheSoak"/>). Set <c>EGGNOG_CHURN_SOAK</c> to any value to run it.
         /// </summary>
         [Fact]

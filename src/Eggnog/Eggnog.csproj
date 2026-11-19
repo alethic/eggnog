@@ -2,7 +2,7 @@
 
     <PropertyGroup>
         <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
-        <Description>Equality saturation for .NET with egglog's capabilities and a typed C# API: relations, functions with lattice merges, constructors, rules, schedules, queries and extraction, plus scopes (child contexts, frozen bases shared across threads) and case splits with lift, on a C# reimplementation of egglog's engine.</Description>
+        <Description>Equality saturation for .NET with egglog's capabilities and a typed C# API: relations, functions with lattice merges, constructors, rules, schedules, queries and extraction, plus scopes (child contexts, frozen bases shared across threads), on a C# reimplementation of egglog's engine.</Description>
         <PackageTags>egraph;e-graph;equality-saturation;egglog;datalog;rewriting;term-rewriting;union-find;free-join</PackageTags>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageIcon>icon.png</PackageIcon>

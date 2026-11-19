@@ -14,7 +14,7 @@ namespace Eggnog.Tests.Scopes
     /// <summary>
     /// A scope tree has no depth limit, as egglog's stack of pushes has none: chains far deeper than the 32 and 64
     /// layers a machine word holds write, run, read, extract, rebuild containers of classes, catch up and dispose at
-    /// every level, nested cases included, and need no more stack than a shallow chain.
+    /// every level, and need no more stack than a shallow chain.
     /// </summary>
     public sealed class ScopeDepthTests
     {
@@ -114,55 +114,6 @@ namespace Eggnog.Tests.Scopes
             Assert.False(graph.Root.Check(seen.Of(1L)));
             Assert.Equal(1, graph.Root.CountRows(seen));
             Assert.Equal(0, graph.Root.CountRows(ns));
-        }
-
-        /// <summary>
-        /// Cases nest past 32 and 64 levels: each case of a 70-deep chain assumes its own fact and sees every
-        /// ancestor's; lifting from the bottom up carries each one-case set's facts into its parent, down to the root.
-        /// </summary>
-        [Fact]
-        public void CasesNestSeventyDeepAndLiftBackUp()
-        {
-            const int Depth = 70;
-            var graph = new EGraph();
-            var fact = graph.DefineRelation<long>("fact");
-            var derived = graph.DefineRelation<long>("derived");
-            var rules = graph.DefineRuleset("rules");
-            rules.DefineRule("derive", r =>
-            {
-                var x = r.Var<long>("x");
-                r.When(fact.Of(x));
-                r.Then(derived.Of(x));
-            });
-
-            var parents = new List<Scope> { graph.Root.CreateChild() };
-            var sets = new List<CaseSet>();
-            for (var d = 1; d <= Depth; d++)
-            {
-                var cases = parents[^1].OpenCases();
-                sets.Add(cases);
-                var @case = cases.Add();
-                Assert.True(@case.IsCase);
-                @case.Assume(fact.Of((long)d));
-                @case.Run(Schedule.Saturate(rules));
-                parents.Add(@case);
-            }
-
-            var deepest = parents[^1];
-            Assert.Equal(Depth, deepest.CountRows(derived));
-            Assert.True(Enumerable.Range(1, Depth).All(d => deepest.Check(derived.Of((long)d))));
-
-            for (var d = Depth; d >= 1; d--)
-            {
-                sets[d - 1].Lift();
-                sets[d - 1].Dispose();
-                Assert.Equal(Depth, parents[d - 1].CountRows(derived));
-                Assert.True(parents[d - 1].Check(derived.Of((long)Depth)));
-            }
-
-            Assert.Equal(Depth, parents[0].CountRows(derived));
-            parents[0].Dispose();
-            Assert.Equal(0, graph.Root.CountRows(derived));
         }
 
         /// <summary>
@@ -269,48 +220,6 @@ namespace Eggnog.Tests.Scopes
             deepest.Dispose();
             Assert.True(scopes.Skip(1).All(scope => scope.IsReleased));
             Assert.Empty(graph.Root.Children);
-        });
-
-        /// <summary>
-        /// Cases nested 200 deep on a small stack: a run of the outermost scope releases the cases under it level by
-        /// level, a case stopped second from the top stops every case below it when they catch up, and the lift that drops
-        /// it as vacuous disposes the whole nest under it.
-        /// </summary>
-        [Fact]
-        public void ACaseStoppedNearTheTopStopsADeepNestBelowIt() => OnASmallStack(() =>
-        {
-            const int Depth = 200;
-            var t = new NodeTheory();
-            var parents = new List<Scope> { t.Root.CreateChild() };
-            var sets = new List<CaseSet>();
-            for (var d = 1; d <= Depth; d++)
-            {
-                var cases = parents[^1].OpenCases();
-                sets.Add(cases);
-                parents.Add(cases.Add());
-            }
-
-            var deepest = parents[^1];
-            var a = deepest.Make(t.A.Of());
-            deepest.Assume(t.Tag.Of(a));
-            Assert.True(deepest.Check(t.Tag.Of(a)));
-            parents[0].Run(Schedule.Saturate(t.Rules));
-            Assert.False(deepest.IsDisposed);
-
-            parents[2].Assume(t.Graph.Contradiction.Of());
-            Assert.True(parents[2].IsContradictory);
-            Assert.False(parents[1].IsContradictory);
-            Assert.True(deepest.IsContradictory);
-            Assert.Throws<ScopeContradictedException>(() => deepest.Check(t.Tag.Of(a)));
-            Assert.Equal(RunStopReason.Contradiction, deepest.Run(Schedule.Saturate(t.Rules)).StopReason);
-            Assert.True(parents[Depth / 2].IsContradictory);
-            Assert.False(deepest.IsFaulted);
-
-            Assert.True(sets[1].Lift().ParentContradicted);
-            Assert.True(parents[2].IsDisposed);
-            Assert.True(deepest.IsDisposed);
-            Assert.True(parents[1].IsContradictory);
-            Assert.False(parents[0].IsContradictory);
         });
 
         /// <summary>

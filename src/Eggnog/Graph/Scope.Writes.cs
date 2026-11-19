@@ -25,8 +25,8 @@ namespace Eggnog
         /// <exception cref="RuleEvaluationException">A primitive of a subterm threw or has no result, and the terms made
         /// before it stand; or a merge failed, and what the call staged stands, as egglog's failed command keeps
         /// it.</exception>
-        /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, before the call
-        /// or through it, or lies under one.</exception>
+        /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction, before the call or
+        /// through it, or lies under a stopped scope; no scope the library makes stops.</exception>
         /// <exception cref="OverflowException">The graph has run out of ids or epochs (<see cref="EGraph.Usage"/>), and the
         /// scope is not faulted. When the ids ran out, or the epochs before the merge, nothing is written. When the epochs
         /// ran out in the rebuild after the merge, the write stays, and if that rebuild left work undone the scope's reads
@@ -54,7 +54,7 @@ namespace Eggnog
 
                 Commit(batch);
 
-                // A case whose write made it contradictory stopped: the class names nothing in a scope with no model.
+                // A scope whose write made it contradictory stopped: the class names nothing in a scope with no model.
                 ThrowIfStopped();
                 return TSort.FromId(new ClassId(Engine.Find(id), Origin));
             }
@@ -66,15 +66,15 @@ namespace Eggnog
 
         /// <summary>
         /// Writes ground facts as one batch, egglog's commands one after the other (see <see cref="Write"/>): relation
-        /// rows; <c>F.Of(k).Is(v)</c> (merged by F's lattice); <c>C.Of(k).Is(x)</c> (unions outputs); <c>a.Is(b)</c> of a
-        /// sort (a union); a call run for its effect alone (<see cref="Fact.Exists"/>, egglog's bare action). Facts that
-        /// hold already write nothing, so they move neither <see cref="Version"/> nor any extractor. A fact that fails
-        /// ends the call as egglog's failed command ends its program: what it staged before it failed stands, the terms
-        /// its calls made and what its primitives wrote, while its own write does not happen, unless what failed is a write
-        /// its primitives made, which alone is dropped, or the rebuild after the fact, whose merges made two rows of a
-        /// function without a lattice meet with different values, which keeps one of the rows and everything the fact
-        /// staged; the facts before it stand, and the facts after it are not written. On a case whose contradiction stopped it, or a scope under one, the
-        /// call does nothing.
+        /// rows; <c>F.Of(k).Is(v)</c> (merged by F's lattice); <c>C.Of(k).Is(x)</c> (unions outputs); <c>a.Is(b)</c> of
+        /// a sort (a union); a call run for its effect alone (<see cref="Fact.Exists"/>, egglog's bare action). Facts
+        /// that hold already write nothing, so they move neither <see cref="Version"/> nor any extractor. A fact that
+        /// fails ends the call as egglog's failed command ends its program: what it staged before it failed stands, the
+        /// terms its calls made and what its primitives wrote, while its own write does not happen, unless what failed
+        /// is a write its primitives made, which alone is dropped, or the rebuild after the fact, whose merges made two
+        /// rows of a function without a lattice meet with different values, which keeps one of the rows and everything
+        /// the fact staged; the facts before it stand, and the facts after it are not written. On a scope whose
+        /// contradiction stopped it, or a scope under one, the call does nothing; no scope the library makes stops.
         /// </summary>
         /// <param name="facts">The facts; none, a <c>null</c> array included, write nothing.</param>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
@@ -99,7 +99,7 @@ namespace Eggnog
             EnterWrite();
             try
             {
-                // A stopped case, or a scope under one, has no model: a fact more changes nothing.
+                // A stopped scope, or a scope under one, has no model: a fact more changes nothing.
                 if (IsStopped)
                     return;
 
@@ -130,8 +130,8 @@ namespace Eggnog
         /// <typeparam name="TSort">The sort.</typeparam>
         /// <param name="a">One class.</param>
         /// <param name="b">The other class.</param>
-        /// <returns><c>true</c> where the classes were distinct before the call; <c>false</c> on a case whose contradiction
-        /// stopped it, or a scope under one.</returns>
+        /// <returns><c>true</c> where the classes were distinct before the call; <c>false</c> on a scope whose
+        /// contradiction stopped it, or a scope under one (no scope the library makes stops).</returns>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
         /// <exception cref="ArgumentException">A class value is not usable in this scope.</exception>
         /// <exception cref="FactConflictException">The union merged two keys of a function without a lattice that hold
@@ -153,7 +153,7 @@ namespace Eggnog
             EnterWrite();
             try
             {
-                // A stopped case, or a scope under one, has no model: no two of its classes are distinct there.
+                // A stopped scope, or a scope under one, has no model: no two of its classes are distinct there.
                 if (IsStopped)
                     return false;
 
@@ -184,12 +184,12 @@ namespace Eggnog
         /// <summary>
         /// Subsumes a ground constructor term as one atomic batch: egglog's <c>(subsume (f args...))</c>. The term's
         /// row stays, and <see cref="Check"/>, <see cref="Get{T}"/> and <see cref="Rows"/> still find it, but rule
-        /// bodies, queries and split rules no longer match it, and extraction skips it; its class keeps every other
-        /// member. A term that does not exist yet is made, subsumed; its subterms are made as by <see
-        /// cref="Make{TSort}"/>, not subsumed. Subsumption is sticky, and a term already subsumed writes nothing, so it
-        /// moves neither <see cref="Version"/> nor any extractor. In a child, the subsumption shadows the ancestor's
-        /// row: the ancestors and the siblings still match it. On a case whose contradiction stopped it, or a scope
-        /// under one, the call does nothing.
+        /// bodies and queries no longer match it, and extraction skips it; its class keeps every other member. A term
+        /// that does not exist yet is made, subsumed; its subterms are made as by <see cref="Make{TSort}"/>, not
+        /// subsumed. Subsumption is sticky, and a term already subsumed writes nothing, so it moves neither
+        /// <see cref="Version"/> nor any extractor. In a child, the subsumption shadows the ancestor's row: the
+        /// ancestors and the siblings still match it. On a scope whose contradiction stopped it, or a scope under one,
+        /// the call does nothing; no scope the library makes stops.
         /// </summary>
         /// <typeparam name="TSort">The sort.</typeparam>
         /// <param name="term">The term: an application of a subsumable constructor (<see
@@ -213,7 +213,7 @@ namespace Eggnog
             EnterWrite();
             try
             {
-                // A stopped case, or a scope under one, has no model: a subsumption changes nothing.
+                // A stopped scope, or a scope under one, has no model: a subsumption changes nothing.
                 if (IsStopped)
                     return;
 
@@ -238,14 +238,14 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Subsumes ground relation rows (<c>r.Of(a, b)</c>) as one batch: egglog's <c>(subsume (r a b))</c>, one command
-        /// per row.
-        /// Each row stays, and <see cref="Check"/> and <see cref="Rows"/> still find it, but rule bodies, queries and
-        /// split rules no longer match it. A row that does not exist yet is inserted, subsumed. Subsumption is sticky,
-        /// and rows already subsumed write nothing, so they move neither <see cref="Version"/> nor any extractor. In a
-        /// child, the subsumption shadows the ancestor's row: the ancestors and the siblings still match it. A row that
-        /// fails keeps the terms its keys made, as egglog's failed command does, and the rows before it stand. On a case
-        /// whose contradiction stopped it, or a scope under one, the call does nothing.
+        /// Subsumes ground relation rows (<c>r.Of(a, b)</c>) as one batch: egglog's <c>(subsume (r a b))</c>, one
+        /// command per row. Each row stays, and <see cref="Check"/> and <see cref="Rows"/> still find it, but rule
+        /// bodies and queries no longer match it. A row that does not exist yet is inserted, subsumed. Subsumption is
+        /// sticky, and rows already subsumed write nothing, so they move neither <see cref="Version"/> nor any
+        /// extractor. In a child, the subsumption shadows the ancestor's row: the ancestors and the siblings still
+        /// match it. A row that fails keeps the terms its keys made, as egglog's failed command does, and the rows
+        /// before it stand. On a scope whose contradiction stopped it, or a scope under one, the call does nothing; no
+        /// scope the library makes stops.
         /// </summary>
         /// <param name="rows">The rows, of subsumable relations (<see cref="RelationOptions.Subsumable"/>).</param>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
@@ -267,7 +267,7 @@ namespace Eggnog
             EnterWrite();
             try
             {
-                // A stopped case, or a scope under one, has no model: a subsumption changes nothing.
+                // A stopped scope, or a scope under one, has no model: a subsumption changes nothing.
                 if (IsStopped)
                     return;
 
@@ -292,16 +292,17 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Deletes the row of a ground function or constructor application as one atomic batch: egglog's
-        /// <c>(delete (f args...))</c>. The row of the application's keys goes, if there is one, and nothing else: a
-        /// deleted constructor term's class stays, with its other members, and rows that name the class stay. The keys
-        /// are evaluated as egglog's top-level action evaluates them: a constructor term among them that does not exist
-        /// yet is made, and a function read must find a value. A key with no row deletes nothing; when every term of it
-        /// exists already, the call moves neither <see cref="Version"/> nor any extractor. A deletion is no change for a
-        /// run's saturation, as in egglog. The root, and any scope without live descendants under a frozen
-        /// parent, may delete; a scope with live descendants, a child of a writable parent and a case may not (the
-        /// descendants would not see the deletion). Delete is a call of its own: a <see cref="ScopeWriter"/> batch does
-        /// not delete. On a case whose contradiction stopped it, or a scope under one, the call does nothing.
+        /// Deletes the row of a ground function or constructor application as one atomic batch: egglog's <c>(delete (f
+        /// args...))</c>. The row of the application's keys goes, if there is one, and nothing else: a deleted
+        /// constructor term's class stays, with its other members, and rows that name the class stay. The keys are
+        /// evaluated as egglog's top-level action evaluates them: a constructor term among them that does not exist yet
+        /// is made, and a function read must find a value. A key with no row deletes nothing; when every term of it
+        /// exists already, the call moves neither <see cref="Version"/> nor any extractor. A deletion is no change for
+        /// a run's saturation, as in egglog. The root, and any scope without live descendants under a frozen parent,
+        /// may delete; a scope with live descendants and a child of a writable parent may not (the descendants would
+        /// not see the deletion). Delete is a call of its own: a <see cref="ScopeWriter"/> batch does not delete. On a
+        /// scope whose contradiction stopped it, or a scope under one, the call does nothing; no scope the library
+        /// makes stops.
         /// </summary>
         /// <typeparam name="T">The application's type.</typeparam>
         /// <param name="term">The application: <c>f.Of(k)</c> of a function or a constructor.</param>
@@ -324,7 +325,7 @@ namespace Eggnog
             EnterWrite();
             try
             {
-                // A stopped case, or a scope under one, has no model: a deletion changes nothing.
+                // A stopped scope, or a scope under one, has no model: a deletion changes nothing.
                 if (IsStopped)
                     return;
 
@@ -352,7 +353,8 @@ namespace Eggnog
         /// Deletes ground relation rows (<c>r.Of(a, b)</c>) as one batch: egglog's <c>(delete (r a b))</c>, one command
         /// per row. A row that does not exist deletes nothing. The rows' terms are evaluated as for
         /// <see cref="Delete{T}"/>, and the same scopes may delete. A row that fails deletes nothing, and the rows before it
-        /// stand. On a case whose contradiction stopped it, or a scope under one, the call does nothing.
+        /// stand. On a scope whose contradiction stopped it, or a scope under one, the call does nothing; no scope the
+        /// library makes stops.
         /// </summary>
         /// <param name="rows">The rows.</param>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
@@ -368,7 +370,7 @@ namespace Eggnog
             EnterWrite();
             try
             {
-                // A stopped case, or a scope under one, has no model: a deletion changes nothing.
+                // A stopped scope, or a scope under one, has no model: a deletion changes nothing.
                 if (IsStopped)
                     return;
 
@@ -437,8 +439,8 @@ namespace Eggnog
         /// <exception cref="RuleEvaluationException">A merge failed as a flush merged the batch's calls: what the flush
         /// staged stands, as egglog's failed command keeps it, and the scope is not faulted. A flush before a later call
         /// fails that call, which writes nothing, and the batch goes on, as egglog's later commands do.</exception>
-        /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies
-        /// under one.</exception>
+        /// <exception cref="ScopeContradictedException">The scope is stopped by its contradiction, or lies under a
+        /// stopped scope; no scope the library makes stops.</exception>
         /// <exception cref="OverflowException">The graph has run out of ids or epochs (<see cref="EGraph.Usage"/>), in a
         /// call of the batch or as it commits, and the scope is not faulted. When the ids ran out in a call, its fact
         /// writes nothing; when they or the epochs ran out before a flush's merge, the flush writes nothing, and the batch

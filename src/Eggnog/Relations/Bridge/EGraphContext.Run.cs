@@ -183,8 +183,8 @@ namespace Eggnog.Relations
         /// In a child, the catch-up before the run (<see cref="EnsureClean"/>) can record a failing lattice merge without
         /// throwing. The database keeps only the first failure, so the run then reports the catch-up's failure as its
         /// own, and a failure of the run itself is not reported beside it. Callers that need the two told apart take the
-        /// catch-up's failure before the run, as the library does after each scope's rebuild and on entry to each case,
-        /// where a catch-up's failure faults the scope, and a run's faults only a case of a split step.
+        /// catch-up's failure before the run, as the library does after each scope's rebuild, where a catch-up's
+        /// failure faults the scope and a run's does not.
         /// </remarks>
         internal IterationReport RunRulesCore(ReadOnlySpan<EGraphRuleId> rules, bool egglogCompatible)
         {

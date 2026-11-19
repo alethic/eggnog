@@ -1,11 +1,10 @@
-using System.Collections.Generic;
 using System.Linq;
 
-namespace Eggnog.Tests.Differential.Splits
+namespace Eggnog.Tests.Differential.CaseRules
 {
 
     /// <summary>
-    /// One discriminated branch of a split-oracle schema: under <c>discriminator = value</c>, its governed paths are
+    /// One discriminated branch of a case-rule oracle schema: under <c>discriminator = value</c>, its governed paths are
     /// present, use stored forms, or hold values from a domain.
     /// </summary>
     /// <param name="Discriminator">The discriminator's path.</param>
@@ -13,14 +12,14 @@ namespace Eggnog.Tests.Differential.Splits
     /// <param name="Present">The paths it declares present.</param>
     /// <param name="Forms">The stored forms it declares, path and form.</param>
     /// <param name="Domains">The domains it declares, path and values.</param>
-    public sealed record SplitOracleBranch(string Discriminator, string Value, string[] Present, (string Path, string Form)[] Forms,
+    public sealed record CaseRuleBranch(string Discriminator, string Value, string[] Present, (string Path, string Form)[] Forms,
         (string Path, string[] Values)[] Domains)
     {
 
         /// <summary>
-        /// Gets the paths the branch mentions.
+        /// Gets whether the branch declares anything.
         /// </summary>
-        public IEnumerable<string> Paths => Present.Concat(Forms.Select(f => f.Path)).Concat(Domains.Select(d => d.Path));
+        public bool IsEmpty => Present.Length == 0 && Forms.Length == 0 && Domains.Length == 0;
 
         /// <summary>
         /// Renders the branch: <c>k0 = 'a' =&gt; present(g00), form(g00, uuid-lower), dom(g01) = {x, y}</c>.

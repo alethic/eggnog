@@ -1138,75 +1138,17 @@ namespace Eggnog.Tests.Values
             Assert.Equal(1L, t.Root.Get(sum.Of(b)));
         }
 
-        [Fact]
-        public void ASplitCannotAssumeAFunctionWithAMerge()
-        {
-            var graph = new EGraph();
-            var choice = graph.DefineFunction<string, Set<long>>("choice", ValueLattice.Intersect<long>());
-            var sum = graph.DefineFunction<string, long>("sum", Sum);
-
-            var e = Assert.Throws<RuleDefinitionException>(() => graph.DefineSplit("pick", s =>
-            {
-                var (k, d) = s.Vars<string, Set<long>>("k", "d");
-                s.When(d.Is(choice.Of(k)));
-                var v = s.Cases("v", d);
-                s.Assume(sum.Of(k).Is(v));
-            }));
-
-            Assert.Contains("a case is a child", e.Message);
-        }
-
-        /// <summary>
-        /// A root run whose split runs a rule that writes such a function in its cases is refused before any work; the
-        /// same rule may run at the root outside the split.
-        /// </summary>
-        [Fact]
-        public void ARootRunCannotRunARuleThatWritesAFunctionWithAMergeInASplitsCases()
-        {
-            var graph = new EGraph();
-            var choice = graph.DefineFunction<string, Set<long>>("choice", ValueLattice.Intersect<long>());
-            var sum = graph.DefineFunction<string, long>("sum", Sum);
-            var split = graph.DefineSplit("pick", s =>
-            {
-                var (k, d) = s.Vars<string, Set<long>>("k", "d");
-                s.When(d.Is(choice.Of(k)));
-                s.Where(Int64Primitives.Greater.Of(Primitives.SetLength<long>().Of(d), 1L));
-                var v = s.Cases("v", d);
-                s.Assume(choice.Of(k).Is(Primitives.SetOf<long>().Of(v)));
-            });
-            var adds = graph.DefineRuleset("adds");
-            adds.DefineRule("add one", r => r.Then(sum.Of("k").Is(1L)));
-            var none = graph.DefineRuleset("none");
-            graph.Root.Assume(choice.Of("k").Is(Set.Of([1L, 2L])));
-
-            var e = Assert.Throws<InvalidOperationException>(() => graph.Root.Run(Schedule.Split(split, Schedule.Run(adds))));
-
-            Assert.Contains("the cases of a split are children", e.Message);
-            Assert.False(graph.Root.IsFaulted);
-            Assert.False(graph.Root.TryGet(sum.Of("k"), out _));
-            graph.Root.Run(Schedule.Sequence(Schedule.Run(adds), Schedule.Split(split, Schedule.Run(none))));
-            Assert.Equal(1L, graph.Root.Get(sum.Of("k")));
-        }
-
         /// <summary>
         /// A rule's union below the root that would rewrite a row of such a function depends on the data, so the run
         /// cannot refuse it before any work: the engine refuses the rewrite, and the run fails with its exception. Here a
-        /// split's case does it, and the root is neither faulted nor changed.
+        /// child's run does it, which faults the child, and the root is neither faulted nor changed.
         /// </summary>
         [Fact]
-        public void AUnionInACaseThatWouldRewriteARowOfAFunctionWithAMergeFailsTheRun()
+        public void AUnionInAChildsRunThatWouldRewriteARowOfAFunctionWithAMergeFailsTheRun()
         {
             var t = new NodeTheory();
             var choice = t.Graph.DefineFunction<string, Set<long>>("choice", ValueLattice.Intersect<long>());
             var sum = t.Graph.DefineFunction<Node, long>("sum", Sum);
-            var split = t.Graph.DefineSplit("pick", s =>
-            {
-                var (k, d) = s.Vars<string, Set<long>>("k", "d");
-                s.When(d.Is(choice.Of(k)));
-                s.Where(Int64Primitives.Greater.Of(Primitives.SetLength<long>().Of(d), 1L));
-                var v = s.Cases("v", d);
-                s.Assume(choice.Of(k).Is(Primitives.SetOf<long>().Of(v)));
-            });
             var a = t.Root.Make(t.A.Of());
             var b = t.Root.Make(t.B.Of());
             t.Root.Assume(sum.Of(a).Is(1L), sum.Of(b).Is(2L), choice.Of("k").Is(Set.Of([1L, 2L])));
@@ -1215,13 +1157,15 @@ namespace Eggnog.Tests.Values
                 r.When(choice.Of("k").Is(Set.Of([1L])));
                 r.Then(t.A.Of().Is(t.B.Of()));
             });
+            var child = t.Root.CreateChild();
+            child.Assume(choice.Of("k").Is(Set.Of([1L])));
 
-            var e = Assert.Throws<InvalidOperationException>(() => t.Root.Run(Schedule.Split(split, Schedule.Run(t.Rules))));
+            var e = Assert.Throws<InvalidOperationException>(() => child.Run(Schedule.Run(t.Rules)));
 
             Assert.Contains("Table sum has a merge that is not a lattice merge", e.Message);
+            Assert.True(child.IsFaulted);
             Assert.False(t.Root.IsFaulted);
             Assert.Equal(2, t.Root.CountRows(sum));
-            Assert.Empty(t.Root.Children);
         }
 
         [Fact]

@@ -398,14 +398,6 @@ namespace Eggnog
         public string SerializedName(uint cell, Relations.ContainerView view) => "set-of";
 
         /// <summary>
-        /// Gets the number of elements of a set's cell, without decoding the set: <c>set-length</c> over cells.
-        /// </summary>
-        /// <param name="cell">The set's cell.</param>
-        /// <param name="view">The containers of the scope the cell belongs to.</param>
-        /// <returns>The number of elements.</returns>
-        internal int CountOfCell(uint cell, Relations.ContainerView view) => Read(cell, view).Count;
-
-        /// <summary>
         /// Gets whether a set's cell holds an element, by the element's cell, without decoding the set:
         /// <c>set-contains</c> over cells.
         /// </summary>

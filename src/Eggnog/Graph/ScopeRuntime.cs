@@ -7,8 +7,8 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// Per-scope buffers that external functions write during engine calls: the tuples of a query or split matcher, those
-    /// of a scheduler's queries, the tables rule callbacks deleted from, and the first evaluation failure. Thread-safe,
+    /// Per-scope buffers that external functions write during engine calls: the tuples of a query, those of a
+    /// scheduler's queries, the tables rule callbacks deleted from, and the first evaluation failure. Thread-safe,
     /// because rule tasks may run in parallel.
     /// </summary>
     /// <remarks>
@@ -106,7 +106,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets or sets the buffer a query or split matcher's collector fills during one engine call.
+        /// Gets or sets the buffer a query's collector fills during one engine call.
         /// </summary>
         public TupleBuffer? QueryMatches { get; set; }
 

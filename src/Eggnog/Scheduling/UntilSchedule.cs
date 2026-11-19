@@ -34,16 +34,16 @@ namespace Eggnog
         public Fact[] Condition { get; }
 
         /// <inheritdoc />
-        internal override bool Execute(ScheduleExecutor executor, Scope scope, int depth, bool inCase, bool splitsEnabled)
+        internal override bool Execute(ScheduleExecutor executor, Scope scope)
         {
-            // A stopped case answers no read and runs nothing: the body would do nothing either.
+            // A stopped scope answers no read and runs nothing: the body would do nothing either.
             scope.Engine.EnsureClean();
             if (scope.Engine.IsStopped)
                 return false;
 
             foreach (var fact in Condition)
                 if (TermReader.Check(scope, fact) == false)
-                    return Body.Execute(executor, scope, depth, inCase, splitsEnabled);
+                    return Body.Execute(executor, scope);
 
             return false;
         }
@@ -52,13 +52,12 @@ namespace Eggnog
         internal override void CollectSchedulerSteps(ICollection<RunWithSchedule> steps) => Body.CollectSchedulerSteps(steps);
 
         /// <inheritdoc />
-        internal override void Collect(ISet<Ruleset> rulesets, ICollection<Fact> conditions, ISet<SplitRule> splits, ISet<Ruleset> inCases,
-            bool inCase)
+        internal override void Collect(ISet<Ruleset> rulesets, ICollection<Fact> conditions)
         {
             foreach (var fact in Condition)
                 conditions.Add(fact);
 
-            Body.Collect(rulesets, conditions, splits, inCases, inCase);
+            Body.Collect(rulesets, conditions);
         }
 
     }

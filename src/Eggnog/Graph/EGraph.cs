@@ -154,7 +154,7 @@ namespace Eggnog
 
         /// <summary>
         /// Gets whether the graph has run out of ids: an <see cref="OverflowException"/> thrown then is the store's limit,
-        /// which faults nothing (architecture, section 2.12), and the calls that catch a delegate's exceptions let it
+        /// which faults nothing (architecture, section 2.11), and the calls that catch a delegate's exceptions let it
         /// through rather than report it as the delegate's failure.
         /// </summary>
         internal bool IdsExhausted => Engine.Store.IdsExhausted;

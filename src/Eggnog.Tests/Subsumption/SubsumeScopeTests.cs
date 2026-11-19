@@ -12,8 +12,7 @@ namespace Eggnog.Tests.Subsumption
     /// Subsumption in scopes. A subsumption is a sticky change of the row's subsumption cell, written in the scope that
     /// makes it: a child's shadows its ancestors' row, so the child and its descendants stop matching it while the
     /// ancestors and the siblings still do, and an ancestor's reaches its descendants when they catch up. Scoped reads
-    /// skip the rows the tagged scope subsumed, through mirrors that copy the subsumptions too. A lift writes the rows
-    /// every case holds, not their subsumption, and split rules skip subsumed rows as rule bodies do.
+    /// skip the rows the tagged scope subsumed, through mirrors that copy the subsumptions too.
     /// </summary>
     public sealed class SubsumeScopeTests
     {
@@ -214,70 +213,6 @@ namespace Eggnog.Tests.Subsumption
 
             Assert.Equal(1, outer.CreateChild().Count(query));
             Assert.Equal(1, outer.Count(query));
-        }
-
-        [Fact]
-        public void ALiftWritesTheRowsEveryCaseHoldsNotTheirSubsumption()
-        {
-            var t = new MathTheory();
-            var fact = t.Graph.DefineRelation<string>("fact");
-            var root = t.Root;
-            root.Assume(fact.Of("a"));
-            root.Subsume(fact.Of("c"));
-
-            using var cases = root.OpenCases();
-            foreach (var @case in new[] { cases.Add(), cases.Add() })
-            {
-                @case.Subsume(fact.Of("a"), fact.Of("b"));
-                @case.Subsume(t.Num.Of(1L));
-                @case.Assume(fact.Of("c"));
-            }
-
-            var lifted = cases.Lift();
-
-            // The parent's rows stay as they were, subsumed or not, and the rows the cases made are lifted, not subsumed.
-            var expected = new[] { ("a", false), ("b", false), ("c", true) };
-            Assert.Equal(expected, root.Rows(fact).Select(row => ((string)row.Keys[0], row.Subsumed)));
-            Assert.False(Assert.Single(root.Rows(t.Num)).Subsumed);
-            Assert.True(lifted.Changed);
-            Assert.All(cases.Cases, @case => Assert.All(@case.Rows(fact), row => Assert.True(row.Subsumed)));
-        }
-
-        [Fact]
-        public void ASplitLiftsTheRewriteOfASubsumingRuleButNotItsSubsumption()
-        {
-            var t = new MathTheory();
-            var dom = t.Graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
-            var key = t.Graph.DefineRelation<string>("key");
-            var split = t.Graph.DefineDomainSplit("split", dom, [key]);
-            var inCase = t.Graph.DefineRuleset("in case");
-            inCase.DefineRule("name one", r => r.Rewrite(t.Num.Of(1L), t.Var.Of("one"), subsume: true));
-            var root = t.Root;
-            root.Assume(dom.Of("k").Is(Set.Of(["x", "y"])), key.Of("k"));
-            var one = root.Make(t.Num.Of(1L));
-
-            var report = root.Run(Schedule.Split(split, Schedule.Saturate(inCase)));
-
-            Assert.Equal(2, report.CasesOpened);
-            Assert.True(root.AreEqual(one, t.Var.Of("one")));
-            Assert.False(Assert.Single(root.Rows(t.Num)).Subsumed);
-            Assert.False(Assert.Single(root.Rows(t.Var)).Subsumed);
-        }
-
-        [Fact]
-        public void ASplitRuleDoesNotMatchASubsumedRow()
-        {
-            var t = new MathTheory();
-            var dom = t.Graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
-            var key = t.Graph.DefineRelation<string>("key");
-            var split = t.Graph.DefineDomainSplit("split", dom, [key]);
-            var root = t.Root;
-            root.Assume(dom.Of("k").Is(Set.Of(["x", "y"])), dom.Of("j").Is(Set.Of(["x", "y"])), key.Of("k"), key.Of("j"));
-            root.Subsume(key.Of("k"));
-
-            var report = root.Run(Schedule.Split(split, Schedule.Saturate(t.Rules)));
-
-            Assert.Equal(2, report.CasesOpened);
         }
 
     }

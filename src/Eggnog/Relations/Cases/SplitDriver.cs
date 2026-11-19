@@ -43,8 +43,8 @@ namespace Eggnog.Relations
     /// </para>
     /// <para>
     /// One driver may serve any number of scopes, one step at a time per thread; its per-step lists are local. Several
-    /// drivers may serve one scope (the rule layer builds one per split node): each runs and lifts only its own
-    /// records, and they share coverage only through shared source objects.
+    /// drivers may serve one scope: each runs and lifts only its own records, and they share coverage only through
+    /// shared source objects.
     /// </para>
     /// </remarks>
     internal sealed class SplitDriver

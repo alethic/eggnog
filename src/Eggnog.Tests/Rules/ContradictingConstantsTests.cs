@@ -6,10 +6,9 @@ namespace Eggnog.Tests.Rules
 {
 
     /// <summary>
-    /// A body that equates two different constants, directly (<c>(= 1 2)</c>) or through a variable
-    /// (<c>(= x 1) (= x 2)</c>), is accepted, as egglog accepts it, and matches nothing: a rule never fires, a query has
-    /// no match, and a split rule opens no case. The expected answers are the egglog binary's at the engine's pin for the
-    /// same programs.
+    /// A body that equates two different constants, directly (<c>(= 1 2)</c>) or through a variable (<c>(= x 1) (= x
+    /// 2)</c>), is accepted, as egglog accepts it, and matches nothing: a rule never fires, and a query has no match.
+    /// The expected answers are the egglog binary's at the engine's pin for the same programs.
     /// </summary>
     public sealed class ContradictingConstantsTests
     {
@@ -119,32 +118,6 @@ namespace Eggnog.Tests.Rules
             Assert.Equal(1, t.Root.Count(equal));
             Assert.False(t.Root.Check(((Term<long>)1L).Is(2L)));
             Assert.True(t.Root.Check(((Term<long>)1L).Is(1L)));
-        }
-
-        /// <summary>
-        /// A split rule's body is a rule's body, so one that equates different constants matches nothing and opens no
-        /// case, and its assumptions are never written.
-        /// </summary>
-        [Fact]
-        public void ASplitThatEquatesDifferentConstantsOpensNoCase()
-        {
-            var graph = new EGraph();
-            var dom = graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
-            var chosen = graph.DefineRelation<string, string>("chosen");
-            var rules = graph.DefineRuleset("rules");
-            var split = graph.DefineSplit("choose", s =>
-            {
-                var (p, d, n) = s.Vars<string, Set<string>, long>("p", "d", "n");
-                s.When(d.Is(dom.Of(p)), n.Is(1L), n.Is(2L));
-                var v = s.Cases("v", d);
-                s.Assume(chosen.Of(p, v));
-            });
-            graph.Root.Assume(dom.Of("one").Is(Set.Of(["x"])));
-
-            var report = graph.Root.Run(Schedule.Split(split, rules));
-
-            Assert.Equal(0, report.CasesOpened);
-            Assert.False(graph.Root.Check(chosen.Of("one", "x")));
         }
 
     }

@@ -235,8 +235,8 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// The memo does not skip a lift whose spec differs from the one memoized: <c>mark(a)</c> holds in every case,
-        /// and the second lift lists <c>mark</c> for the first time (the rule layer rebuilds the spec when a table is
-        /// defined, and host-driven lifts pass it on every call).
+        /// and the second lift lists <c>mark</c> for the first time (a spec built after a table is defined lists it,
+        /// and a lift takes the spec it is given).
         /// </summary>
         [Fact]
         public void TheMemoDoesNotSkipALiftWithAnotherSpec()

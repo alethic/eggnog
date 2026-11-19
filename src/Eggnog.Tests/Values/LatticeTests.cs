@@ -11,8 +11,8 @@ namespace Eggnog.Tests.Values
 
     /// <summary>
     /// Lattices: the laws <see cref="ValueLattice{T}.Verify"/> checks, the built-ins, merges that fail, at the root and
-    /// in children, and a user lattice over a registered struct with a case join (<see cref="NumericBoundTheory"/>), the
-    /// contract a consumer's numeric bounds rely on.
+    /// in children, and a user lattice over a registered struct (<see cref="NumericBoundTheory"/>), the contract a
+    /// consumer's numeric bounds rely on.
     /// </summary>
     public sealed class LatticeTests
     {
@@ -37,16 +37,6 @@ namespace Eggnog.Tests.Values
             ValueLattice.Min<long>().Verify(Numbers);
             Assert.Equal("intersect", ValueLattice.Intersect<string>().Name);
             Assert.Equal(typeof(Set<string>), ValueLattice.Union<string>().ValueType);
-            Assert.NotNull(ValueLattice.Max<long>().CaseJoin);
-        }
-
-        [Fact]
-        public void VerifyRejectsAMismatchedCaseJoin()
-        {
-            var wrong = new ValueLattice<Set<string>>("wrong", (a, b) => a.Intersect(b), (a, b) => a.Intersect(b));
-            var e = Assert.Throws<InvalidOperationException>(() => wrong.Verify(Sets));
-            Assert.Contains("absorption", e.Message);
-            Assert.Contains("wrong", e.Message);
         }
 
         [Fact]
@@ -206,19 +196,17 @@ namespace Eggnog.Tests.Values
         };
 
         /// <summary>
-        /// <see cref="ValueLattice{T}.Verify"/> accepts both bound lattices, case joins included, on samples with ties of
-        /// value and of scale, and rejects a lower-bound merge whose tie rule keeps its first argument: on a tie of value
-        /// with different <see cref="NumericBound.Open"/> it is not commutative.
+        /// <see cref="ValueLattice{T}.Verify"/> accepts both bound lattices on samples with ties of value and of scale,
+        /// and rejects a lower-bound merge whose tie rule keeps its first argument: on a tie of value with different
+        /// <see cref="NumericBound.Open"/> it is not commutative.
         /// </summary>
         [Fact]
         public void VerifyAcceptsTheBoundLatticesAndRejectsATieRuleThatKeepsItsFirstArgument()
         {
             NumericBoundTheory.LowerLattice().Verify(Bounds);
             NumericBoundTheory.UpperLattice().Verify(Bounds);
-            Assert.NotNull(NumericBoundTheory.LowerLattice().CaseJoin);
-            Assert.NotNull(NumericBoundTheory.UpperLattice().CaseJoin);
 
-            var firstOnTie = new ValueLattice<NumericBound>("first-on-tie", (a, b) => a.Value >= b.Value ? a : b, NumericBoundTheory.LowerLattice().CaseJoin);
+            var firstOnTie = new ValueLattice<NumericBound>("first-on-tie", (a, b) => a.Value >= b.Value ? a : b);
             var e = Assert.Throws<InvalidOperationException>(() => firstOnTie.Verify(Bounds));
             Assert.Contains("commutativity", e.Message);
             Assert.Contains("first-on-tie", e.Message);
@@ -299,46 +287,6 @@ namespace Eggnog.Tests.Values
         }
 
         /// <summary>
-        /// A lift joins each bound by its lattice's case join, the looser of the cases' bounds (a closed bound winning a
-        /// tie of value), both from a host-driven <see cref="CaseSet"/> and from a split step's cases.
-        /// </summary>
-        [Fact]
-        public void LiftsJoinCasesToTheLooserBound()
-        {
-            var t = new NumericBoundTheory();
-            var root = t.Graph.Root;
-            using (var cases = root.OpenCases())
-            {
-                cases.Add().Assume(t.Lo.Of("x").Is(new NumericBound(3m, true)), t.Hi.Of("x").Is(new NumericBound(10m, false)));
-                cases.Add().Assume(t.Lo.Of("x").Is(new NumericBound(3m, false)), t.Hi.Of("x").Is(new NumericBound(12m, true)));
-                var lifted = cases.Lift();
-                Assert.Equal(2, lifted.Values);
-                Assert.Equal(2, lifted.LiveCases);
-            }
-
-            Assert.Equal(new NumericBound(3m, false), root.Get(t.Lo.Of("x")));
-            Assert.Equal(new NumericBound(12m, true), root.Get(t.Hi.Of("x")));
-
-            // A split on kind: each case proves its own bounds of y from comparisons, and the lift keeps the looser.
-            var s = new NumericBoundTheory();
-            var dom = s.Graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
-            var discriminator = s.Graph.DefineRelation<string>("discriminator");
-            var split = s.Graph.DefineDomainSplit("kind", dom, [discriminator]);
-            var branches = s.Graph.DefineRuleset("branches");
-            branches.DefineRule("kind a", r => { r.When(dom.Of("kind").Is(Set.Of(["a"]))); r.Then(s.Ge.Of("y", 1m), s.Lt.Of("y", 5m)); });
-            branches.DefineRule("kind b", r => { r.When(dom.Of("kind").Is(Set.Of(["b"]))); r.Then(s.Gt.Of("y", 1m), s.Le.Of("y", 8m)); });
-            var scope = s.Graph.Root;
-            scope.Assume(discriminator.Of("kind"), dom.Of("kind").Is(Set.Of(["a", "b"])));
-
-            var report = scope.Run(Schedule.Split(split, Schedule.Saturate(branches, s.Bounds)));
-
-            Assert.Equal(2, report.CasesOpened);
-            Assert.Equal(new NumericBound(1m, false), scope.Get(s.Lo.Of("y")));
-            Assert.Equal(new NumericBound(8m, false), scope.Get(s.Hi.Of("y")));
-            Assert.False(scope.Check(s.Ge.Of("y", 1m)));                   // only the bounds are common to both cases
-        }
-
-        /// <summary>
         /// Children of a frozen scope merge bounds independently and concurrently: each child narrows the frozen scope's
         /// bounds by its own comparisons, an open bound winning the tie at the frozen scope's value, and the frozen
         /// scope keeps its own.
@@ -405,9 +353,9 @@ namespace Eggnog.Tests.Values
 
         /// <summary>
         /// Every distinct value a scope encodes is interned in the graph's pools, which never shrink: a host write's
-        /// constants and each rule output. These lattices' merges and case joins return one of their arguments, so
-        /// their results add nothing. A child's values stay interned once it is disposed, and a later child that
-        /// writes the same values adds nothing.
+        /// constants and each rule output. These lattices' merges return one of their arguments, so their results add
+        /// nothing. A child's values stay interned once it is disposed, and a later child that writes the same values
+        /// adds nothing.
         /// </summary>
         [Fact]
         public void EveryDistinctBoundIsInternedAndOutlivesTheChildThatMadeIt()

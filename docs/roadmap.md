@@ -11,23 +11,23 @@ each with what would reopen it.
 ## Fidelity with egglog
 
 Fidelity with upstream egglog comes first. A way an egglog feature behaves differently here is a defect to remove,
-unless .NET makes it unavoidable, and then it is recorded as such; an addition (scopes, case splits, host queries) may
-restrict only itself, never an egglog feature, and takes no name or form egglog gives a meaning. The root, and any scope
-without live descendants, behaves as egglog does; restrictions apply only in child scopes and splits, where soundness
-needs them. Each item lands when egglog's own tests of the feature, ported to the C# API, pass; an item that touches the
-engine's root paths also passes the root gate ("Benchmarks and timed gates").
+unless .NET makes it unavoidable, and then it is recorded as such; an addition (scopes, host queries) may restrict only
+itself, never an egglog feature, and takes no name or form egglog gives a meaning. The root, and any scope without live
+descendants, behaves as egglog does; restrictions apply only in child scopes, where soundness needs them. Each item
+lands when egglog's own tests of the feature, ported to the C# API, pass; an item that touches the engine's root paths
+also passes the root gate ("Benchmarks and timed gates").
 
 - **Table reads in rule heads.** egglog 3.0.0 allows lookups in the heads of `:naive` and `:unsafe-seminaive` rules; here
   heads never read but in a full rule callback, egglog's `rust_rule_full`, or a primitive of full access, a function
-  value's application among them (architecture 2.13, item 2). Such a rule inherits no progress in a child.
+  value's application among them (architecture 2.12, item 2). Such a rule inherits no progress in a child.
 - **Constant containers of classes.** egglog's global may be a container of classes, which a rule or a `:merge` reads as
-  it reads a class global; here a rule or a merge expression builds it with its primitives (architecture 2.13, item 5).
+  it reads a class global; here a rule or a merge expression builds it with its primitives (architecture 2.12, item 5).
 - **Containers under one id.** When a rebuild leaves two different containers under one id, egglog's read of the id
   gives the one its rebuild renamed or reinserted last; here it gives either. Only a union of an ill-typed element, the
-  old value of another sort a merge's class constant keeps, reaches it (architecture 2.13, item 6).
+  old value of another sort a merge's class constant keeps, reaches it (architecture 2.12, item 6).
 - **Unions of a failed run or command.** egglog's run whose write fails, and its command that fails before its
   rebuild, leave their unions unrebuilt, unseen until a later command rebuilds; here the run and the host fact rebuild
-  them (architecture 2.13, item 7).
+  them (architecture 2.12, item 7).
 - **egglog 3.0.0.** The engine follows `5e655cae` until the behaviour items of
   [`egglog-3.0.0-todo.md`](egglog-3.0.0-todo.md) are followed: join-key order, container term forms, escaped string
   literals, duplicate rule names, the thread count per graph.
@@ -35,11 +35,11 @@ engine's root paths also passes the root gate ("Benchmarks and timed gates").
 
 Kept, not departures to remove: egglog defects the port fixes (decisions rows 6 and 7, and the defect list of
 [`history/egglog-engine-map.md`](history/egglog-engine-map.md)), which change match counts and plans but not results;
-relations as unit-valued functions where egglog makes them constructors over a sort of their own (architecture 2.13,
+relations as unit-valued functions where egglog makes them constructors over a sort of their own (architecture 2.12,
 item 4), observable only in serialization, which emulates egglog's form; the lasting departures of decisions row 9 for
 containers of classes, a container of function values counting as one of classes at the root too, a query on a frozen
-scope, the frozen root included, interning nothing, and the others there only in children and splits; and the `BigInt`
-shift and the `BigRat` `pow` past `int.MaxValue` bits, which no .NET `BigInteger` holds.
+scope, the frozen root included, interning nothing, and the others there only in children; and the `BigInt` shift and
+the `BigRat` `pow` past `int.MaxValue` bits, which no .NET `BigInteger` holds.
 
 ## Engine work
 
@@ -95,16 +95,10 @@ shift and the `BigRat` `pow` past `int.MaxValue` bits, which no .NET `BigInteger
 - **The `CreateBuffer` profile.** If the re-taken profile shows more under `CreateBuffer`, an ETW profile decides: below
   5% inclusive the staging-buffer item closes; at 5% or more, per-thread reuse of the batch state is prototyped and kept
   only if `BasicMath` serial gains at least 3% and more than twice the A/A spread.
-- **Epochs per split case.** Each case of a split advances the clock nine times (21 + 9 x cases epochs per split query,
-  pinned by `ScopeChurnTests`). At 100 queries a second with 64 cases the clock ends a graph in under a day. The work is
-  to find which of the nine advances a case needs.
 - **Parallelism soaks.** One-hour `EGGNOG_CONCURRENT_SOAK` runs on x64 (net8.0, net10.0) and on an arm64 CI runner,
   which the owner runs by hand; the item closes when they come back clean. They widen the concurrent-children check
   (children of a frozen root driven by host threads, each equal to a serial replay, with the probe's check of the
   thread-pool growth bound) to fresh seeds; the targeted tests pin the known races, and nothing waits on the soaks.
-- **Cancelling split-step lifts.** A cancellation token checked between lift rounds, so a run overshoots `TimeLimit` by
-  at most one iteration or one lift round. Worth doing if one lift's p99, from the library-path timings, exceeds 10% of
-  a typical `TimeLimit`.
 
 ## Benchmarks and timed gates
 
@@ -139,8 +133,8 @@ of them fall on the same side of the gate; otherwise it is inconclusive, up to f
   indexes) from a `dotnet-gcdump` snapshot of 1,000 live children, whose total must agree with `--context-footprint`
   within 5%. It needs no idle machine.
 - **Library paths.** `QueryScopeBenchmarks`, `LibraryRunOverheadBenchmarks` and `BusyParentCatchUpBenchmarks` check
-  their results and wait for the campaign's times. Catch-up is at most 9.5% of a split step's rows at 8 cases, under the
-  25% threshold, so only its time per examined row is left.
+  their results and wait for the campaign's times. Catch-up's share of a workload's rows is left to measure, and so is
+  its time per examined row (`BusyParentCatchUpBenchmarks`).
 - **Library run overhead.** The library adds about 320 B per rule plus about 1 KB per run over the engine. A library
   `Run` must stay within 1.05x of the engine's `RunRules` at 10 rules, or its per-run bookkeeping is trimmed.
 
@@ -150,24 +144,24 @@ of them fall on the same side of the gate; otherwise it is inconclusive, up to f
   KB, its ancestors' live-descendant counts and its local rules. An internal core per scope with a private sentinel
   makes `Dispose` optional ([decisions](engine/decisions.md), row 18).
 - **The scope core's gate.** The scope core lands if the full suite passes on both frameworks in Release, tiered
-  compilation on and off, with a collection forced at every run observer, split step and `CreateChild`; no sentinel
-  finalizer runs for a disposed scope, a bare child costs at most 5% more, and a dropped one retains at most 64 B.
+  compilation on and off, with a collection forced at every run observer and `CreateChild`; no sentinel finalizer runs
+  for a disposed scope, a bare child costs at most 5% more, and a dropped one retains at most 64 B.
 - **Queries managed by the garbage collector.** A query that is never disposed keeps about 6.1 KB and an engine rule for
   the graph's life, and its name blocks redefinition. After the scope core, each query gets a sentinel too, and its name
   becomes a label that need not be unique.
 - **The query gate.** Queries managed by the garbage collector land if 1,000 dropped queries that ran retain at most
   64 B each, and a disposed query runs no sentinel finalizer.
-- **The hidden-discriminator note.** A subsection of [`architecture.md`](architecture.md) section 2.9, which no living
-  doc covers: synthesizing a hidden discriminator key with guarded branch rules, the `governs(k, p)` remedy for split
-  demand, the cost in cases, and `SplitExtractionTests.ASplitOnAHiddenDiscriminatorJoinsTheBranchDomains`.
-- **Sound numeric bounds.** The hidden-discriminator note also says that a comparison that first converts a stored
-  value proves no type, and that a bound that steps by one is sound only over integers. Both are soundness traps that
-  only history documents record.
+- **The hidden-discriminator note.** A note, for theories such as `PredicateTheory`, on synthesizing a hidden
+  discriminator key with guarded branch rules, so that a disjunction with no discriminator of its own is reasoned by
+  cases, as the fixture's case rules do in
+  `DiscriminatedSchemaTests.TheCaseRulesOfAHiddenDiscriminatorJoinTheBranchDomains`. Only history documents and that
+  test's summary describe it.
+- **Sound numeric bounds.** A note, for theories such as `PredicateTheory`, that a comparison that first converts a
+  stored value proves no type, and that a bound that steps by one is sound only over integers. Both are soundness traps
+  that only history documents record.
 - **`PredicateTheory`'s limits.** The test fixture's class remarks are to state its three limits: comparisons between
   numbers only, stepping by one over `long`, and domains of strings only (the last limits what a theory can state).
   Today only history documents record them.
-- **The `RunOptions` remarks.** `TimeLimit` and `RowLimit` say a run overshoots by at most one iteration; it is one
-  iteration or one lift, as the class summary says.
 
 ## Parked
 
@@ -175,19 +169,12 @@ Each waits on its trigger.
 
 - **Proofs** as upstream egglog builds them (`EGraph::new_with_proofs` and its term encoding): when upstream egglog's
   proof API settles and ships in a release ([decisions](engine/decisions.md), row 17).
-- **Compaction above the highest live descendant cursor:** when a workload holds a child of a large writable scope, or
-  splits at one, once the `BasicMath` regression is understood. A held child on `math` leaves 2.41 physical rows per
-  live row (1.25 with none). Built if a held child is 10% or more slower than none and compaction brings it within 3%.
-- **The hidden-set remap:** when a split workload shows tombstones below the cases' cursors. On it, the tombstones below
-  the highest live cursor and the row-buffer bytes are measured at the run's peak; the remap is built only if those
-  tombstones are at least 25% of the peak's and hold at least 100 MB of row buffers.
-- **A memory budget per run** that disposes settled split records first: when a user's split runs fail on memory before
-  `RowLimit` or `CaseLimit` stops them.
-- **Running a split's cases in parallel**, which needs a way to thaw a sealed parent before the lift: when in-case work
-  is 70% or more of a split run on a user's workload. Parallel cases, or ids shared across sibling cases, then join the
-  `EGGNOG_CONCURRENT_SOAK` soaks.
-- **Failures of case splits under a timeout policy**, reported against full clones: when a deep-split workload that can
-  time out exists, such as a TheSy-style suite. No current workload can time out, so the count would be zero.
+- **Compaction above the highest live descendant cursor:** when a workload holds a child of a large writable scope, once
+  the `BasicMath` regression is understood. A held child on `math` leaves 2.41 physical rows per live row (1.25 with
+  none). Built if a held child is 10% or more slower than none and compaction brings it within 3%.
+- **The hidden-set remap:** when a workload shows tombstones below its live children's cursors. On it, the tombstones
+  below the highest live cursor and the row-buffer bytes are measured at the run's peak; the remap is built only if
+  those tombstones are at least 25% of the peak's and hold at least 100 MB of row buffers.
 - **A first id block of 4** (`IdBlockAllocator.FirstBlockSize` is 16): when the usage gauge shows ids ending a host's
   graphs before the clock, at a costly retirement rate. It extends a graph's life by about 2.1x for plain queries, and
   lands with allocation per child within +1% and time per child within 2%.
@@ -197,19 +184,14 @@ Each waits on its trigger.
 - **Scoped interning:** when a host that cannot canonicalize literals would retire graphs more often than it can afford,
   or exceed its memory budget between retirements: 2-3 values (150-230 B) per fresh-literal query, 1.3-2 GB a day at 100
   queries a second. Gate: `RuleSetRunBenchmarks` and bridge `math` and `ac` within 2%.
-- **A per-case budget across executions, and a count of truncated cases:** when `Split(rule, Repeat(n, steps))`, which
-  bounds each execution of a case, is not enough for a user, or a user must tell from the report that a case was cut
-  off.
-- **Public lift-memo figures** (`Memoized` on `LiftReport`, a `LiftsMemoized` beside `RunReport.Lifts`): when a user
-  asks. `RunReport.Lifts` keeps counting every lift, memo answers included.
 - **The eager parallel switch:** when a change rewrites a parallel kernel and the new kernel lacks targeted tests above
   its threshold, or a seeded mutation is caught only in eager mode.
 - **A random-program harness comparing concurrent children with serial replays:** when a seeded mutation escapes both
   the targeted tests and the soaks.
 - **The NativeAOT smoke application:** when NativeAOT becomes a supported target whose runtime output is tested, beyond
   the compatibility the CI publish check enforces ([decisions](engine/decisions.md), row 16).
-- **The deferred benchmark classes:** `ScopeCatchUp`, `MirrorSync`, `EqualStep` and `SplitStep` when a change touches
-  those paths; `TheoryDefinition` when a host's graph rebuild needs a figure.
+- **The deferred benchmark classes:** `ScopeCatchUp`, `MirrorSync` and `EqualStep` when a change touches those paths;
+  `TheoryDefinition` when a host's graph rebuild needs a figure.
 
 ## Closed
 
@@ -233,19 +215,18 @@ Considered and not planned. Each line says what would reopen it.
   and a concurrency defect escapes the tests and soaks.
 - Provenance as a library feature (use the first matching step and the observer diff, with re-running without the
   ruleset as the decisive test): for a user debugging a named theory whom these routes cannot help.
-- Case-only tags (`T.In(caseTag)`): for a theory that needs a nested split or an in-case rule to read an outer case's
-  view.
-- Counting depth-limited splits in `RunReport.SplitsSkipped`: for a user who tunes `SplitDepthLimit` and needs a signal.
-- A guarded lift as a feature: for a user who reasons over if-then-else guards in volume; the guidance is in
-  [`architecture.md`](architecture.md), section 2.9.
-- Per-lift reporting for split steps: if a consumer needs exact per-lift figures.
+- Case splits, lifts and host-driven cases in the library: a theory reasons by the cases of a domain in its own rules,
+  over set lattices, as the `PredicateTheory` fixture's case rules do. Reopen only by a decision to make reasoning by
+  cases a library feature.
+- Guarded terms as a feature, a term that differs by case built by the library: for a user who reasons over
+  if-then-else guards in volume; the recipe with children is in [`architecture.md`](architecture.md), section 2.8.
 - Pairing a catch-up failure with the run's own in `RunRulesCore`: if an engine caller outside the library appears.
 - Lazy `IndexCatalog` objects: if never-probed catalogs exceed 5% of a lifted case's bytes and the root gate stays
   within 2%.
 - `ComputeCostsFromRootSorts` and `FunctionToDag` over a context: when a scope-level "print a table as terms" API is
   scheduled.
 - A remap of descendants' cursors: only as part of the hidden-set remap.
-- Parent-visible ids winning over smaller ids: if a user lifts terms in volume.
+- Parent-visible ids winning over smaller ids: if terms are lifted in volume.
 - Pruning child rows an ancestor made redundant: if such rows are 25% or more of case bytes and cases live long.
 - Flattening hidden sets: if a child hides more than 25% of an ancestor layer of 10,000 rows or more.
 - Shared ids for a term that sibling cases derive: if the term lift is used in volume.

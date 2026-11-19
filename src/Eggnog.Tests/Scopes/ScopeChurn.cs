@@ -14,7 +14,7 @@ namespace Eggnog.Tests.Scopes
     /// A long-lived graph serving query scopes on the predicate theory (<see cref="PredicateTheory"/>): a frozen empty
     /// root, one frozen schema scope, and per derivation a query child that makes its predicate, assumes it as the where
     /// clause, runs, reads a snapshot and is disposed. The schema declares <c>kind</c> as a discriminator with a
-    /// domain of <c>a</c>, <c>b</c>, <c>c</c> (and as many more values as asked), a branch rule on each of the three, and
+    /// domain of <c>a</c>, <c>b</c>, <c>c</c> (and as many more values as asked), a branch on each of the three, and
     /// <c>n</c> as a number within [0, 100].
     /// </summary>
     public sealed class ScopeChurn
@@ -23,8 +23,7 @@ namespace Eggnog.Tests.Scopes
         /// <summary>
         /// Initializes the graph and its frozen schema.
         /// </summary>
-        /// <param name="domain">The number of values of <c>kind</c>'s domain, at least 3: a split query opens one case
-        /// per value.</param>
+        /// <param name="domain">The number of values of <c>kind</c>'s domain, at least 3.</param>
         public ScopeChurn(int domain = 3)
         {
             ArgumentOutOfRangeException.ThrowIfLessThan(domain, 3);
@@ -41,9 +40,9 @@ namespace Eggnog.Tests.Scopes
             Schema.Assume(
                 c.Present.Of("kind"), c.Discriminator.Of("kind"), c.Dom.Of("kind").Is(Set.From(values)),
                 c.Types.Of("n").Is(Set.Of(["number"])), c.Lo.Of("n").Is(0L), c.Hi.Of("n").Is(100L));
-            c.DeclareBranch(Schema, "kind", "a", c.Form.Of("ref", "uuid-lower"));
-            c.DeclareBranch(Schema, "kind", "b", c.Form.Of("ref", "uuid-lower"));
-            c.DeclareBranch(Schema, "kind", "c", c.Form.Of("at", "instant-ms"));
+            c.DeclareBranch(Schema, "kind", "a", forms: [("ref", "uuid-lower")]);
+            c.DeclareBranch(Schema, "kind", "b", forms: [("ref", "uuid-lower")]);
+            c.DeclareBranch(Schema, "kind", "c", forms: [("at", "instant-ms")]);
             Schema.Run(c.Facts);
             Schema.Freeze();
         }
@@ -74,10 +73,11 @@ namespace Eggnog.Tests.Scopes
         public Schedule Plain => Schedule.Saturate(Theory.Horn, Theory.Lattice, Theory.Rewrite);
 
         /// <summary>
-        /// Gets the schedule of a split query: the theory's <see cref="PredicateTheory.Saturation"/>, which splits on a
-        /// mentioned discriminator.
+        /// Gets the schedule of a query that reasons by cases: the theory's <see cref="PredicateTheory.Saturation"/>,
+        /// whose case rules reason by the values of a mentioned discriminator. Under <c>(Not (StrEq "kind" "c"))</c>
+        /// they derive the stored form of <c>ref</c>, which the branches of a and b both declare.
         /// </summary>
-        public Schedule Split => Theory.Saturation;
+        public Schedule Cases => Theory.Saturation;
 
         /// <summary>
         /// Runs one derivation: a query child of the schema makes <paramref name="predicate"/>, assumes it as the where

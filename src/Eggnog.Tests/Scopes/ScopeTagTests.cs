@@ -61,20 +61,9 @@ namespace Eggnog.Tests.Scopes
                 r.When(t.Fact.Of("a"));
             }));
 
-            // The tag of a split's cases, and of a host-driven case.
-            Assert.Throws<ArgumentException>(() => t.Graph.DefineSplit("foreign cases", s => { }, foreign));
-            var parent = t.Root.CreateChild();
-            using (var cases = parent.OpenCases())
-            {
-                Assert.Throws<ArgumentException>(() => cases.Add(foreign));
-                Assert.Throws<ArgumentException>(() => cases.Add(t.Graph.RootTag));
-                Assert.Empty(cases.Cases);
-            }
-
             // Nothing was defined by the refusals.
             Assert.DoesNotContain(t.Graph.Rulesets, r => r.Name == "licensed");
             Assert.Empty(t.Rules.Rules);
-            Assert.Empty(t.Graph.SplitRules);
         }
 
         [Fact]
@@ -205,7 +194,7 @@ namespace Eggnog.Tests.Scopes
             graph.Root.Freeze();
             var schema = graph.Root.CreateChild(c.Schema);
             schema.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of(["order", "invoice"])));
-            c.DeclareBranch(schema, "kind", "order", c.Form.Of("ref", "uuid-lower"));
+            c.DeclareBranch(schema, "kind", "order", forms: [("ref", "uuid-lower")]);
             schema.Run(Schedule.Saturate(c.Horn, c.Lattice));
             schema.Freeze();
             return (c, schema);

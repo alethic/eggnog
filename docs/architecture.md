@@ -25,9 +25,8 @@ Contents:
 Eggnog is an equality-saturation library: a database of terms and facts, closed under equality (an e-graph), and a
 Datalog-style rule engine that runs over it until nothing new can be derived. Its engine is a C# reimplementation of
 [egglog](https://github.com/egraphs-good/egglog)'s Rust engine, and its public API is a typed C# API over that
-engine. Two features have no counterpart in egglog: scopes (a tree of contexts that inherit their parent's contents
-and store only what they change) and case splits with lift (reasoning by cases inside a scope, keeping what every case
-proves).
+engine. Its main addition, which egglog lacks, is scopes: a tree of contexts that inherit their parent's contents and
+store only what they change.
 
 ### 1.1 Layers
 
@@ -37,11 +36,10 @@ consumer code (C#)
       v
 Eggnog (namespace Eggnog, public)
   EGraph, Scope, ScopeTag, typed tables (Relation, Function, Constructor), Term and Fact,
-  rules and rulesets, queries, schedules, CaseSet, CostModel, Extractor, run reports
+  rules and rulesets, queries, schedules, CostModel, Extractor, run reports
 Eggnog (namespace Eggnog, internal)
   RuleCompiler -> RuleProgram -> RuleLowering, EngineScope / ContextEngineScope, ScopeGuard,
-  ScopeOrigin, ScheduleExecutor, HostBatch, QueryRunner, mirror tables, RuleSplitSource,
-  LiftSpecBuilder, ExtractionCatalog
+  ScopeOrigin, ScheduleExecutor, HostBatch, QueryRunner, mirror tables, ExtractionCatalog
       |   same assembly; engine types are internal and named as Relations.X
       v
 Eggnog.Relations bridge (internal)
@@ -79,13 +77,13 @@ because several engine and library types share simple names.
 ### 2.1 The graph and its definitions
 
 An `EGraph` is a theory and its database. It holds the column types (`Values`), the tables, the rulesets and their
-rules, the queries, the split rules, the scope tags, and the root of a tree of scopes (`Root`). It holds only managed
-memory and is not disposable.
+rules, the queries, the scope tags, and the root of a tree of scopes (`Root`). It holds only managed memory and is not
+disposable.
 
-Definitions are never sealed. Rules, rulesets, queries, split rules and tags may be defined from any thread at any
-time, and take part from the next iteration of every run. A table definition may be made from any thread once the
-root is frozen; before that it throws `InvalidOperationException` if another thread is using the root at that moment.
-Definitions are taken under the graph's definition lock and published copy-on-write to the engine.
+Definitions are never sealed. Rules, rulesets, queries and tags may be defined from any thread at any time, and take
+part from the next iteration of every run. A table definition may be made from any thread once the root is frozen;
+before that it throws `InvalidOperationException` if another thread is using the root at that moment. Definitions are
+taken under the graph's definition lock and published copy-on-write to the engine.
 
 `EGraphOptions` sets the root's degree of parallelism (default 1: serial and deterministic; 0 for every processor, as
 egglog's `-j 0` when `RAYON_NUM_THREADS` is unset) and whether rule statistics record each rule's query plan.
@@ -138,11 +136,9 @@ A column holds either a class or a value.
   - A writable root makes one in the graph's environment of its type. A writable child uses one its view holds, its own
     rebuilt copies included, and otherwise makes one in its own container layers, under an id local to it, which its
     ancestors and siblings never see and which goes when it is disposed, as egglog's push interns in its copy (decisions
-    row 9; section 3.8, "Interning in a child"). A split's case is such a child, and the constants its assumptions write
-    may be containers of the root's classes, which it makes in its own layers when its view does not hold them (section
-    2.9). A frozen scope, and a query on one, which runs in a transient child but interns nothing, uses those its view
-    holds; one it lacks matches nothing there where the term's value is bound already, a query that would bind a
-    variable to one fails, and a write that needs one is refused.
+    row 9; section 3.8, "Interning in a child"). A frozen scope, and a query on one, which runs in a transient child but
+    interns nothing, uses those its view holds; one it lacks matches nothing there where the term's value is bound
+    already, a query that would bind a variable to one fails, and a write that needs one is refused.
   - Their types register while the root is frozen and its children run, as well as at a writable root, as egglog
     declares a container sort inside a `(push)` (section 3.8, "The container pass").
   - A child merges classes they hold as the root does: a merge in a child, a host write's, a rule's, a write primitive's
@@ -159,8 +155,8 @@ A column holds either a class or a value.
       `(vec-union old new)`, which a host batch simulates with its own unions. A rule's body, a query and a read
       refuse it, as egglog's query does.
     - Its unions take effect after the fact or the rule's iteration, as egglog's after the command.
-    - It runs in a child as at the root, as egglog's in a push, in the child's rules, host writes, function values'
-      applications and a split's cases, its unions the child's (decisions row 9); a merge such as
+    - It runs in a child as at the root, as egglog's in a push, in the child's rules, host writes and function values'
+      applications, its unions the child's (decisions row 9); a merge such as
       `(vec-union old new)` runs only at the root, which alone writes a function whose merge is not a lattice
       (section 2.3).
     - egglog's bare action, `(vec-union a b)` on its own, is `Fact.Exists(Primitives.VecUnion<Node>().Of(a, b))`
@@ -169,8 +165,7 @@ A column holds either a class or a value.
     a multiset's elements with the first, the element of least cell, and returns it, with no result for an empty
     multiset.
   - egglog has no literal for one, so a rule builds it from terms with its primitives. A host writes or reads one as a
-    constant, its classes made canonical first, and a split's assumptions hold one as a constant whose classes are the
-    root's. A constant map whose keys hold classes and are one now is refused:
+    constant, its classes made canonical first. A constant map whose keys hold classes and are one now is refused:
     which key egglog's rebuild keeps depends on container cells the host's map no longer knows.
   - As a constructor's argument it extracts as its value, the container of its classes, and each class extracts as its
     own term.
@@ -270,8 +265,8 @@ There is one pool per type for the whole graph, and every scope interns into it,
 child databases share their root's base-value registry and container environments by reference, and
 `ColumnType<T>.Encode` takes no scope (a container of values is interned without an execution state, from the shared
 id counter). So a
-value has the same cell in every scope, sibling and case, which is what lets joins and not-equal tests compare raw
-cells across scopes and lifts. What a scope interned stays after the scope is disposed. A container of classes a child
+value has the same cell in every scope, children and siblings alike, which is what lets joins and not-equal tests
+compare raw cells across scopes. What a scope interned stays after the scope is disposed. A container of classes a child
 makes is the exception: it lives in the child's own container layers, under a cell local to the child, goes with the
 child, and is not counted in `InternedCount` (section 3.8, "Interning in a child"). These operations intern, in any
 scope:
@@ -281,15 +276,13 @@ scope:
 | A host write (`Make`, `Assume`, `Union`, `Write`) | each new constant that is not stored inline (strings, doubles, `BigInt`s, `BigRat`s, sets, containers, registered values, and `long`s outside `[0, 2^31)`), each fact's in egglog's order, and then each new result of a computation it writes |
 | A rule's primitive, in its body or head, during a run | each new result, such as a set that `SetUnion` or `SetIntersect` computes |
 | A lattice merge, in a run or in a child's catch-up | each new merged value |
-| A lift's case join | each new joined value, in the shared pool for the parent |
-| A split's case assumptions | each new value a case assumes, such as the singleton set of a domain split's case |
 | `DefineRule` (local or global) and `EGraph.DefineQuery` | each new constant, when the rule or query is defined; none when the definition is refused |
 
 Reads, checks and `Until` conditions never intern (`TryEncodeExisting`); a query interns its constants when it is
 defined and, when it runs, the new results of the computations in its body, as a rule does. A host that serves requests
 from long-lived scopes keeps the pools flat by reusing its literals: a query scope that names only values already
 interned interns nothing, and one that names a new string interns the string and whatever the rules compute from it.
-`EGraph.Usage` reports the pools' size beside the graph's ids and epochs (section 2.12).
+`EGraph.Usage` reports the pools' size beside the graph's ids and epochs (section 2.11).
 
 ### 2.3 Tables
 
@@ -313,11 +306,9 @@ reads are the same.
 
 A function with a lattice (`ValueLattice<T>`) merges two outputs for one key with the lattice's `Merge`, which must be
 associative, commutative and idempotent. Built in: `Max`, `Min` (over `IComparable<T>`), and `Intersect` and `Union`
-over `Set<T>`. A lattice also has a `CaseJoin`, the join a lift uses to combine the values of several cases
-(`Max` merges, so its case join is `Min`; `Intersect` merges, so its case join is `Union`). `ValueLattice<T>.Verify`
-checks the laws on samples. A function with neither a lattice nor a merge refuses two different outputs for one key: a
-host write throws `FactConflictException` without writing the value; a rule that derives a conflict fails with
-`RuleEvaluationException`.
+over `Set<T>`. `ValueLattice<T>.Verify` checks the laws on samples. A function with neither a lattice nor a merge
+refuses two different outputs for one key: a host write throws `FactConflictException` without writing the value; a rule
+that derives a conflict fails with `RuleEvaluationException`.
 
 A function may output a class, as egglog's `function` of an e-class sort does (`DefineFunction<T1, ..., TSort>`): it
 holds the class written for a key without making a term or a union, the rebuild keeps the output canonical, and
@@ -341,9 +332,9 @@ constructor write, and fails that fact after its rebuild, as egglog's command fa
 rest of the fact, and `FactConflictException` names the row the rebuild kept, of the function the rebuild's failure
 names; a rule's run fails with `RuleEvaluationException`, its unions standing. A failure before the rebuild, of a
 rule's write or of a fact where it runs, rebuilds the unions all the same, where egglog leaves them unrebuilt
-(section 2.13, item 7). A
+(section 2.12, item 7). A
 batch that merged classes flushes and rebuilds before a later write of such a function, as egglog's next command runs
-after the rebuild; a split's case writes its functions before its unions. A rewrite's right side may not be a function application, which
+after the rebuild. A rewrite's right side may not be a function application, which
 egglog would look up in the head. Below the root a function with `New`, `Old` or an expression is root-only like any
 other, and a union in which a class one of its rows outputs would lose is refused as for its keys.
 
@@ -364,13 +355,13 @@ into the union-find before it rebuilds the tables, where egglog's table rebuild 
 row 23 of the engine map's defect list), so with `:merge (vec-push old $g)`, `(h (A))` at `(vec-of (A))`, `(h (B))`
 at `(vec-of (B))` and `(union (A) (B))`, the merged vector's second element is the old vector here and `$g` in egglog.
 A union of such an element with another container's id can leave two containers under one id, which a read gives
-differently from egglog (section 2.13, item 6). A merge's primitives take their ids as they are, as
+differently from egglog (section 2.12, item 6). A merge's primitives take their ids as they are, as
 egglog's do (decision 22), so within a rule's run they do not see the run's own unions either, and the next rebuild
 makes what they made canonical. A batch that merged classes flushes and rebuilds before a write of a function whose
 merge holds a class constant, whatever its output, as egglog's next command reads the global after the rebuild.
 An expression is checked and lowered when its function is defined, and named by its rendering; a lookup with no row, or
 a primitive that throws or has no result, fails the merge as egglog's merge panics, which fails a rule's run or a host
-write's flush, and what they wrote stands (section 2.12). A host batch works out an expression of primitives and
+write's flush, and what they wrote stands (section 2.11). A host batch works out an expression of primitives and
 constants itself, so its failure fails only the fact; one that calls tables only the engine evaluates, after every write
 of the batch, so the batch stages each write as it comes, and flushes what it planned before a later read of the key, a
 later write of a table the expression reads, and the write itself after a merge of classes, as egglog's next command
@@ -399,26 +390,24 @@ smaller id kept, as the engine does whatever column types made them (section 2.2
 or holds changes before a class that loses is held by a container of a kind the row holds, the replay runs below the
 root from that merge on, at the end of each fact that changes the batch's congruence check, O(passes × rows of the
 check) each time. A merge whose rebuilt containers meet none that such a row names, or meet one that keeps its smaller
-id, leaves the row as it is and is not refused. Also refused: a rule local to a child that writes one, and a split rule
-that assumes one; and a run in which a rule that writes one would run below the root, in a child or in a split's cases.
-No rule, query or split rule reads one in another scope (`In`), since its mirror would be written below the root; a host
-read may. Two cases depend on the data, so only the engine refuses them, with its `InvalidOperationException`: a rule's
-union below the root that would rewrite one of the function's rows fails the run (and faults a child); and a root write
-or merge that a live child would have to rewrite at its catch-up, because the child merged away a class keying or held
-by the row, faults that child at its next call, and not the root.
+id, leaves the row as it is and is not refused. Also refused: a rule local to a child that writes one; and a run in
+which a rule that writes one would run below the root, in a child. No rule or query reads one in another scope (`In`),
+since its mirror would be written below the root; a host read may. Two cases depend on the data, so only the engine
+refuses them, with its `InvalidOperationException`: a rule's union below the root that would rewrite one of the
+function's rows fails the run (and faults a child); and a root write or merge that a live child would have to rewrite at
+its catch-up, because the child merged away a class keying or held by the row, faults that child at its next call, and
+not the root.
 
 Each kind of table has its own options, so that each offers only what applies to it. `RelationOptions` and
-`FunctionOptions` set the role (`Analysis`: a table derived from terms alone, rather than a fact, the default) and
-whether lifts copy the table into a case's parent (`Lift`; by default facts lift and analyses do not).
-`ConstructorOptions` sets whether lifts copy the constructor's terms (`Lift`, by default yes) and whether extraction
-skips its rows (`Unextractable`, egglog's `:unextractable`); a constructor's role is always `Term`, and its cost is not
-an option but a parameter of `DefineConstructor` (`cost`, by default 1). `RelationOptions` and `ConstructorOptions`
-also set whether the rows may be subsumed (`Subsumable`, section 2.5); `FunctionOptions` has no such setting, since
-no function can be.
+`FunctionOptions` set the role (`Analysis`: a table derived from terms alone, rather than a fact, the default).
+`ConstructorOptions` sets whether extraction skips its rows (`Unextractable`, egglog's `:unextractable`); a
+constructor's role is always `Term`, and its cost is not an option but a parameter of `DefineConstructor` (`cost`, by
+default 1). `RelationOptions` and `ConstructorOptions` also set whether the rows may be subsumed (`Subsumable`, section
+2.5); `FunctionOptions` has no such setting, since no function can be.
 
 `EGraph.Contradiction` is a built-in nullary relation, an addition egglog lacks, named `$contradiction`. A rule that
-derives it says the scope has no model. In a case it stops the case (section 2.9); elsewhere it is an ordinary fact,
-unless a run asks to stop on it (`RunOptions.StopOnContradiction`).
+derives it says the scope has no model. It is an ordinary fact; a run that asks to stop on it
+(`RunOptions.StopOnContradiction`) skips its later steps, and the scope stays usable.
 
 A table's name is any non-empty string unique among the user's tables, `@` and a leading `$` included, as in egglog. The
 tables the library makes for itself take no name of the user's: the built-in contradiction relation is not among the
@@ -488,7 +477,7 @@ rules.DefineRule("a singleton domain makes a path present", r =>
   function whose merge is not a lattice only at the root, a deletion only where the scope may delete (a scope's own
   mirrors are then reconciled as for a rule that deletes), a subsumption only of a subsumable table, no analysis table
   and no scoped view; a refused write, even one the callback catches, or an exception fails the rule's run, as egglog's
-  callback returning `None` panics (section 2.12). A rule with a full callback has no licence unless it calls
+  callback returning `None` panics (section 2.11). A rule with a full callback has no licence unless it calls
   `ReadsOwnFacts`, since its reads are not atoms the licence sees. Callbacks run on the engine's threads, as primitives
   do, and cannot call into a graph. Under `RunWith` a full callback's rule is queried semi-naively, as egglog builds
   every scheduler's query.
@@ -496,13 +485,12 @@ rules.DefineRule("a singleton domain makes a path present", r =>
   (egglog's `rewrite ... :subsume`, which also subsumes the matched left side), mark a row of a relation or
   constructor as subsumed; so do the host's `Scope.Subsume` and `ScopeWriter.Subsume` (section 2.7). The row stays:
   lookups, `Check`, `Get` and `Rows` (whose `TableRow.Subsumed` says so) still find it, and a head that makes the term
-  gets its class. But no rule body, query or split rule matches it any more (from the next iteration, when a rule
-  subsumed it), and extraction skips it. A missing row is inserted subsumed, with its subterms made as usual, and the
-  rule's later head items still run. Subsumption is sticky: merges and the unions that rewrite the row keep it, and
-  nothing undoes it. What earlier matches derived from the row stays. As in egglog, every relation and constructor is
-  subsumable and no function is; `Subsumable = false` on `RelationOptions` or `ConstructorOptions` opts a table out,
-  an addition that stores no subsumption cell, so that a table that is never subsumed pays no cell per row and no
-  filter per atom.
+  gets its class. But no rule body or query matches it any more (from the next iteration, when a rule subsumed it), and
+  extraction skips it. A missing row is inserted subsumed, with its subterms made as usual, and the rule's later head
+  items still run. Subsumption is sticky: merges and the unions that rewrite the row keep it, and nothing undoes it.
+  What earlier matches derived from the row stays. As in egglog, every relation and constructor is subsumable and no
+  function is; `Subsumable = false` on `RelationOptions` or `ConstructorOptions` opts a table out, an addition that
+  stores no subsumption cell, so that a table that is never subsumed pays no cell per row and no filter per atom.
 - **Deletion** is egglog's `delete`. `Delete(application)` and `Delete(rows)` in a head, and the host's `Scope.Delete`
   (section 2.7), delete the row of a key of a relation, a function or a constructor, if there is one, and nothing else:
   a deleted constructor term's class stays, with its other members and the rows that name it, and making the term again
@@ -511,21 +499,19 @@ rules.DefineRule("a singleton domain makes a path present", r =>
   relation's fact or a constructor's term in a head writes nothing when the table already holds the row, since egglog
   makes a relation a constructor and looks the row up, so a deletion of it in the same iteration wins and a rule that
   deletes a row and writes it back settles. A scope deletes only when the engine's retraction guard lets it (section
-  3.8): not with live descendants, which would not see the deletion, and not under a writable parent; so not in a case
-  either. `Run` refuses, before any work, a rule that deletes where the scope may not, and in a run that splits, whose
-  cases stay live until it ends; one defined on another thread during the run takes part only in the iterations where
-  it may run. `graph.Contradiction` is not deleted.
+  3.8): not with live descendants, which would not see the deletion, and not under a writable parent. `Run` refuses,
+  before any work, a rule that deletes where the scope may not; one defined on another thread during the run takes part
+  only in the iterations where it may run. `graph.Contradiction` is not deleted.
 - **Heads never read tables**, but in a full rule callback (`ThenCallFull`) or a primitive of full access, a function
   value's application among them, whose rule is naive. A function's output used
   in a head must be matched in the body. This keeps every match a function of the body alone, which is what lets a
   child scope inherit its ancestors' progress (section 3.8).
 - `Naive()` makes a rule match in full every time instead of semi-naively.
 - A primitive or lambda that throws fails the rule: the run throws `RuleEvaluationException` naming the rule and the
-  bindings, and the scope stays usable (section 2.12). A primitive may be partial, as egglog's `-?>` primitives are
+  bindings, and the scope stays usable (section 2.11). A primitive may be partial, as egglog's `-?>` primitives are
   (`Primitive.IsPartial`): it has no result for some arguments. The built-ins are partial where egglog's are (checked
   `i64` arithmetic, division by zero, `log`, `sqrt`, `from-string`); `Primitive.CreatePartial` makes a user's. No result drops the match in a body let, a
-  filter and a query; in a head and in a split's case assumptions the primitive's function throws, which fails the
-  rule, where egglog panics.
+  filter and a query; in a head the primitive's function throws, which fails the rule, where egglog panics.
 
 A rule definition is checked and compiled at once (`RuleCompiler`): errors are `RuleDefinitionException`s naming the
 rule. The compiler normalizes the builder's draft into a `RuleProgram`, an engine-independent form with registers,
@@ -552,7 +538,6 @@ a ruleset without a licence.
 | `Repeat(n, steps)` | up to `n` passes of the steps, stopping after a pass with no change in which no scheduler held work back (egglog's `can_stop`) |
 | `Saturate(steps)` | passes of the steps until one changes nothing and no scheduler held work back |
 | `Until(body, facts)` | the body, unless every ground fact already holds (egglog's `:until`) |
-| `Split(rule, inCase)` | a case split step (section 2.9) |
 
 One iteration runs every active rule against the same snapshot of the scope, then merges what they staged and rebuilds
 (Jacobi-style, as egglog does). A rule is active in a scope when it belongs to a scheduled ruleset and is either
@@ -573,7 +558,7 @@ own clone of the scheduler, with its own matches left and its own worklists, whi
 (`FunctionConfig.ContextPrivate`): bookkeeping that descendants never read, that moves no `Version`, and that a scope
 may delete from where a rule may not. A child starts from what its parent held when the child was made, as egglog's
 `push` clones the e-graph with its schedulers: the matches its parent left wait in the child, as do those a failed step
-of the parent chose but did not apply (section 2.12), and the child's queries continue
+of the parent chose but did not apply (section 2.11), and the child's queries continue
 from its parent's progress (the query rules never seed a watermark from an ancestor's; the step sets the child's own).
 This is where egglog's defect 10 goes ([`history/egglog-engine-map.md`](history/egglog-engine-map.md)): egglog's clone
 and original share part of the buffers. Its defect 9 goes too: the matches offered hold classes as the scope's canonical
@@ -582,43 +567,25 @@ too, and a rule whose head uses no variable of its body cannot be scheduled (egg
 runs on the scope's thread under the engine-call marker, so it cannot call into a graph; one that throws faults the
 scope.
 
-`RunOptions` bounds a run: `IterationLimit` (engine iterations, counted in every scope of the run, cases included),
-`TimeLimit`, `RowLimit` (rows in the own layers of the scope and its live cases, a case its contradiction stopped among
-them until the lift drops it, section 2.9), and for splits `CaseLimit`, `SplitDepthLimit` and `Lift` limits. The first
-three are off by default, so a `Saturate` runs until nothing changes, as egglog's does. Limits and cancellation are
-checked before every iteration and every split step; an iteration or a lift cannot be interrupted, so a run overshoots
-by at most one of them. Reaching a limit is not an error: the run stops soundly with fewer facts, and
-`RunReport.StopReason` says why.
-
-There is no iteration budget per case. To bound each case of a split, pass `Repeat(n, rules)` as the in-case schedule:
-`Split(rule, Repeat(n, horn, lattice))`. Under `Saturate` as the in-case schedule, one case that does not terminate
-keeps the run going, or uses up an `IterationLimit` that is set, and if it does so before the split step lifts, the
-scope gets nothing from any of the step's cases. `Repeat(n, Saturate(...))` bounds nothing, since each of its passes is
-a full saturation. The bound applies to each execution of the in-case schedule, not to the case over the run: a case
-runs it before the step's lift, again when the step deepens after the lift, and again at each later execution of the
-step. A case cut off this way stays live, its facts hold under its assumption, and the lift stays sound; a run that
-otherwise ends normally reports `Completed`. A host that must know a case was cut off finds, in the steps
-(`RunReport.Steps`, which stays empty unless `RunOptions.RecordSteps` is set, or an `Observer` that sees each step), an
-execution of the in-case schedule that ran all `n` passes in that case and still changed it in the last. A host sizes
-`n` from the passes its cases take when they do terminate, read from the same steps.
+`RunOptions` bounds a run: `IterationLimit` (engine iterations), `TimeLimit` and `RowLimit` (rows in the scope's own
+layers). All three are off by default, so a `Saturate` runs until nothing changes, as egglog's does. Limits and
+cancellation are checked before every iteration; an iteration cannot be interrupted, so a run overshoots by at most one.
+Reaching a limit is not an error: the run stops soundly with fewer facts, and `RunReport.StopReason` says why.
 
 `RunReport` gives the iterations, whether the run saturated and whether it changed the scope, search, merge and
-rebuild times, per-rule statistics (matches, search time, iterations with matches, and the plan when
-`EGraphOptions.RecordPlans` is set), and the split counts. With `RecordSteps` it keeps one `RunStep` per iteration,
-mirror sync, split step and lift; an `Observer` receives each step as it happens and may read the scopes of the run.
-There are no proofs or per-row explanations, and no record of which rule wrote a row. Two routes find where a fact came
-from:
+rebuild times, and per-rule statistics (matches, search time, iterations with matches, and the plan when
+`EGraphOptions.RecordPlans` is set). With `RecordSteps` it keeps one `RunStep` per iteration and mirror sync; an
+`Observer` receives each step as it happens and may read the scopes of the run. There are no proofs or per-row
+explanations, and no record of which rule wrote a row. Two routes find where a fact came from:
 
 - **The first matching step.** Run with `RecordSteps` and `EGraphOptions.RecordPlans`, find the first step whose
   `Rules` lists a rule that derives the fact, and read the rule (`Rule.ToString()`), the facts it reads
   (`Scope.Rows`) and its plan (`RuleStatistics.Plan`).
 - **The observer diff.** An `Observer` snapshots `Scope.Rows` of every table in the step's scope after each step and
   compares the snapshot with the previous one of the same scope. Each row that appeared, and each lattice value that
-  changed, is then tied to the step that made it, and the step's `Rules` are its candidate rules. Three caveats: a
-  case's first snapshot is compared with its parent's, since the case starts from the parent's facts; changes seen in
-  the split scope after a split step or a lift came from the cases and are set aside as lifted, not derived there; and
-  the candidates are every rule that matched in the step, not only those whose head writes the row's table, so the
-  list can be longer than the rules that could have written the row.
+  changed, is then tied to the step that made it, and the step's `Rules` are its candidate rules. One caveat: the
+  candidates are every rule that matched in the step, not only those whose head writes the row's table, so the list can
+  be longer than the rules that could have written the row.
 
 Neither route says that leaving a rule out would remove the fact: a fact can come from a chain of rules, or from two
 rules at once. To decide that, run again without the rule's ruleset, on a fresh graph, and compare.
@@ -639,10 +606,10 @@ fact on its own, after the batch's earlier calls when they merged classes, so th
 keeps, and the fact then fails keeping all it staged, as egglog's command fails at its rebuild (section 2.3). Its
 primitives run once, as egglog's command evaluates them: one over the tables or over classes is planned after the flush
 of the earlier calls in the first place, and a pure one over values gives the second plan the result it gave the first.
-The same holds in a child, a split's case included, which the failure faults (section 2.9).
+The same holds in a child.
 While a scope under the batch's has a `Write` batch open, the flush is refused, and so is the fact, which writes
 nothing, as any call that needs a flush then is. The unions of a fact that fails where it runs, or for a write its
-primitives made, are rebuilt with the batch, where egglog's command leaves them unrebuilt (section 2.13, item 7). A
+primitives made, are rebuilt with the batch, where egglog's command leaves them unrebuilt (section 2.12, item 7). A
 refusal egglog's type
 checker or the library makes, before anything runs, writes nothing. An `Assume` of several facts then stops, as egglog's
 program stops at an error, and the facts before stand; a `Write` callback may catch the failure and go on. A batch is
@@ -684,7 +651,6 @@ ancestors. A child sees what its ancestors write later, too; it catches up lazil
 root                      empty and frozen, or a shared theory
  +- schema#1  (schema)    frozen once its facts and rules are settled
  |   +- query#1 (query)   a writable child per question, disposed after it
- |   |   +- case#1        made by a split inside a run, disposed when the run ends
  |   +- query#2 (query)   on another thread: children of a frozen scope run concurrently
  +- schema#2  (schema)
 ```
@@ -700,9 +666,7 @@ root                      empty and frozen, or a shared theory
   descendant is disposed, the tables compact again at the next write that calls for it. Results never depend on it,
   but memory and full scans do. So freeze a scope before creating children of it, and do not hold descendants of a
   large writable scope across heavy work in it. A scope frozen with live descendants keeps its replaced rows for good,
-  and `Scope.CompactionsBlockedAtFreeze` counts the tables that kept them. A split run at a writable scope holds its
-  cases until the top-level run ends (section 2.9), so the scope keeps its replaced rows for the length of the run, and
-  a large writable scope or root that splits pays for it in memory.
+  and `Scope.CompactionsBlockedAtFreeze` counts the tables that kept them.
 - **Tags.** A `ScopeTag` (`EGraph.DefineScopeTag`) labels scopes. Tags belong to one graph and are absolute: a tag
   resolves, from a scope, to the nearest ancestor-or-self that carries it. The root carries `EGraph.RootTag`.
 - **Local rules.** `Scope.DefineRule(ruleset, name, define)` defines a rule that is active only in that scope and its
@@ -726,64 +690,12 @@ root                      empty and frozen, or a shared theory
   it. An ancestor's reaches its descendants when they catch up, and a frozen scope's stays for its children.
 - **Queries on frozen scopes** run in a transient child created for the call and disposed after it, so the frozen
   scope stays read-only. In a writable scope a query runs as an iteration that writes nothing.
+- **Terms that differ by case.** The library does not reason by cases; a host that needs a term that differs by case,
+  for a few if-then-else guards, builds it with children: it opens a child per distinct condition and assumes the
+  condition, runs the theory there, and extracts the then-branch's best term; it then `Make`s that term in the parent
+  inside the theory's if-then-else constructor and `Union`s it with the original term.
 
-### 2.9 Case splits and lift
-
-A case split reasons by cases inside a scope: if a key can take only the values in a set, open one case per value,
-run rules in each, and keep in the scope what holds in every case. Cases that reach a contradiction are dropped, since
-they have no model.
-
-- **Split rules.** `DefineDomainSplit(name, domain, guards, caseTag)` splits, wherever every guard relation holds of a
-  key `k` and the lattice-valued function `domain(k)` has more than one element, into one case per element `v`, each
-  assuming `domain(k) = {v}`. `DefineSplit(name, define)` takes any body, a key, a set variable to split on (`Cases`),
-  and the assumptions each case makes: writes over the body's variables, the case's element, and constants, among them
-  classes from the root and containers of the root's classes, a container of which a case makes in its own containers
-  when its view does not hold it, as egglog's push would. They compute over values only. A constant map whose keys hold
-  classes that are one in the case is refused when the case writes it, as a host write of it is (section 2.2), and the
-  run fails, which faults the scope it was called on (section 2.12). Which keys are worth splitting is part of the split
-  rule's body: more guards split less, and never unsoundly. The coverage obligation is the theory's: the cases must
-  cover the scope, which a domain that only narrows guarantees.
-- **Split steps.** `Schedule.Split(rule, inCase)` is a step of a run. Where the split rule's body matches, it opens
-  the cases, runs `inCase` in each, and lifts. Cases live until the top-level run ends: a later execution of the step
-  skips a key that a live split already covers (in the scope or an ancestor), runs `inCase` again in the cases it
-  opened so they take in the scope's new facts, and lifts again. Nested split steps in `inCase` split cases further,
-  after the lift of the level above (lift before deepening), up to `SplitDepthLimit`; a split with more than
-  `CaseLimit` cases is skipped and counted. A split step is best placed after the facts its rule reads have settled:
-  `Saturate(Saturate(facts...), Split(rule, inCase), rewrites...)`.
-- **Host-driven cases.** `Scope.OpenCases()` returns a `CaseSet`. `Add()` makes a case, the host writes its
-  assumptions and runs schedules in it, and `Lift()` writes into the parent what holds in every live case. Disposing the
-  set disposes its cases.
-- **What a lift writes.** Equalities between the parent's classes that hold in every live case (the meet of the cases'
-  partitions); relation rows present in every live case; constructor terms over the parent's classes; and function
-  values, joined over the cases with the lattice's case join (or, for a function without a lattice, only where every
-  case agrees). Tables with `Lift = false` are left out. A row arrives in the parent not subsumed, unless the parent
-  subsumed it: a lift writes what every case holds, not what the cases chose to stop matching. A lift runs in rounds
-  until a round writes nothing, because a term lifted in one round can make the next round's facts expressible over the
-  parent's classes. If every case is contradictory, the lift writes the contradiction into the parent. A row that names
-  a container of classes a case made is not lifted, though every case may hold an equal one, nor is an equality of
-  containers the cases reach only by rebuilding them equal (decisions row 9; section 3.9).
-- **Guarded terms by hand.** A lift writes only what holds in every case, so it builds no term that differs by case. A
-  host that needs one for a few if-then-else guards lifts it by hand: it opens a child per distinct condition and
-  assumes the condition, runs the theory there, and extracts the then-branch's best term; it then `Make`s that term in
-  the parent inside the theory's if-then-else constructor and `Union`s it with the original term.
-- **Contradicted cases.** A case whose rules derive `Contradiction` stops: it answers `IsContradictory` and identity
-  members, `Run` returns at once with `StopReason = Contradiction`, and other reads and writes throw
-  `ScopeContradictedException`. Scopes beneath a stopped case answer as it does. The case stops at the merge of the
-  iteration that derives the contradiction, after that iteration's search has run in full: every match of the iteration
-  runs, calling the user code of its rule and counting in the run's report, unless a failure stops the join first, and a
-  failure throws as in any run (section 2.12), so in a split step's case it faults the scope the run was called on. What
-  those matches write stays in the case until the lift drops it, and counts against `RowLimit` while the split step's
-  other cases run (section 2.6), so the run can stop at the limit before the lift. What they draw from the graph stays
-  after the case is dropped (section 2.12): the values they intern, containers of values included, keep their cells, by
-  which `ordering-min`, `ordering-max`, `set-get` and `multiset-pick` order values, and extraction breaks ties, in every
-  scope afterwards (section 2.2), and the ids they reserve count in `EGraph.Usage` and raise every id reserved after
-  them. Join indexes list their keys in hash-slot order (the join-index key order item of
-  [`egglog-3.0.0-todo.md`](egglog-3.0.0-todo.md)), so the raised ids can hand a later run, in any scope, its matches in
-  another order, and change what that order decides: the value a function with a merge that is not a lattice
-  (`FunctionMerge<T>`) keeps, the order of fresh ids, and with it which class a union keeps, and which of a class's
-  equal-cost rows extraction takes.
-
-### 2.10 Extraction
+### 2.9 Extraction
 
 `Scope.Extract(class, costs)` returns the cheapest term of a class as an `ExtractedTerm` (head, arguments, child
 terms, cost, and an s-expression `ToString`). `Scope.ExtractVariants(class, count, costs)` returns up to `count`
@@ -804,7 +716,7 @@ An extractor reads the scope as it was when it was made; using it after a write 
 so does using it once a constructor defined after it has rows extraction may use.
 Extractors over a frozen scope may run concurrently, one per thread.
 
-### 2.11 Threading
+### 2.10 Threading
 
 - **Thread domains.** A writable scope and every scope created under it while it is writable form one thread domain.
   A domain is used by one thread at a time: every scope call (a batch, a run, a read, a query) holds the domain's
@@ -821,14 +733,11 @@ Extractors over a frozen scope may run concurrently, one per thread.
   on whatever threads the host calls them from.
 - **User delegates** (primitives, lambdas, lattices, filters, cost functions) run inside engine calls, possibly on
   several threads at once. They must be pure and must not call into any graph; such a call throws.
-- A split's cases run on their parent's thread.
 
-### 2.12 Lifetimes and failures
+### 2.11 Lifetimes and failures
 
 - `Scope.Dispose()` never throws. It makes the scope unusable at once (`ObjectDisposedException` on new calls); its
-  calls already in progress complete, and its class values stay usable in its live descendants (section 2.2). A run on
-  the scope whose split step opens cases directly under it after the disposal is refused there with
-  `ObjectDisposedException`, after earlier steps may have written; a split step that opens no case is not refused. Its
+  calls already in progress complete, and its class values stay usable in its live descendants (section 2.2). Its
   engine state and local rules are released when it has no live children (transient query children included) and no
   call is in progress in its domain on another thread; whichever thread removes the last obstacle releases it.
   Disposing the root does nothing. So a frozen schema can be retired while queries beneath it finish.
@@ -846,10 +755,10 @@ Extractors over a frozen scope may run concurrently, one per thread.
   host write keeps what its calls staged before the failure (section 2.7); a flush that fails before a later call of a
   batch fails that call, and the batch goes on.
 - A failure with no egglog counterpart faults the scope: a lattice merge that throws while a call catches its scope up
-  with an ancestor's writes, a failure in a case of a split step or a lift (which faults the case, and the scope the run
-  was called on), a scheduler that throws, and an exception the engine cannot undo in a child (section 3.8). `Failure`
-  keeps the exception, and every later call except `Dispose` throws `InvalidOperationException` with it as the inner
-  exception. A faulted root makes the graph unusable.
+  with an ancestor's writes, a scheduler that throws, a copy rule that fails as a mirror is synced (section 2.8), which
+  faults the tagged scope and the scope whose run needed the sync, and an exception the engine cannot undo in a child
+  (section 3.8). `Failure` keeps the exception, and every later call except `Dispose` throws `InvalidOperationException`
+  with it as the inner exception. A faulted root makes the graph unusable.
 - Refusals made before anything changes (`ArgumentException`, a write's `FactConflictException`, a definition error)
   do not fault, nor does the `FactConflictException` of a merge whose rows conflict, which comes after its rebuild.
 - A disposed scope gives back its own state, but not what it drew from the graph:
@@ -858,38 +767,37 @@ Extractors over a frozen scope may run concurrently, one per thread.
   |---|---|
   | Its rows, layers, union-find overlay, journal and cursors | nothing |
   | Its local rules, their engine rules, variants and call-site external functions | nothing; freed rule and external-function ids are reused |
-  | Values it interned: constants, primitive and merge results, case assumptions, joins | all of them, in the graph's pools (section 2.2) |
+  | Values it interned: constants, primitive and merge results | all of them, in the graph's pools (section 2.2) |
   | Ids it reserved (one block of 16 for its first term, then blocks doubling up to 4,096) | all of them: ids are never handed out again |
-  | Epochs its writes, run iterations, rebuild passes and cases took | all of them: the clock never goes back |
+  | Epochs its writes, run iterations and rebuild passes took | all of them: the clock never goes back |
   | Scope tags and the mirror tables of scoped reads | all of them: they are graph definitions, so a host defines tags with its theory, not per request |
 
 - Ids and epochs are finite: about 2.1 billion ids (`Array.MaxLength`, the largest id a union-find holds) and about 4.3
   billion epochs, shared by every scope of the graph. `EGraph.Usage` returns a `GraphUsage`: `InternedValues`,
-  `IdsReserved` against `IdLimit`, `Epochs` against `EpochLimit`, and `FractionUsed`, the larger share. A workload
-  that splits usually runs out of epochs first. When either runs out, every call that needs one throws
-  `OverflowException`: a write that makes a term or merges, a run whose rule makes a term or that needs another
-  iteration, pass or case, `CreateChild`, `CaseSet.Add` and `CaseSet.Lift`, a freeze that must catch up, a query read
+  `IdsReserved` against `IdLimit`, `Epochs` against `EpochLimit`, and `FractionUsed`, the larger share. When either
+  runs out, every call that needs one throws `OverflowException`: a write that makes a term or merges, a run whose rule
+  makes a term or that needs another iteration or pass, `CreateChild`, a freeze that must catch up, a query read
   (`Any`, `Count` and `ForEachMatch` run the query as a rule, which takes an epoch even on a frozen scope), and any
   other read of a writable scope that must catch up first (`Check`, `TryGet`, `AreEqual`, `CountRows` and the rest,
   when an ancestor changed since the scope last caught up, or its own rebuild ran out before it finished). A frozen
   scope, and a writable one with nothing to catch up, reads facts and terms without an epoch.
 - Running out is not a fault, and the scope can be disposed. A write that ran out before its merge is dropped, so the
   scope reads as before. One that ran out in the rebuild after its merge stays written, with the rebuild's finished
-  passes committed, so the scope reads it without an epoch unless that rebuild left work undone. A lift round that ran
-  out before its merge writes nothing. Every later call that needs an id or an epoch throws the same way, and once the
-  epochs are out the graph creates no more children. A long-lived host therefore retires a graph before
-  `FractionUsed` reaches 1: it defines a new graph from the same definitions, sends new work to it, and lets the old
-  one go once its last scope is disposed. The library has no helper for this; the host owns its definitions.
+  passes committed, so the scope reads it without an epoch unless that rebuild left work undone. Every later call that
+  needs an id or an epoch throws the same way, and once the epochs are out the graph creates no more children. A
+  long-lived host therefore retires a graph before `FractionUsed` reaches 1: it defines a new graph from the same
+  definitions, sends new work to it, and lets the old one go once its last scope is disposed. The library has no helper
+  for this; the host owns its definitions.
 
-### 2.13 Differences from egglog
+### 2.12 Differences from egglog
 
 The library offers egglog's core (tables with functional dependencies and merges, union-find with congruence closure,
-semi-naive Datalog rules, schedules, primitives, lattices and extraction) and adds scopes and case splits. Fidelity with
-egglog comes first, so each departure below is to be removed, or confined to the additions, as the roadmap's "Fidelity
-with egglog" lists:
+semi-naive Datalog rules, schedules, primitives, lattices and extraction) and adds scopes. Fidelity with egglog comes
+first, so each departure below is to be removed, or confined to the additions, as the roadmap's "Fidelity with egglog"
+lists:
 
-1. Queries and split rules skip subsumed rows as rule bodies do, where egglog's `check` sees them; the other
-   departures of subsumption are listed in decision 20 of [`engine/decisions.md`](engine/decisions.md).
+1. Queries skip subsumed rows as rule bodies do, where egglog's `check` sees them; the other departures of subsumption
+   are listed in decision 20 of [`engine/decisions.md`](engine/decisions.md).
 2. Rule heads never read tables, except a full rule callback's (`ThenCallFull`) or a full primitive's, a function
    value's application among them, in its naive rule, and functions have no defaults: a lookup without a row fails.
 3. No proofs or explanations.
@@ -1081,8 +989,7 @@ is an exact, allocation-free test. A child that mints nothing reserves nothing; 
 later one twice the ids reserved so far, up to 4,096. A context captures the clock at the start of each run, rebuild
 pass and write batch, stamps that batch's rows with it, and advances it at the end. Neither counter is reclaimed: a
 query scope that makes one term uses 16 ids, and on the predicate test theory a plain query with its snapshot read
-takes 12 to 21 epochs, depending on its shape, and a split query 21 + 9 x *cases* (`ScopeChurnTests` pins the
-split counts).
+takes 12 to 21 epochs, depending on its shape.
 
 Every id mint applies one bound, `UnionFind.MaxId` (`Array.MaxLength - 1`), the largest id a union-find array can
 hold: the root's own mints (`Store.CheckId`), a child's blocks, a rule's mint at the root (`Database.IncrementCounter`
@@ -1144,10 +1051,9 @@ recording the entry in the child's container log while the child has live descen
 race to intern one content agree on one id and only the winner mints. Rule actions and external functions reach it
 through their execution state (`ContainerEnv.GetOrInsert` redirects a child's state there, one field test at the root),
 the bridge's `EGraphContext.GetContainerValue` through the child's view, and the library's encodes through the scope's
-(`ContainerClasses.Intern`), a split's case among them when the host batch that writes its assumptions encodes a
-constant container of the root's classes. The id is local to the child, so the layer owns it, no ancestor or sibling
-sees the container, disposing the child drops it with its layers, and a lift drops the rows that name it, as it drops a
-row naming a class the case made (section 3.9). The child's id blocks are reserved on the shared counter after it was
+(`ContainerClasses.Intern`). The id is local to the child, so the layer owns it, no ancestor or sibling sees the
+container, disposing the child drops it with its layers, and a lift drops the rows that name it, as it drops a row
+naming a class the case made (section 3.9). The child's id blocks are reserved on the shared counter after it was
 created, so the local id is larger than every id that existed then, and a container that existed before the child wins
 any later merge with it, as in egglog's push; a container a writable ancestor makes after one of the child's blocks was
 reserved may have the larger id. When a writable ancestor later gains an equal content, the child's catch-up merges the
@@ -1331,8 +1237,8 @@ table; context-private tables are never gated. `SortedWritesTable.CompactionsBlo
 when the last descendant is disposed, and the next merge that meets the trigger compacts. A frozen table never changes
 again, so a context frozen with live descendants keeps the tombstones of every gated table that had one;
 `Database.Freeze` counts those tables, which the context reports (`Context.CompactionsBlockedAtFreeze`) and the library
-surfaces as `Scope.CompactionsBlockedAtFreeze`. A split's cases live until the top-level run ends, so a split run gates
-its scope for the run's whole length.
+surfaces as `Scope.CompactionsBlockedAtFreeze`. The cases a `SplitDriver` opens live until it disposes its records, so
+its scope is gated until then.
 
 **Queries in a child.** A rule set snapshots the views of the tables it reads when it is built (`ViewSnapshot`), and
 the search reads only that snapshot. An atom's rows are a `LayeredSubset` over the layers of its view; each prober has
@@ -1358,12 +1264,12 @@ The library's deletion (section 2.5) is the engine's, and the library refuses be
 refuse. Subsumption is not a retraction: a sticky value change of the row's subsumption cell, merged like an output
 (decision 1).
 
-**Contradiction.** A context created as a case stops when the contradiction relation gets a row: its stop flag is set
-when a merge applies the row (the merge after an iteration's search, or a write's flush) or the row becomes visible from
-an ancestor (at the context's creation, in a catch-up, or when its parent stops), the rebuild loop checks it, and a
-stopped case is skipped by the lift and disposed. A rule's write of the row is an ordinary write, so the search that
-derives it runs in full, and what that search interns and the ids it reserves stay in the graph's pools and id counter
-after the case is disposed (section 2.9).
+**Contradiction.** A context created with `ContextOptions.StopOnContradiction`, as a case's options set it, stops when
+the contradiction relation gets a row: its stop flag is set when a merge applies the row (the merge after an iteration's
+search, or a write's flush) or the row becomes visible from an ancestor (at the context's creation, in a catch-up, or
+when its parent stops), the rebuild loop checks it, and a stopped case is skipped by the lift and disposed. A rule's
+write of the row is an ordinary write, so the search that derives it runs in full, and what that search interns and the
+ids it reserves stay in the store's pools and id counter after the case is disposed.
 
 **What the root pays.** A few per-call, per-batch, per-probe and per-refinement branches, freeze-time and
 child-creation work (each child, a query's transient child and a case included, also allocates its empty container
@@ -1373,26 +1279,38 @@ row, per staged row or per find, and the root's allocation probes pin this.
 
 ### 3.9 Cases and lift
 
-`Relations/Cases` holds the engine side of case splits.
+`Relations/Cases` holds the engine's case splits and lift: cases opened under a context, each assuming its part, and a
+lift that writes into the context what holds in every live case. The library opens no case; the engine's own tests and
+benchmarks exercise them.
 
 - `MemberMap`: for a case, each class it merged over its parent's ids (its group root) with those members. Built from
   the overlay's member lists and cached by the overlay's version.
 - `Lifter`: lifts what holds in every live case into the parent, in rounds. Each round brings the parent and the cases
   up to date, drops contradictory cases, takes the live case with the fewest groups as the seed, stages the meet of the
   partitions (the unions every case agrees on) and the facts of every table in the lift spec (`LiftSpec`), and flushes
-  them into the parent at one epoch. To be complete, it also looks up ancestor rows by each merged class's winner, since
-  with loser-only marking those rows are never copied into a case. An equality of container ids in the parent's view is
-  withheld from the meet, since the cases reach it only by rebuilding the containers' contents equal, which the parent
-  keeps apart, and so is a row of an id output whose only common parent id rests on one. A container of classes a case
-  interned has an id local to the case, which stands for no parent id, so a row that names one is dropped, as a row
-  naming a class the case made is: a container the case's rules, writes or the constants of its split's assumptions
-  made, which the case interned in its own layers. A memo (`LiftSignature`) makes a lift over cases and a parent that
-  have not changed return at once.
+  them into the parent at one epoch: of a relation, the rows every live case holds; of a constructor, the terms over the
+  parent's classes every live case holds; of a function, the values every live case holds, joined by the table's case
+  join (`LiftTable`), or written only where the cases agree when it has none. Rounds repeat, since a term lifted in one
+  round can make the next round's facts expressible over the parent's classes, until a round writes nothing or the round
+  limit is reached; when every case is contradictory, the lift writes the contradiction into the parent. A row arrives
+  in the parent not subsumed, unless the parent subsumed it: a case's subsumption stops matching the row under its
+  assumption, which is no fact of the parent. To be complete, it also looks up ancestor rows by each merged class's
+  winner, since with loser-only marking those rows are never copied into a case. An equality of container ids in the
+  parent's view is withheld from the meet, since the cases reach it only by rebuilding the containers' contents equal,
+  which the parent keeps apart, and so is a row of an id output whose only common parent id rests on one. A container of
+  classes a case interned has an id local to the case, which stands for no parent id, so a row that names one is
+  dropped, as a row naming a class the case made is: a container the case's rules, writes or the constants of its
+  split's assumptions made, which the case interned in its own layers. A memo (`LiftSignature`) makes a lift over cases
+  and a parent that have not changed return at once. A lift is sound only when the cases cover the parent, every model
+  of the parent being a model of some case: that is the caller's obligation (a split source's, for `SplitDriver`), and
+  only a vacuous case may be dropped.
 - `CaseSet`: the cases of one split, created as cases, run, lifted and disposed together.
 - `SplitDriver`: one step of a split schedule. It asks its sources (`ISplitSource`) for split requests, skips requests a
   live record in the scope or an ancestor covers and requests over the limits, opens the cases, runs the in-case
   schedule (`ICaseSchedule`) in each with nested splits disabled and lifts (phase A), then runs it again with nested
-  splits enabled and lifts again if that changed something (phase B). Records live until the driver disposes them.
+  splits enabled and lifts again if that changed something (phase B). Records live until the driver disposes them. A
+  later step skips the requests they cover, but runs and lifts again the live records it opened, so that their cases
+  take in the scope's new facts, and a case those facts make vacuous is dropped.
 
 ### 3.10 Parallelism
 
@@ -1424,7 +1342,6 @@ own may together use more than the root's, since nothing bounds parallelism acro
 | Host reads | `TryLookup`, `Find`, `TableSize`, `ForEach` on the context |
 | Queries | a naive engine rule whose only action is a collector; in a frozen scope, run in a transient child |
 | `Freeze`, `CreateChild`, `Dispose` | the context's, with the plans the library asks the freeze to make |
-| Split steps, `CaseSet` | `SplitDriver` with a `RuleSplitSource` per split rule and a `ScheduleCaseRunner`; `CaseSet` and `Lifter` with the graph's `LiftSpec` |
 | Extraction | the on-demand `Extractor` over the context, through the graph's `ExtractionCatalog` |
 
 The path of one `Scope.Run`:
@@ -1441,8 +1358,6 @@ Scope.Run(schedule)                     enters the scope's ScopeGuard for the wh
         Database.MergeAll                 merge in stratum order
         Context.Rebuild                   restore congruence (and, in a child, hide and copy)
       RunStep, statistics               recorded in the RunReport
-    for each Split node:
-      SplitDriver.Step                  find requests, open cases, run inCase in each, lift
 ```
 
 A host write takes the same guard, plans its batch in `HostBatch`, stages it on the context and flushes; a read takes
@@ -1481,9 +1396,9 @@ congruence closure.
 ### 5.2 Differential tests
 
 Random programs run two or three ways, and every observation must agree, modulo renaming of class ids where ids may
-differ. A failing program prints itself (several harnesses shrink it first), and each family's seed count can be raised
-with an environment variable (`EGGNOG_SEEDS`, `EGGNOG_CONTEXT_SEEDS` and others, named in each class's
-documentation).
+differ; the case rules, which run one way, are held to their models instead. A failing program prints itself (several
+harnesses shrink it first), and each family's seed count can be raised with an environment variable (`EGGNOG_SEEDS`,
+`EGGNOG_CONTEXT_SEEDS` and others, named in each class's documentation).
 
 | Level | Programs | Compared against |
 |---|---|---|
@@ -1496,7 +1411,7 @@ documentation).
 | Lift (`Relations/Cases`) | random parents and cases (unions, rows, lattice values, terms, rule runs, vacuous cases) | the specification: after a lift the parent holds exactly what held in every live case, no more and no less |
 | Rule layer (`Differential`) | random rule-layer programs with host writes, runs and queries | three ways: semi-naive, naive twins, and a reference interpreter |
 | Scopes (`Differential`) | random scope trees with tags, frozen prefixes, local rules and scoped reads | the same program's literal encoding at one root, with contexts as data |
-| Splits (`Differential`) | random discriminated schemas and queries | the literal encoding with splits written as rules, and a model-based split oracle |
+| Case rules (`Differential`) | random discriminated schemas of the predicate test fixture and queries over them | a model-based oracle: what `PredicateTheory`'s case rules derive holds in every model of the program |
 
 Inheritance and parallelism have their own equivalence tests: watermark inheritance on and off must give equal views
 with no more matches, and serial and parallel runs must give the same facts. Concurrent children of a frozen context
@@ -1534,12 +1449,15 @@ production runs.
 - The public surface test fails on any change to the public API that `Surface/PublicSurface.txt` does not record.
 - Opt-in soaks and seed replays (about a dozen tests) are skipped unless their environment variable is set.
 - `Readme/ReadmeExampleTests` runs the code examples of the READMEs verbatim.
-- A theory of predicates over document paths (presence, forms, domains, types, numeric bounds, and the simplification
-  of predicates) is a shared test fixture under `Predicates/`, in two encodings. `PredicateTheory` uses scopes as the
-  contexts: frozen schema scopes, local rules compiled from a schema's declarations, and engine splits.
-  `ContextArgumentTheory` is the same theory in one flat graph, with contexts as data arguments, inheritance written as
-  rules and splits written as rules. Tests of splits, scopes, schedules, rendering, concurrency and diagnostics run
-  over it, and the split differentials use the context-argument encoding as the oracle for the scoped one.
+- A theory of predicates over document paths (presence, forms, domains, types, numeric bounds, and the simplification of
+  predicates) is a shared test fixture under `Predicates/`, in two encodings. `PredicateTheory` uses scopes as the
+  contexts: frozen schema scopes, local rules compiled from a schema's declarations, and case rules over set lattices,
+  which drop a value of a discriminator's domain whose branch's claims the scope rules out and derive what the branches
+  of every value left declare. `ContextArgumentTheory` is the same theory in one flat graph, with contexts as data
+  arguments and inheritance written as rules over them, but for its cases: it opens a context per value of a
+  discriminator and runs the whole theory there, so it derives what a case reaches through further rules, which the
+  scoped case rules, reading only what the branches declare, do not. Tests of scopes, rendering, concurrency and
+  diagnostics run over it, and a model-based oracle checks the scoped case rules (section 5.2).
 
 ---
 

@@ -24,8 +24,7 @@ namespace Eggnog
         public Schedule[] Steps { get; }
 
         /// <inheritdoc />
-        internal override bool Execute(ScheduleExecutor executor, Scope scope, int depth, bool inCase, bool splitsEnabled) =>
-            ExecuteAll(Steps, executor, scope, depth, inCase, splitsEnabled);
+        internal override bool Execute(ScheduleExecutor executor, Scope scope) => ExecuteAll(Steps, executor, scope);
 
         /// <inheritdoc />
         internal override void CollectSchedulerSteps(ICollection<RunWithSchedule> steps)
@@ -35,11 +34,10 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        internal override void Collect(ISet<Ruleset> rulesets, ICollection<Fact> conditions, ISet<SplitRule> splits, ISet<Ruleset> inCases,
-            bool inCase)
+        internal override void Collect(ISet<Ruleset> rulesets, ICollection<Fact> conditions)
         {
             foreach (var step in Steps)
-                step.Collect(rulesets, conditions, splits, inCases, inCase);
+                step.Collect(rulesets, conditions);
         }
 
         /// <summary>
@@ -48,15 +46,12 @@ namespace Eggnog
         /// <param name="steps">The steps.</param>
         /// <param name="executor">The run's executor.</param>
         /// <param name="scope">The scope.</param>
-        /// <param name="depth">The split depth.</param>
-        /// <param name="inCase">Whether the scope is a case.</param>
-        /// <param name="splitsEnabled">Whether split steps run.</param>
         /// <returns>Whether any step changed the scope.</returns>
-        internal static bool ExecuteAll(Schedule[] steps, ScheduleExecutor executor, Scope scope, int depth, bool inCase, bool splitsEnabled)
+        internal static bool ExecuteAll(Schedule[] steps, ScheduleExecutor executor, Scope scope)
         {
             var changed = false;
             foreach (var step in steps)
-                changed |= step.Execute(executor, scope, depth, inCase, splitsEnabled);
+                changed |= step.Execute(executor, scope);
 
             return changed;
         }

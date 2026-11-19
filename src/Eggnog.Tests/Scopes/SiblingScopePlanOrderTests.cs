@@ -100,7 +100,7 @@ namespace Eggnog.Tests.Scopes
                 return recorded;
             }
 
-            // Compile in order; index cases.Count is the discriminated schema, compiled with its split.
+            // Compile in order; index cases.Count is the discriminated schema, compiled with its case rules.
             var schemas = new Scope[cases.Count + 1];
             var compiled = 0;
             foreach (var i in order)
@@ -118,7 +118,6 @@ namespace Eggnog.Tests.Scopes
                     DiscriminatedSchema.Declare(c, schema);
                     var report = schema.Run(c.Facts);
                     Assert.True(report.Saturated);
-                    Assert.Equal(3, report.CasesOpened);
                     Record(report, "the discriminated schema");
                 }
 

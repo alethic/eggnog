@@ -196,43 +196,6 @@ namespace Eggnog.Tests.Graph
         }
 
         /// <summary>
-        /// A class a case returned is refused as disposed outside the case's subtree once the run that made the case
-        /// disposes it when it ends; the same class obtained from the scope itself stays usable.
-        /// </summary>
-        [Fact]
-        public void ACasesClassIsRefusedAfterTheRunThatMadeTheCase()
-        {
-            var c = new Predicates.Scoped.PredicateTheory(new EGraph());
-            c.Graph.Root.Freeze();
-            var scope = c.Graph.Root.CreateChild(c.Schema);
-            scope.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of(["a", "b"])), c.Discriminator.Of("kind"));
-            var q = scope.Make(c.StrEq.Of("kind", "a"));
-            Predicates.Pred? fromCase = null;
-            string? casePath = null;
-
-            scope.Run(Schedule.Split(c.SchemaSplit, c.Horn), new RunOptions
-            {
-                Observer = step =>
-                {
-                    if (step.Scope.IsCase && fromCase is null)
-                    {
-                        // A read from the observer: the class carries the case's origin.
-                        fromCase = step.Scope.Find(q);
-                        casePath = step.Scope.Path;
-                        Assert.True(step.Scope.AreEqual(fromCase.Value, q));
-                    }
-                },
-            });
-
-            Assert.NotNull(fromCase);
-            Assert.Empty(scope.Children);
-            var refused = Assert.Throws<ArgumentException>(() => scope.Find(fromCase.Value));
-            Assert.Contains($"came from scope '{casePath}', which is disposed", refused.Message, StringComparison.Ordinal);
-            Assert.Throws<ArgumentException>(() => scope.Union(fromCase.Value, q));
-            Assert.True(scope.AreEqual(q, scope.Find(q)));
-        }
-
-        /// <summary>
         /// A value made by a batch whose call was rejected, from another thread, is invalid afterwards: nothing of the
         /// batch is written, its <c>Make</c> calls included. A call that only fails leaves the value valid.
         /// </summary>
