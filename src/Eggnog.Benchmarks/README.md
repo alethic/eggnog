@@ -533,24 +533,44 @@ The app holds a copy of the fixture, in `Library/Predicates/` (namespace `Eggnog
 purpose rather than a link to the tests' files: the tests' fixture changes with the tests, and the copy stays as it is,
 so that a run on a later build asks the same theory the same queries as the baseline it is compared with. Its rules,
 rulesets, schedules, schemas, queries and expected answers are the fixture's; only the namespace, the checks (which
-throw `InvalidOperationException` where the tests assert) and the references to test classes differ, and
-`DiscriminatedSchema.AskWithCases` is the tests' query with the case rules. The tests compile the copy too:
-`BenchmarkFixtureCopyTests` (in `src/Eggnog.Tests/Predicates/Scoped/`) checks that it defines the same tables, rules
-(the schemas' local rules among them) and schedules, derives the same facts in every schema and query scope, gives
-every answer the tests' fixture gives, and that each case's check judges every query scope as the fixture's does. A
-deliberate change to the tests' fixture leaves the copy as it is and changes that test instead.
+throw `InvalidOperationException` where the tests assert) and the docs differ, and `DiscriminatedSchema.AskWithCases` is
+the tests' query with the case rules. The tests compile the copy too: `BenchmarkFixtureCopyTests` (in
+`src/Eggnog.Tests/Predicates/Scoped/`) checks that it defines the same tables, rules (the schemas' local rules among
+them) and schedules, as the library renders them, derives the same facts in every schema and query scope, gives every
+answer the tests' fixture gives, that each case's check judges every query scope as the fixture's does, and that
+compiling the schemas and asking each query take the same epochs and ids. Nothing renders which schedule a step runs, or
+the one `DiscriminatedSchema.Ask` builds where it runs it, so a schedule that reaches the same facts and answers in
+other steps shows only in those counts. A lambda renders as `<lambda>`, so the bodies of the theory's three lambdas show
+only in the facts, answers and counts of the corpus's runs. A deliberate change to the tests' fixture leaves the copy as
+it is and changes that test instead. The tests compile the corpus the classes build over the copy as well, and
+`PredicateCorpusTests` (in `src/Eggnog.Tests/Benchmarks/`) checks that it passes its own checks and that a wrong answer
+fails them.
 
 | Class | What it measures | Checks |
 | --- | --- | --- |
-| `PredicateQueryBenchmarks` | A per-request query of a compiled schema (`Ask`): a child of the query's frozen schema scope, the predicate made and assumed as the where clause, a saturating run, the answer checked, disposal, the way a service asks a question of a compiled schema. `Query` names the query: each case of `ScopedQueryCases` (13 values, `DeclaredFormLowers` to `IntegerInsideDomain`), each query of `DiscriminatedSchema` without the case rules, as the corpus asks them (6, `KindByKey` to `ExceptKindB`), and the same queries with the query's case rules, `PredicateTheory.Saturation` (6, `KindByKeyWithCases` to `ExceptKindBWithCases`); or `Corpus`, all 25 in that order in one invocation. | The setup asks every query and checks its answer: each case's result by the case's own check, and each discriminated-schema query's extraction, its rendering and its cost, against the assertion of `DiscriminatedSchemaTests` where it makes one (six of the twelve), otherwise against the extraction the engine gives, which no test asserts as a value. Every invocation checks its answer the same way. No query scope left alive, after the setup's invocation and at cleanup. |
-| `PredicateHostQueryBenchmarks` | A host query (`EGraph.DefineQuery`; the present paths whose types admit a string) on frozen scopes: defined before any schema scope is created and counted on the frozen discriminated schema (`CountOnFrozenSchema`), which runs it in a transient child; defined on the graph for one request and counted in a per-request child of that schema, then disposed with the child (`DefineInRequestChild`); and defined on the graph after its root is frozen, counted there once and disposed (`DefineOnFrozenRoot`), on a fresh graph each iteration of 4,096 invocations. `Rules` (0, 100, 1,000) adds global rules, defined before the root freezes, in a ruleset no schedule runs: every schema inherits them and no run executes or matches them; each registers one external function. A run shows whether a query's cost stays flat as the rules a frozen scope inherits grow. | The corpus's answers as above; the host query matches `kind`, `label`, `type` and `uid` in the discriminated schema and nothing at the empty root; a query defined after the root froze counts the one present string path of a child of the root made after the definition; every invocation checks its count (4, or 0 at the root); no scope left alive, after each iteration of `DefineOnFrozenRoot` and at cleanup. |
+| `PredicateQueryBenchmarks` | A per-request query of a compiled schema (`Ask`): a child of the query's frozen schema scope, the predicate made and assumed as the where clause, a saturating run, the answer checked, disposal, the way a service asks a question of a compiled schema. `Query` names the query: each case of `ScopedQueryCases` (13 values, `DeclaredFormLowers` to `IntegerInsideDomain`), each query of `DiscriminatedSchema` without the case rules, as the corpus asks them (6, `KindByKey` to `ExceptKindB`), and the same queries with the query's case rules, `PredicateTheory.Saturation` (6, `KindByKeyWithCases` to `ExceptKindBWithCases`); or `Corpus`, all 25 in that order in one invocation. | The setup checks that each value of `Query` asks the query it names, by the query's name, then asks every query and checks its answer: each case's result by the case's own check, and each discriminated-schema query's extraction, its rendering and its cost, against the assertion of `DiscriminatedSchemaTests` where it makes one (six of the twelve), otherwise against the extraction the engine gives, which no test asserts as a value. Every invocation checks its answer the same way. No query scope left alive, after the setup's invocation and at cleanup. |
+| `PredicateHostQueryBenchmarks` | A host query (`EGraph.DefineQuery`; the present paths whose types admit a string) on frozen scopes: defined before any schema scope is created and counted on the frozen discriminated schema (`CountOnFrozenSchema`), which runs it in a transient child; defined on the graph for one request and counted in a per-request child of that schema, then disposed with the child (`DefineInRequestChild`); and defined on the graph after its root is frozen, counted there once and disposed (`DefineOnFrozenRoot`), on a fresh graph each iteration of 4,096 invocations. `Rules` (0, 100, 1,000) adds global rules, defined before the root freezes, in a ruleset no schedule runs: every schema inherits them and no run executes or matches them; each registers one external function. A run shows whether a query's cost stays flat as the rules a frozen scope inherits grow. | The corpus's answers as above; the discriminated schema derived nothing from the unscheduled rules (the first of them would derive `mentioned(seq)` there); the host query matches `kind`, `label`, `type` and `uid` in the discriminated schema and nothing at the empty root; a query defined after the root froze counts the one present string path of a child of the root made after the definition; every invocation checks its count (4, or 0 at the root), and each iteration of `DefineOnFrozenRoot` that its invocations counted (the fresh graph's epochs grew, which a count of 0 cannot show); no per-request child left alive, after the setup's invocation of `DefineInRequestChild` and at cleanup. A count of 4 holds on the frozen schema as well, so no check tells that `DefineInRequestChild` counted in its child, and a query on a frozen scope runs in a transient child, which a scope does not list among its children (`Scope.Children`), so no check sees one left alive. |
 
-The measured region holds the query alone: the predicates' terms are built in the setup, as a service holds a
-request's predicate before it asks, and the steps are the corpus's own (`DiscriminatedSchema.Ask`, or `AskWithCases`).
-`Items` is the queries one invocation asks (1, or 25 for `Corpus`), so time over `Items` is the time per query; the
-host-query cases count no items. Both classes add the `Median` and `P95` columns, since a latency is read at its median
-and its tail. BenchmarkDotNet takes every statistic over iterations, and an iteration's figure is the mean of the
-invocations it ran, so `P95` is the tail of the iteration means, not of single queries. A query takes 16 to 18 ids and
+A check that fails in a setup, an invocation or an iteration's cleanup fails the case. BenchmarkDotNet only logs one
+that fails in a global cleanup ("Exception during GlobalCleanup!") and still reports the case's figures, so such a
+failure shows only in that line of the run's output and the next, which gives the check's message.
+
+The measured region of `PredicateQueryBenchmarks` holds the query and the check of its answer, and nothing else: the
+predicates' terms are built in the setup, as a service holds a request's predicate before it asks, and the steps are the
+corpus's own (`DiscriminatedSchema.Ask`, or `AskWithCases`). The check reads the query scope and, for most queries,
+extracts the predicate; a discriminated-schema query's extraction is rendered and compared with the one the setup
+checked. `Items` is the queries one invocation asks (1, or 25 for `Corpus`), so time over `Items` is the time per query;
+the host-query cases count no items. Both classes add the `Median` and `P95` columns (`LatencyColumnsAttribute`), since
+a latency is read at its median and its tail. BenchmarkDotNet takes every statistic over iterations, and an iteration's
+figure is the mean of the invocations it ran, so `P95` is the tail of the iteration means, not of single queries. Under
+the default job it first drops the iterations above the upper outlier fence of the iteration means (Q3 + 1.5 IQR), and
+takes every statistic, `Mean`, `Median`, `P95` and `Max` among them, over the rest (`--job dry` drops none). An isolated
+iteration slow enough to lie above the fence (a collection, an interruption) is dropped: it shows only in its own
+`WorkloadActual` line of the run's output (the `WorkloadResult` lines skip it) and in the hint on removed outliers
+printed after the summary. `P95` is interpolated between two of the kept means, so a slow stretch of a run that stays
+within the fence enters it only when it covers at least one in twenty of the iterations kept, and a stretch over about a
+quarter of the iterations or more raises the fence and is kept; a single slow iteration within the fence shows in `Mean`
+and `Max`, but in `P95` only in part, and not at all once 21 or more iterations are kept. A query takes 16 to 18 ids and
 11 to 34 epochs of the graph's limits (`EGraph.Usage`), and an invocation of a host-query case one epoch and no id; a
 run of the default job stays far below the limits.
 

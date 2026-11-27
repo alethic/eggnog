@@ -10,7 +10,7 @@ namespace Eggnog.Benchmarks.Library
     /// The latency of a per-request query of a compiled schema, on the predicate theory's query corpus: one query asked
     /// of its frozen schema scope in a child of it, the predicate made and assumed as the where clause, a saturating
     /// run, the answer checked, and the child disposed, the way a service asks a question of a compiled schema.
-    /// <see cref="Query"/> names the query, so each one is timed on its own, or asks the whole corpus in one invocation.
+    /// <see cref="Query"/> names the query, so each is timed on its own, or asks the whole corpus in one invocation.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -23,15 +23,17 @@ namespace Eggnog.Benchmarks.Library
     /// diagnoser's allocated bytes per operation are the bytes per invocation.
     /// </para>
     /// <para>
-    /// The measured region holds the query and nothing else: the predicate's term is built in the setup, as a service
-    /// holds a request's predicate before it asks, and the steps are the corpus's own
+    /// The measured region holds the query and the check of its answer, and nothing else: the predicate's term is built
+    /// in the setup, as a service holds a request's predicate before it asks, and the steps are the corpus's own
     /// (<see cref="Predicates.DiscriminatedSchema.Ask"/>, or <see cref="Predicates.DiscriminatedSchema.AskWithCases"/>
     /// for the queries with the case rules). Every invocation checks its answer as the corpus defines it: a case's
-    /// result by the case's own check (<see cref="Predicates.ScopedQueryCase.Holds"/>), a discriminated-schema query's
-    /// by its extraction, compared with the rendering and cost the setup checked. The setup builds the whole corpus and
-    /// checks every case's result and every extraction, with and without the case rules (<see cref="PredicateCorpus"/>),
-    /// then runs one invocation and checks that it left no scope alive; the cleanup checks that no query scope outlived
-    /// its invocation.
+    /// result by the case's own check (<see cref="Predicates.ScopedQueryCase.Holds"/>), which reads the query scope and
+    /// for most cases extracts, a discriminated-schema query's by its extraction, rendered and compared with the
+    /// rendering and cost the setup checked. The setup builds the whole corpus, checks that each value of
+    /// <see cref="PredicateQuery"/> asks the query it names, and checks every case's result and every extraction, with
+    /// and without the case rules (<see cref="PredicateCorpus"/>), then runs one invocation and checks that it left no
+    /// scope alive; the cleanup checks that no query scope outlived its invocation, though BenchmarkDotNet only logs a
+    /// failure there.
     /// </para>
     /// <para>
     /// Each query takes 16 to 18 ids and 11 to 34 epochs of the graph's limits (<see cref="EGraph.Usage"/>), which a

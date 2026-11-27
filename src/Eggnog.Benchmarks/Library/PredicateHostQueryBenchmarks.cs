@@ -52,11 +52,17 @@ namespace Eggnog.Benchmarks.Library
     /// frees the same.
     /// </para>
     /// <para>
-    /// The setup checks every answer of the corpus; that the host query matches exactly the four expected paths of the
-    /// discriminated schema and none at the root; that a query defined after the root froze matches in a child of the
-    /// root made after the definition; and one invocation of each benchmark. Every invocation checks its count; the
-    /// iteration cleanup checks that the fresh root has no live child, and the global cleanup that no schema has one.
-    /// The class is not sealed because BenchmarkDotNet generates a class that derives from it.
+    /// The setup checks every answer of the corpus; that the discriminated schema derived nothing from the unscheduled
+    /// rules, the first of which would derive <c>mentioned(seq)</c> there; that the host query matches exactly the four
+    /// expected paths of the discriminated schema and none at the root; that a query defined after the root froze
+    /// matches in a child of the root made after the definition; and one invocation of each benchmark. Every invocation
+    /// checks its count. A count of none on the empty frozen root would hold as well if no count ran, so the iteration
+    /// cleanup checks that the iteration's invocations counted there: the fresh graph's epochs grew. A count of four
+    /// holds as well on the frozen schema as in a child of it, so no check tells where
+    /// <see cref="DefineInRequestChild"/> counted. The global cleanup checks that no schema has a live child, which
+    /// shows a per-request child left alive, though BenchmarkDotNet only logs its failure; the transient child a query
+    /// on a frozen scope runs in is not listed among the scope's children (<see cref="Scope.Children"/>), so no check
+    /// sees one left alive. The class is not sealed because BenchmarkDotNet generates a class that derives from it.
     /// </para>
     /// </remarks>
     [LatencyColumns]
@@ -80,6 +86,7 @@ namespace Eggnog.Benchmarks.Library
         PredicateCorpus? corpus;
         Query? query;
         PredicateTheory? fresh;
+        long freshEpochs;
 
         /// <summary>
         /// Gets or sets the number of global rules the graph defines beyond the theory's, before its root freezes, in a
@@ -89,19 +96,25 @@ namespace Eggnog.Benchmarks.Library
         public int Rules { get; set; }
 
         /// <summary>
-        /// Builds and checks the corpus, with the host query and the unscheduled rules defined before its schemas, then
-        /// checks the host query's matches and one invocation of each benchmark; builds a fresh frozen root, as every
-        /// iteration of <see cref="DefineOnFrozenRoot"/> does, and checks that a query defined on it matches in a child
-        /// of it made after the definition.
+        /// Builds and checks the corpus, with the host query and the unscheduled rules defined before its schemas, and
+        /// checks that the discriminated schema derived nothing from the unscheduled rules; then checks the host query's
+        /// matches and one invocation of each benchmark; builds a fresh frozen root, as every iteration of
+        /// <see cref="DefineOnFrozenRoot"/> does, and checks that a query defined on it matches in a child of it made
+        /// after the definition.
         /// </summary>
-        /// <exception cref="InvalidOperationException">A schema or a query of the corpus failed its check, the host
-        /// query matches other paths, a query defined on the frozen root matches wrongly, or a benchmark's count is
-        /// wrong or left a scope alive.</exception>
+        /// <exception cref="InvalidOperationException">A schema or a query of the corpus failed its check, a schema's
+        /// compilation ran the unscheduled rules, the host query matches other paths, a query defined on the frozen root
+        /// matches wrongly, or a benchmark's count is wrong, did not run, or left a per-request child alive.</exception>
         [GlobalSetup]
         public void GlobalSetup()
         {
             var rules = Rules;
             corpus = new PredicateCorpus(c => query = DefineBeforeFreeze(c, rules));
+
+            // The first unscheduled rule matches seq, whose lower bound in the discriminated schema is 1, and no rule of
+            // the theory derives mentioned(seq) there: the row exists only if the schema's compilation ran them.
+            if (corpus.Discriminated.Check(corpus.Theory.Mentioned.Of("seq")))
+                throw new InvalidOperationException("The discriminated schema holds mentioned(seq): its compilation ran the unscheduled rules.");
 
             var p = (Var<string>)query!.Variables[0];
             var matched = new List<string>();
@@ -123,13 +136,14 @@ namespace Eggnog.Benchmarks.Library
 
             IterationSetup();
             DefineOnFrozenRoot();
-            CheckDefinedOnFrozenRootMatches(fresh!);
             IterationCleanup();
+            CheckDefinedOnFrozenRootMatches(fresh!);
         }
 
         /// <summary>
         /// Builds the fresh graph an iteration of <see cref="DefineOnFrozenRoot"/> runs on: the theory, the host query
-        /// and the unscheduled rules, then the empty root frozen.
+        /// and the unscheduled rules, then the empty root frozen; and notes the epochs the graph has used
+        /// (<see cref="EGraph.Usage"/>), for the iteration cleanup.
         /// </summary>
         [IterationSetup(Target = nameof(DefineOnFrozenRoot))]
         public void IterationSetup()
@@ -138,6 +152,7 @@ namespace Eggnog.Benchmarks.Library
             DefineBeforeFreeze(c, Rules);
             c.Graph.Root.Freeze();
             fresh = c;
+            freshEpochs = c.Graph.Usage.Epochs;
         }
 
         /// <summary>
@@ -198,19 +213,21 @@ namespace Eggnog.Benchmarks.Library
         }
 
         /// <summary>
-        /// Checks that no invocation of the iteration left a scope alive under the fresh root.
+        /// Checks that the iteration's invocations counted on the fresh root, which their count of none cannot show:
+        /// the graph's epochs grew since the iteration setup, as a count takes one and a definition or a disposal none.
         /// </summary>
-        /// <exception cref="InvalidOperationException">The fresh root has a live child.</exception>
+        /// <exception cref="InvalidOperationException">The fresh graph's epochs did not grow.</exception>
         [IterationCleanup(Target = nameof(DefineOnFrozenRoot))]
         public void IterationCleanup()
         {
-            var children = fresh!.Graph.Root.Children.Count;
-            if (children != 0)
-                throw new InvalidOperationException($"The fresh root has {children} live children.");
+            if (fresh!.Graph.Usage.Epochs == freshEpochs)
+                throw new InvalidOperationException("No invocation of the iteration counted on the fresh root: its graph's epochs did not grow.");
         }
 
         /// <summary>
-        /// Checks that no invocation left a scope alive in the corpus.
+        /// Checks that no invocation of <see cref="DefineInRequestChild"/> left its per-request child alive: no schema
+        /// has a live child. A query on a frozen scope runs in a transient child, which a scope does not list among its
+        /// children, so this cannot see one left alive.
         /// </summary>
         /// <exception cref="InvalidOperationException">A schema has a live child, or the root has one that is not a
         /// schema.</exception>

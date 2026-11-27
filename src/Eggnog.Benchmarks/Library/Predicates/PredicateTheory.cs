@@ -24,13 +24,13 @@ namespace Eggnog.Benchmarks.Library.Predicates
     /// corpus (<see cref="ScopedQueryCases"/>, <see cref="DiscriminatedSchema"/>), for the query-latency benchmarks
     /// (<c>PredicateQueryBenchmarks</c>, <c>PredicateHostQueryBenchmarks</c>). It is a copy on purpose, not a link to
     /// the tests' files: those change with the tests, and this one stays as it is, so that a benchmark run on a later
-    /// build asks the same theory the same queries as the baseline it is compared with. Its rules, rulesets,
-    /// schedules, schemas, queries and expected answers are the fixture's; only its namespace, its checks, which throw
-    /// <see cref="System.InvalidOperationException"/> where the tests assert, and its references to test classes
-    /// differ, and <see cref="DiscriminatedSchema.AskWithCases"/> is the tests' own query with the case rules.
-    /// <c>BenchmarkFixtureCopyTests</c>, in the tests, compiles these files and checks that they define, derive and
-    /// answer what the tests' fixture does; a deliberate change to the tests' fixture leaves these files as they are
-    /// and changes that test instead.
+    /// build asks the same theory the same queries as the baseline it is compared with. Its rules, rulesets, schedules,
+    /// schemas, queries and expected answers are the fixture's; only its namespace, its checks, which throw
+    /// <see cref="System.InvalidOperationException"/> where the tests assert, and its docs differ, and
+    /// <see cref="DiscriminatedSchema.AskWithCases"/> is the tests' own query with the case rules. The tests compile
+    /// these files too, and <c>BenchmarkFixtureCopyTests</c> compares what they define, as the library renders it,
+    /// derive and answer, and the epochs and ids their runs take, with the tests' fixture; a deliberate change to the
+    /// tests' fixture leaves these files as they are and changes that test instead.
     /// </remarks>
     public sealed partial class PredicateTheory
     {

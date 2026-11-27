@@ -2,16 +2,17 @@ namespace Eggnog.Benchmarks.Library
 {
 
     /// <summary>
-    /// The query <see cref="PredicateQueryBenchmarks"/> asks: one query of the predicate theory's corpus, or all of
-    /// them. Public because benchmark parameters are.
+    /// The query <c>PredicateQueryBenchmarks</c> asks: one query of the predicate theory's corpus, or all of them.
+    /// Public because benchmark parameters are.
     /// </summary>
     /// <remarks>
     /// The corpus is, in this order: the cases of <see cref="Predicates.ScopedQueryCases.All"/>, each asked of its own
     /// schema; the queries of <see cref="Predicates.DiscriminatedSchema.Queries"/>, asked of the discriminated schema
     /// without the case rules, as the corpus asks them (<see cref="Predicates.DiscriminatedSchema.Ask"/>); and the same
     /// queries with the query's case rules (<see cref="Predicates.DiscriminatedSchema.AskWithCases"/>). The values
-    /// before <see cref="Corpus"/> follow that order. Each name has at most 20 characters, the width of
-    /// BenchmarkDotNet's parameter column, which shortens a longer value in the summary and in the exported reports.
+    /// before <see cref="Corpus"/> follow that order, and <see cref="PredicateCorpus"/> checks that each asks the query
+    /// it names. Each name has at most 20 characters, the width of BenchmarkDotNet's parameter column, which shortens a
+    /// longer value in the summary and in the exported reports.
     /// </remarks>
     public enum PredicateQuery
     {

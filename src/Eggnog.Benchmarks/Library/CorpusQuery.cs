@@ -15,7 +15,7 @@ namespace Eggnog.Benchmarks.Library
     /// <see cref="Ask"/> is the whole query, as the corpus asks it and as a service asks a question of a compiled
     /// schema: a child of the schema, the predicate made and assumed as the where clause, a saturating run, the check
     /// or the extraction, and disposal. The term is built once, here, rather than at each ask, as a service holds the
-    /// predicate of a request before it asks, so that nothing but the query is measured.
+    /// predicate of a request before it asks, so that nothing but the query and the check of its answer is measured.
     /// </remarks>
     internal sealed class CorpusQuery
     {

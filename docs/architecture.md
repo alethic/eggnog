@@ -1380,9 +1380,9 @@ production runs.
   scoped case rules, reading only what the branches declare, do not. Tests of scopes, rendering, concurrency and
   diagnostics run over it, and a model-based oracle checks the scoped case rules (section 5.2). The benchmarks hold a
   copy of `PredicateTheory` and its query corpus, on which they time queries on frozen scopes, and
-  `BenchmarkFixtureCopyTests` checks that the copy defines, derives and answers what the fixture does. A deliberate
-  change to the fixture leaves the copy as it is, so that its timings compare across builds, and changes that test
-  instead (section 6).
+  `BenchmarkFixtureCopyTests` compares the copy with the fixture: what each defines, as the library renders it,
+  derives and answers, and the epochs and ids each run takes. A deliberate change to the fixture leaves the copy as
+  it is, so that its timings compare across builds, and changes that test instead (section 6).
 
 ---
 

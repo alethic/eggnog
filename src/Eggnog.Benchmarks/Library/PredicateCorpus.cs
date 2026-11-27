@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 using Eggnog.Benchmarks.Library.Predicates;
 
@@ -25,11 +26,64 @@ namespace Eggnog.Benchmarks.Library
     /// that does not compare.
     /// </para>
     /// <para>
+    /// Building it also checks that each value of <see cref="PredicateQuery"/> asks the query it names, by the query's
+    /// name (<see cref="CorpusQuery.Name"/>): a case's, or a discriminated-schema query's predicate, with or without the
+    /// case rules. Tied to the corpus only by its position, a value would time another query, unchecked, once the values
+    /// or the corpus were reordered, and a comparison would set that time against the baseline's for the value.
+    /// </para>
+    /// <para>
     /// The graph is serial (<see cref="EGraphOptions.Default"/>), so extraction ties break the same way at every run.
     /// </para>
     /// </remarks>
     internal sealed class PredicateCorpus
     {
+
+        /// <summary>
+        /// The predicates of <see cref="DiscriminatedSchema.Queries"/>, in its order, as they render.
+        /// </summary>
+        static readonly string[] predicates =
+        [
+            $"(And (StrEq \"kind\" \"b\") (UuidEq \"body.key\" \"{DiscriminatedSchema.Key}\"))",
+            $"(And (Or (StrEq \"kind\" \"a\") (StrEq \"kind\" \"b\")) (UuidEq \"body.ref\" \"{DiscriminatedSchema.Ref}\"))",
+            $"(Or (And (StrEq \"kind\" \"a\") (UuidEq \"body.ref\" \"{DiscriminatedSchema.Ref}\")) (And (StrEq \"kind\" \"b\") (UuidEq \"body.ref\" \"{DiscriminatedSchema.Ref}\")))",
+            $"(And (And (Or (StrEq \"kind\" \"a\") (StrEq \"kind\" \"b\")) (UuidEq \"body.ref\" \"{DiscriminatedSchema.Ref}\")) (And (BoolTrue \"flag\") (InstantGt \"meta.updated\" \"{DiscriminatedSchema.Since}\")))",
+            "(And (StrEq \"type\" \"Record\") (Or (StrEq \"kind\" \"a\") (Or (StrEq \"kind\" \"b\") (StrEq \"kind\" \"c\"))))",
+            $"(And (Not (StrEq \"kind\" \"b\")) (UuidEq \"body.ref\" \"{DiscriminatedSchema.Ref}\"))",
+        ];
+
+        /// <summary>
+        /// The query each value of <see cref="PredicateQuery"/> before <see cref="PredicateQuery.Corpus"/> names, by the
+        /// query's name (<see cref="CorpusQuery.Name"/>): a case's name, or a discriminated-schema query's predicate,
+        /// followed by " with the case rules" for the queries that run them.
+        /// </summary>
+        static readonly (PredicateQuery Query, string Name)[] named =
+        [
+            (PredicateQuery.DeclaredFormLowers, "a declared stored form lowers the UUID comparison"),
+            (PredicateQuery.NoDiscriminator, "without the discriminator nothing is proven and nothing lowers"),
+            (PredicateQuery.UnloweredDisjunction, "without the case rules, horn and lattice rules alone do not lower a disjunction"),
+            (PredicateQuery.RefusedValueGuard, "a domain less a refused value proves the guard"),
+            (PredicateQuery.UndiscriminatedUnion, "without the case rules, the branches of an undiscriminated union never meet"),
+            (PredicateQuery.BeyondDeclaredBound, "a comparison beyond a declared bound is false"),
+            (PredicateQuery.InsideDeclaredRange, "a bound inside the declared range is left alone"),
+            (PredicateQuery.DeclaredTypeExact, "a declared type makes a weakened ordering comparison exact"),
+            (PredicateQuery.NoDeclaredType, "without a declared type the comparison stays weakened"),
+            (PredicateQuery.DeclaredTautology, "a declared tautology is deleted"),
+            (PredicateQuery.NoPresenceClaim, "without a presence claim the comparison stays"),
+            (PredicateQuery.IntegerOutsideDomain, "an integer outside a declared domain is false"),
+            (PredicateQuery.IntegerInsideDomain, "an integer inside the declared domain is left alone"),
+            (PredicateQuery.KindByKey, predicates[0]),
+            (PredicateQuery.KindsByRef, predicates[1]),
+            (PredicateQuery.RefPerKind, predicates[2]),
+            (PredicateQuery.Flagged, predicates[3]),
+            (PredicateQuery.EveryKind, predicates[4]),
+            (PredicateQuery.ExceptKindB, predicates[5]),
+            (PredicateQuery.KindByKeyWithCases, predicates[0] + " with the case rules"),
+            (PredicateQuery.KindsByRefWithCases, predicates[1] + " with the case rules"),
+            (PredicateQuery.RefPerKindWithCases, predicates[2] + " with the case rules"),
+            (PredicateQuery.FlaggedWithCases, predicates[3] + " with the case rules"),
+            (PredicateQuery.EveryKindWithCases, predicates[4] + " with the case rules"),
+            (PredicateQuery.ExceptKindBWithCases, predicates[5] + " with the case rules"),
+        ];
 
         /// <summary>
         /// Each discriminated-schema query's extraction without the query's case rules, in the order of
@@ -67,9 +121,10 @@ namespace Eggnog.Benchmarks.Library
         /// </summary>
         /// <param name="define">Definitions made in the graph after the theory's, while the root is writable and before
         /// any schema scope is created; <c>null</c> for none.</param>
-        /// <exception cref="InvalidOperationException">The corpus does not have the queries <see cref="PredicateQuery"/>
-        /// names; a schema's or a query's run did not saturate or left a child; a case's result does not hold; an
-        /// extraction is another term or has another cost; or a query left its scope alive.</exception>
+        /// <exception cref="InvalidOperationException">The corpus does not have as many cases and discriminated-schema
+        /// queries as <see cref="PredicateQuery"/> names, or a value of it does not ask the query it names; a schema's or
+        /// a query's run did not saturate or left a child; a case's result does not hold; an extraction is another term
+        /// or has another cost; or a query left its scope alive.</exception>
         public PredicateCorpus(Action<PredicateTheory>? define = null)
         {
             Theory = new PredicateTheory(new EGraph());
@@ -91,6 +146,13 @@ namespace Eggnog.Benchmarks.Library
                 queries.Add(CorpusQuery.ForDiscriminated(Theory, Discriminated, terms[i], true, withCases[i].Extraction, withCases[i].Cost));
 
             Queries = queries.ToArray();
+            if (named.Select(entry => entry.Query).Order().SequenceEqual(Enum.GetValues<PredicateQuery>().Where(value => value != PredicateQuery.Corpus)) == false)
+                throw new InvalidOperationException($"The names of the queries do not name every value of {nameof(PredicateQuery)} but {nameof(PredicateQuery.Corpus)} once.");
+
+            foreach (var (value, name) in named)
+                if (Queries[(int)value].Name != name)
+                    throw new InvalidOperationException($"{nameof(PredicateQuery)}.{value} asks the query {Queries[(int)value].Name}; it names {name}.");
+
             foreach (var query in Queries)
                 query.Ask();
 
