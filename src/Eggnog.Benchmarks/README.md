@@ -13,9 +13,10 @@ library through its public API (`Library/`, namespace `Eggnog.Benchmarks.Library
   row a child catches up with under a busy parent, beside what a deep copy of the root costs (see
   [The context benchmarks](#the-context-benchmarks));
 - the library against the egglog command line, on a port of egglog's `math-microbenchmark.egg`, and the library's own
-  paths: transient query scopes and idle local rules, and the library's work per run at the root. They use the public
-  API, except the engine baseline of `LibraryRunOverheadBenchmarks` (see
-  [The library benchmarks](#the-library-benchmarks)).
+  paths: transient query scopes and idle local rules, the library's work per run at the root, and the latency of
+  queries on frozen scopes over a copy of the tests' predicate theory and its query corpus (`PredicateQueryBenchmarks`,
+  `PredicateHostQueryBenchmarks`). They use the public API, except the engine baseline of
+  `LibraryRunOverheadBenchmarks` (see [The library benchmarks](#the-library-benchmarks)).
 
 Benchmarks with a result to check check it, against a reference model or against known counts, so a broken engine
 fails the run instead of producing a number.
@@ -516,8 +517,77 @@ once with `DOTNET_gcServer=0`, since a service may run either collector.
 Whether sibling schema scopes compiled in either order run different plans is checked in the tests, not here:
 `SiblingScopePlanOrderTests` (in `src/Eggnog.Tests/Scopes/`) compiles the fixed corpus of `ScopedQueryCases.CompileAll`
 on `PredicateTheory` in both orders, with recorded plans, checks that each order plans every global rule once and
-shares that plan with every scope, and prints the plan of every global rule. Timing those
-queries here needs the fixture in this app.
+shares that plan with every scope, and prints the plan of every global rule. Those queries are timed here, on the
+app's copy of the fixture ([Query latency on the predicate theory](#query-latency-on-the-predicate-theory)).
+
+### Query latency on the predicate theory
+
+`PredicateQueryBenchmarks` and `PredicateHostQueryBenchmarks` time queries on frozen scopes over the tests' predicate
+theory: `PredicateTheory`, a theory of predicates over document paths with frozen schema scopes, branch rules local to
+a schema and case rules over set lattices, and its query corpus, the 13 cases of `ScopedQueryCases` (each with a schema
+of its own) and the six queries of `DiscriminatedSchema` (a schema discriminated by `kind`). `PredicateCorpus` builds
+the corpus in a serial graph: the theory, the empty root frozen, then the 14 schemas compiled and frozen under it as
+siblings. Only the public API is used.
+
+The app holds a copy of the fixture, in `Library/Predicates/` (namespace `Eggnog.Benchmarks.Library.Predicates`), on
+purpose rather than a link to the tests' files: the tests' fixture changes with the tests, and the copy stays as it is,
+so that a run on a later build asks the same theory the same queries as the baseline it is compared with. Its rules,
+rulesets, schedules, schemas, queries and expected answers are the fixture's; only the namespace, the checks (which
+throw `InvalidOperationException` where the tests assert) and the references to test classes differ, and
+`DiscriminatedSchema.AskWithCases` is the tests' query with the case rules. The tests compile the copy too:
+`BenchmarkFixtureCopyTests` (in `src/Eggnog.Tests/Predicates/Scoped/`) checks that it defines the same tables, rules
+(the schemas' local rules among them) and schedules, derives the same facts in every schema and query scope, gives
+every answer the tests' fixture gives, and that each case's check judges every query scope as the fixture's does. A
+deliberate change to the tests' fixture leaves the copy as it is and changes that test instead.
+
+| Class | What it measures | Checks |
+| --- | --- | --- |
+| `PredicateQueryBenchmarks` | A per-request query of a compiled schema (`Ask`): a child of the query's frozen schema scope, the predicate made and assumed as the where clause, a saturating run, the answer checked, disposal, the way a service asks a question of a compiled schema. `Query` names the query: each case of `ScopedQueryCases` (13 values, `DeclaredFormLowers` to `IntegerInsideDomain`), each query of `DiscriminatedSchema` without the case rules, as the corpus asks them (6, `KindByKey` to `ExceptKindB`), and the same queries with the query's case rules, `PredicateTheory.Saturation` (6, `KindByKeyWithCases` to `ExceptKindBWithCases`); or `Corpus`, all 25 in that order in one invocation. | The setup asks every query and checks its answer: each case's result by the case's own check, and each discriminated-schema query's extraction, its rendering and its cost, against the assertion of `DiscriminatedSchemaTests` where it makes one (six of the twelve), otherwise against the extraction the engine gives, which no test asserts as a value. Every invocation checks its answer the same way. No query scope left alive, after the setup's invocation and at cleanup. |
+| `PredicateHostQueryBenchmarks` | A host query (`EGraph.DefineQuery`; the present paths whose types admit a string) on frozen scopes: defined before any schema scope is created and counted on the frozen discriminated schema (`CountOnFrozenSchema`), which runs it in a transient child; defined on the graph for one request and counted in a per-request child of that schema, then disposed with the child (`DefineInRequestChild`); and defined on the graph after its root is frozen, counted there once and disposed (`DefineOnFrozenRoot`), on a fresh graph each iteration of 4,096 invocations. `Rules` (0, 100, 1,000) adds global rules, defined before the root freezes, in a ruleset no schedule runs: every schema inherits them and no run executes or matches them; each registers one external function. A run shows whether a query's cost stays flat as the rules a frozen scope inherits grow. | The corpus's answers as above; the host query matches `kind`, `label`, `type` and `uid` in the discriminated schema and nothing at the empty root; a query defined after the root froze counts the one present string path of a child of the root made after the definition; every invocation checks its count (4, or 0 at the root); no scope left alive, after each iteration of `DefineOnFrozenRoot` and at cleanup. |
+
+The measured region holds the query alone: the predicates' terms are built in the setup, as a service holds a
+request's predicate before it asks, and the steps are the corpus's own (`DiscriminatedSchema.Ask`, or `AskWithCases`).
+`Items` is the queries one invocation asks (1, or 25 for `Corpus`), so time over `Items` is the time per query; the
+host-query cases count no items. Both classes add the `Median` and `P95` columns, since a latency is read at its median
+and its tail. BenchmarkDotNet takes every statistic over iterations, and an iteration's figure is the mean of the
+invocations it ran, so `P95` is the tail of the iteration means, not of single queries. A query takes 16 to 18 ids and
+11 to 34 epochs of the graph's limits (`EGraph.Usage`), and an invocation of a host-query case one epoch and no id; a
+run of the default job stays far below the limits.
+
+`DefineOnFrozenRoot` starts every iteration from a fresh graph (`[IterationSetup]`): the theory, the host query and the
+unscheduled rules, its empty root frozen, with no schema. An iteration runs a fixed 4,096 invocations
+(`[InvocationCount]`), so that its mean is taken over the same definitions on a fresh frozen root whatever an invocation
+costs and whatever a disposal frees, and does not depend on the invocations that ran before it. A query defined on the
+frozen root is allowed. It lowers to one engine rule and registers three external functions: its filter's call, its
+match collector, and the panic function of the collector's call. Its disposal frees them and its name; from an
+iteration's second invocation on, the rule and the functions take the ids the previous disposal freed, and the query is
+defined again under the same name, so an invocation that left its query alive fails the next one. Per invocation only
+counters grow: the graph's numbering of rule descriptions and the generation of the rule id taken, by one each, and the
+graph's epochs, by one for the count. `DefineInRequestChild` makes the same definition and disposal on the graph.
+
+Each registration and each removal copies the graph's registry of external functions whole, six copies an invocation,
+so the bytes of a definition and a disposal grow with the functions the graph has registered, and so with `Rules`.
+BenchmarkDotNet's memory diagnoser counts about 43.1 KB per `DefineOnFrozenRoot` invocation at `Rules` 0, 48.4 KB at
+100 and 95.8 KB at 1,000, over an iteration (net10.0, `--job dry`). The allocation probe, with
+`--per-thread --types 0 --repetitions 20` on net10.0, counts a median of 17,568 B per `CountOnFrozenSchema` invocation
+at every `Rules`, and 58,616 B, 64,040 B and 112,616 B per `DefineInRequestChild` invocation, with a few invocations
+allocating up to about 7.5 KB more. The probe runs the iteration setup before every invocation, so for
+`DefineOnFrozenRoot` it counts the first definition on a fresh root, which allocates more: a median of 58,144 B to
+58,368 B at `Rules` 0, 68,952 B to 69,176 B at 100 and 166,408 B at 1,000, the first two moving by 224 B from run to
+run.
+
+Build the app in Release (see [Running](#running)) and run each class in its own process, as a comparison does
+([The method](#the-method)), with `--allStats` so the exported reports carry every statistic:
+
+```
+src/Eggnog.Benchmarks/bin/Release/net10.0/Eggnog.Benchmarks.exe --filter *.PredicateQueryBenchmarks.* --allStats --artifacts <dir>
+src/Eggnog.Benchmarks/bin/Release/net10.0/Eggnog.Benchmarks.exe --filter *.PredicateHostQueryBenchmarks.* --allStats --artifacts <dir>
+```
+
+`--filter "*PredicateQueryBenchmarks.Ask(Query: Corpus)"` runs the corpus alone. The classes have 26 and 9 cases;
+under the default job a case takes about 15 s, so one launch of each class takes about 9-11 minutes in all, and the
+method's four launches of each (its launch matrix for library classes) about 35-45 minutes. One launch of each could
+take up to about 45 minutes if every case ran to BenchmarkDotNet's iteration limits.
 
 ## The allocation probe
 

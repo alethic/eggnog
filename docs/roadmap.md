@@ -132,7 +132,10 @@ of them fall on the same side of the gate; otherwise it is inconclusive, up to f
   within 5%. It needs no idle machine.
 - **Library paths.** `QueryScopeBenchmarks`, `LibraryRunOverheadBenchmarks` and `BusyParentCatchUpBenchmarks` check
   their results and wait for the campaign's times. Catch-up's share of a workload's rows is left to measure, and so is
-  its time per examined row (`BusyParentCatchUpBenchmarks`).
+  its time per examined row (`BusyParentCatchUpBenchmarks`). `PredicateQueryBenchmarks` and
+  `PredicateHostQueryBenchmarks`, the latency of queries on frozen scopes over the benchmarks' copy of the predicate
+  fixture, check their results and wait for a first timing on an idle machine, the baseline later builds are compared
+  with.
 - **Library run overhead.** The library adds about 320 B per rule plus about 1 KB per run over the engine. A library
   `Run` must stay within 1.05x of the engine's `RunRules` at 10 rules, or its per-run bookkeeping is trimmed.
 
