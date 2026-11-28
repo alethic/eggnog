@@ -1,0 +1,170 @@
+using System;
+
+namespace Eggnog.Benchmarks.Library.Predicates
+{
+
+    /// <summary>
+    /// A schema of documents discriminated by <c>kind</c>, compiled into a schema scope of
+    /// <see cref="PredicateTheory"/> as facts assumed in the schema and branch rules local to it. <c>kind</c> is
+    /// present and holds a, b or c: the schema is a <c>oneOf</c> discriminated by an enum. Documents of kinds a and b
+    /// carry a <c>body.ref</c> stored as a canonical lowercase UUID, documents of kind b also a <c>body.key</c>, and
+    /// documents of kind c a <c>body.pos</c> instead. The timestamps under <c>meta</c> are stored as fixed-width
+    /// instants.
+    /// </summary>
+    public static class DiscriminatedSchema
+    {
+
+        /// <summary>
+        /// The UUID the queries compare <c>body.ref</c> with.
+        /// </summary>
+        public const string Ref = "11111111-1111-1111-1111-111111111111";
+
+        /// <summary>
+        /// The UUID the queries compare <c>body.key</c> with.
+        /// </summary>
+        public const string Key = "22222222-2222-2222-2222-222222222222";
+
+        /// <summary>
+        /// The instant the update-time comparison asks for.
+        /// </summary>
+        public const string Since = "2026-08-02T12:00:00.000Z";
+
+        /// <summary>
+        /// Compiles the schema under the graph's frozen root with the theory's <see cref="PredicateTheory.Facts"/>:
+        /// horn and lattice rules, and the schema's case rules over its discriminator <c>kind</c> (a, b, c), by which
+        /// nothing more holds, since no claim is declared by all three branches, then the copies of its facts; then
+        /// freezes it.
+        /// </summary>
+        /// <param name="c">The theory, whose graph's root is frozen.</param>
+        /// <returns>The frozen schema scope.</returns>
+        /// <exception cref="InvalidOperationException">The schema's run did not saturate, or left a child.</exception>
+        public static Scope Compile(PredicateTheory c)
+        {
+            var schema = c.Graph.Root.CreateChild();
+            Declare(c, schema);
+            var compiled = schema.Run(c.Facts);
+            if (compiled.Saturated == false)
+                throw new InvalidOperationException("The discriminated schema did not saturate.");
+
+            if (schema.Children.Count != 0)
+                throw new InvalidOperationException($"The discriminated schema's run left {schema.Children.Count} children.");
+
+            schema.Freeze();
+            return schema;
+        }
+
+        /// <summary>
+        /// Declares the schema's facts and branch rules in a writable schema scope.
+        /// </summary>
+        /// <param name="c">The theory.</param>
+        /// <param name="schema">The schema scope.</param>
+        public static void Declare(PredicateTheory c, Scope schema)
+        {
+            schema.Assume(
+                c.Present.Of("type"),
+                c.Types.Of("type").Is(Set.Of(["string"])),
+                c.Present.Of("seq"),
+                c.Types.Of("seq").Is(Set.Of(["number"])),
+                c.Lo.Of("seq").Is(1L),
+                c.Hi.Of("seq").Is(2147483647L),
+                c.Present.Of("kind"),
+                c.Dom.Of("kind").Is(Set.Of(["a", "b", "c"])),
+                c.Discriminator.Of("kind"),
+                c.Present.Of("uid"),
+                c.Form.Of("uid", "uuid-lower"),
+                c.Present.Of("label"),
+                c.Types.Of("label").Is(Set.Of(["string"])),
+                c.Present.Of("flag"),
+                c.Types.Of("flag").Is(Set.Of(["boolean"])),
+                c.Present.Of("meta"),
+                c.Form.Of("meta.created", "instant-ms"),
+                c.Form.Of("meta.updated", "instant-ms"),
+                c.Form.Of("meta.deleted", "instant-ms"));
+            c.DeclareBranch(schema, "kind", "a", present: ["body.ref"], forms: [("body.ref", "uuid-lower")]);
+            c.DeclareBranch(schema, "kind", "b",
+                present: ["body.ref", "body.key"],
+                forms: [("body.ref", "uuid-lower"), ("body.key", "uuid-lower")]);
+            c.DeclareBranch(schema, "kind", "c", present: ["body.pos"]);
+        }
+
+        /// <summary>
+        /// The schema's queries: one document of kind b by key; the documents of kinds a and b with one ref, written
+        /// as one disjunction and spelt per kind; those of them that are flagged and were updated since an instant;
+        /// documents of every kind, a tautology over <c>kind</c>; and the documents with one ref other than those of
+        /// kind b, which may be of kind c. Those that need the query's case rules to lower do not lower under
+        /// <see cref="Ask"/>, which runs none; they still exercise the schema.
+        /// </summary>
+        /// <param name="c">The theory.</param>
+        /// <returns>The queries' predicates.</returns>
+        public static ConstructorTerm<Pred>[] Queries(PredicateTheory c) =>
+        [
+            c.And.Of(c.StrEq.Of("kind", "b"), c.UuidEq.Of("body.key", Key)),
+            c.And.Of(c.Or.Of(c.StrEq.Of("kind", "a"), c.StrEq.Of("kind", "b")), c.UuidEq.Of("body.ref", Ref)),
+            c.Or.Of(
+                c.And.Of(c.StrEq.Of("kind", "a"), c.UuidEq.Of("body.ref", Ref)),
+                c.And.Of(c.StrEq.Of("kind", "b"), c.UuidEq.Of("body.ref", Ref))),
+            c.And.Of(
+                c.And.Of(c.Or.Of(c.StrEq.Of("kind", "a"), c.StrEq.Of("kind", "b")), c.UuidEq.Of("body.ref", Ref)),
+                c.And.Of(c.BoolTrue.Of("flag"), c.InstantGt.Of("meta.updated", Since))),
+            c.And.Of(
+                c.StrEq.Of("type", "Record"),
+                c.Or.Of(c.StrEq.Of("kind", "a"), c.Or.Of(c.StrEq.Of("kind", "b"), c.StrEq.Of("kind", "c")))),
+            c.And.Of(c.Not.Of(c.StrEq.Of("kind", "b")), c.UuidEq.Of("body.ref", Ref)),
+        ];
+
+        /// <summary>
+        /// Asks a query in a new child of the schema, and saturates it with horn, lattice and rewrite rules, without the
+        /// case rules.
+        /// </summary>
+        /// <param name="c">The theory.</param>
+        /// <param name="schema">The frozen schema.</param>
+        /// <param name="term">The query's predicate.</param>
+        /// <param name="options">The query scope's options; <c>null</c> for the default.</param>
+        /// <returns>The query scope, which the caller disposes, and the predicate's class.</returns>
+        /// <exception cref="InvalidOperationException">The query's run did not saturate, or left a child.</exception>
+        public static (Scope Query, Pred Q) Ask(PredicateTheory c, Scope schema, ConstructorTerm<Pred> term, ScopeOptions? options = null)
+        {
+            var query = schema.CreateChild(options);
+            var q = query.Make(term);
+            query.Assume(c.WhereClause.Of(q));
+            var report = query.Run(Schedule.Saturate(c.Horn, c.Lattice, c.Rewrite));
+            if (report.Saturated == false)
+                throw new InvalidOperationException($"The query {term} did not saturate.");
+
+            if (query.Children.Count != 0)
+                throw new InvalidOperationException($"The query {term} left {query.Children.Count} children.");
+
+            return (query, q);
+        }
+
+        /// <summary>
+        /// Asks a query with the query's case rules (<see cref="PredicateTheory.Saturation"/>) and checks that the run
+        /// saturated and left no child behind.
+        /// </summary>
+        /// <param name="c">The theory.</param>
+        /// <param name="schema">The frozen schema.</param>
+        /// <param name="term">The query's predicate.</param>
+        /// <returns>The query scope, which the caller disposes, and the predicate's class.</returns>
+        /// <exception cref="InvalidOperationException">The query's run stopped before it completed, did not saturate,
+        /// or left a child.</exception>
+        public static (Scope Query, Pred Q) AskWithCases(PredicateTheory c, Scope schema, ConstructorTerm<Pred> term)
+        {
+            var query = schema.CreateChild();
+            var q = query.Make(term);
+            query.Assume(c.WhereClause.Of(q));
+            var report = query.Run(c.Saturation);
+            if (report.StopReason != RunStopReason.Completed)
+                throw new InvalidOperationException($"The query {term} with the case rules stopped: {report.StopReason}.");
+
+            if (report.Saturated == false)
+                throw new InvalidOperationException($"The query {term} with the case rules did not saturate.");
+
+            if (query.Children.Count != 0)
+                throw new InvalidOperationException($"The query {term} with the case rules left {query.Children.Count} children.");
+
+            return (query, q);
+        }
+
+    }
+
+}

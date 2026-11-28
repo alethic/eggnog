@@ -1378,7 +1378,11 @@ production runs.
   arguments and inheritance written as rules over them, but for its cases: it opens a context per value of a
   discriminator and runs the whole theory there, so it derives what a case reaches through further rules, which the
   scoped case rules, reading only what the branches declare, do not. Tests of scopes, rendering, concurrency and
-  diagnostics run over it, and a model-based oracle checks the scoped case rules (section 5.2).
+  diagnostics run over it, and a model-based oracle checks the scoped case rules (section 5.2). The benchmarks hold a
+  copy of `PredicateTheory` and its query corpus, on which they time queries on frozen scopes, and
+  `BenchmarkFixtureCopyTests` compares the copy with the fixture: what each defines, as the library renders it,
+  derives and answers, and the epochs and ids each run takes. A deliberate change to the fixture leaves the copy as
+  it is, so that its timings compare across builds, and changes that test instead (section 6).
 
 ---
 
@@ -1387,6 +1391,8 @@ production runs.
 `src/Eggnog.Benchmarks` is a console app that uses BenchmarkDotNet as a library with its in-process toolchain. It
 holds ports of egglog's benchmarks for tables and union-find, ports of egglog-bridge's `math` and `ac` example
 programs (with an example mode that prints what the Rust prints, for side-by-side comparison), a set of root-engine
-benchmarks over scans, indexes, the executor, actions and rebuilds, and benchmarks of what a child context costs.
+benchmarks over scans, indexes, the executor, actions and rebuilds, benchmarks of what a child context costs, and
+benchmarks of the library through its public API, among them the latency of queries on frozen scopes over a copy of
+the predicate test fixture.
 Benchmarks with a result to check check it, against a reference model or against known counts, so a broken engine
 fails the run instead of producing a number. See [its README](../src/Eggnog.Benchmarks/README.md).

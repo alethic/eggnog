@@ -48,7 +48,7 @@ namespace Eggnog.Tests.Predicates.Scoped
         /// Asks a query with the query's case rules (<see cref="PredicateTheory.Saturation"/>) and checks that the run
         /// saturated and left no child behind.
         /// </summary>
-        static (Scope Query, Pred Q) AskWithCases(PredicateTheory c, Scope schema, ConstructorTerm<Pred> term)
+        internal static (Scope Query, Pred Q) AskWithCases(PredicateTheory c, Scope schema, ConstructorTerm<Pred> term)
         {
             var query = schema.CreateChild();
             var q = query.Make(term);

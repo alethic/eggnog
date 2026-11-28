@@ -27,10 +27,17 @@
         <!-- The benchmark app's comparison mode does not depend on BenchmarkDotNet; its sources are compiled into the tests
              too, so Benchmarks/ can test its parsing, arithmetic and outcome rules. The same goes for the writes
              benchmarks' shard counts, and for the allocation probe's invoker, which needs only BenchmarkDotNet's
-             attributes. -->
+             attributes. The query-latency benchmarks' copy of the predicate fixture is compiled in as well, so that
+             Predicates/Scoped/BenchmarkFixtureCopyTests can check it against the tests' own, and so are the corpus they
+             build over it, its queries and their checks, which do not depend on BenchmarkDotNet either, so that
+             Benchmarks/PredicateCorpusTests can test those checks. -->
         <Compile Include="..\Eggnog.Benchmarks\Comparison\*.cs" Link="Benchmarks\Comparison\%(Filename)%(Extension)" />
         <Compile Include="..\Eggnog.Benchmarks\Relations\Writes\WritesShardCounts.cs" Link="Benchmarks\Writes\WritesShardCounts.cs" />
         <Compile Include="..\Eggnog.Benchmarks\Probes\BenchmarkInvoker.cs" Link="Benchmarks\Probes\BenchmarkInvoker.cs" />
+        <Compile Include="..\Eggnog.Benchmarks\Library\Predicates\*.cs" Link="Benchmarks\Library\Predicates\%(Filename)%(Extension)" />
+        <Compile Include="..\Eggnog.Benchmarks\Library\CorpusQuery.cs" Link="Benchmarks\Library\CorpusQuery.cs" />
+        <Compile Include="..\Eggnog.Benchmarks\Library\PredicateCorpus.cs" Link="Benchmarks\Library\PredicateCorpus.cs" />
+        <Compile Include="..\Eggnog.Benchmarks\Library\PredicateQuery.cs" Link="Benchmarks\Library\PredicateQuery.cs" />
         <PackageReference Include="BenchmarkDotNet.Annotations" Version="0.15.8" />
     </ItemGroup>
 
