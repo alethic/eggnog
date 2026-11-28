@@ -22,7 +22,6 @@ on:
 
 permissions:
   contents: read
-  packages: read
 
 jobs:
   build:
@@ -244,14 +243,14 @@ jobs:
     - aot
     - test
     runs-on: ubuntu-24.04
+    # id-token lets the NuGet login step trade the job's OIDC token for a short-lived nuget.org API key.
+    # Naming any permission drops the others to none, so the release needs contents listed.
     permissions:
       contents: write
-      packages: write
-      id-token: write   # required for NuGet.org Trusted Publishing (OIDC)
+      id-token: write
     env:
       # Gates both the nuget.org push and the GitHub release: true for a published release, or for a manual run with
-      # publish checked (from any ref, a tag included). The GitHub Packages push is not gated and runs on every
-      # non-PR build.
+      # publish checked (from any ref, a tag included).
       PUBLISH: ${{ github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.publish == true) }}
       # The GitHub release's tag: the published release's own tag (the build checked that it is GitVersion's
       # version), else the version GitVersion computes.
@@ -277,20 +276,22 @@ jobs:
       with:
         name: nuget
         path: dist/nuget
-    - name: NuGet Login (Trusted Publishing)
+    # Trusted publishing: no stored key. NUGET_USER is the nuget.org username, not an organization, that
+    # created the trusted publishing policy for this repository and workflow.
+    - name: NuGet Login
       if: env.PUBLISH == 'true'
-      id: nuget-login
+      id: NuGetLogin
       uses: NuGet/login@v1
       with:
-        user: jhaltom
+        user: ${{ secrets.NUGET_USER }}
     # --skip-duplicate makes pushing a version nuget.org already has a no-op.
     - name: Push NuGet
       if: env.PUBLISH == 'true'
       shell: pwsh
-      run: dotnet nuget push dist/nuget/*.nupkg --source $env:NUGET_REPOS --api-key $env:NUGET_API_KEY --skip-duplicate
+      run: dotnet nuget push dist/nuget/*.nupkg --source $env:NUGET_REPOS --api-key $env:NUGET_TOKEN --skip-duplicate
       env:
         NUGET_REPOS: https://api.nuget.org/v3/index.json
-        NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+        NUGET_TOKEN: ${{ steps.NuGetLogin.outputs.NUGET_API_KEY }}
     # After the nuget.org push, so a failed push in a manual publish creates no tag or release. A published release
     # exists before the run starts; if the push fails, it stays without packages until a re-run. `commit` lets the
     # action create the tag when it does not exist. When the release already exists (a published release or a re-run)
@@ -308,10 +309,3 @@ jobs:
         prerelease: ${{ contains(steps.GitVersion.outputs.semVer, '-') }}
         makeLatest: ${{ !contains(steps.GitVersion.outputs.semVer, '-') }}
         token: ${{ secrets.GITHUB_TOKEN }}
-    # Last, so that a GitHub Packages failure cannot keep a release from nuget.org.
-    - name: Push NuGet (GitHub)
-      shell: pwsh
-      run: dotnet nuget push dist/nuget/*.nupkg --source $env:GITHUB_REPOS --api-key $env:GITHUB_TOKEN --skip-duplicate
-      env:
-        GITHUB_REPOS: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
